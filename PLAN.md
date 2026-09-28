@@ -9,7 +9,8 @@ Sources: the organizer PDFs in `docs/` (problem statement, kickoff deck, dataset
 ## 0. Repo hygiene
 
 - [x] Organizer PDFs removed from git history (Sep 28). They stay in `docs/`, ignored by `.gitignore`.
-- [ ] Before adding any remote: confirm no branch or reflog still reaches the old commit with the PDFs, then scan the full history for secrets (for example `gitleaks detect`).
+- [x] Old commit with the PDFs purged (Sep 28): `main` and `rebranch` both start from the clean root, the reflog was expired, and `git gc` found no unreachable objects or PDF blobs.
+- [x] Secret scan (Sep 28, gitleaks 8.30.1): all 3 commits on every branch and the committable working-tree files, no leaks found. A planted fake AWS key was caught, so the scanner works. Re-run before the first push.
 - [ ] Add a secret scanner as a pre-commit hook.
 - [ ] Commit `.env.example` with empty values for the variables listed in `README.md` (AWS, `S3_BUCKET`, `OPENAI_API_KEY`, `JWT_SECRET`).
 - [ ] The public repo must be named `factored-hackathon-2026-<team name>`. Keep it private until submission day.
@@ -57,7 +58,7 @@ Source: the problem statement PDF. "Status" says whether `ARCHITECTURE.md` answe
 | Credit: explanations, uncertainty, review paths for missing or borderline data | R04, R06, R05 review band | Partial: how uncertainty is shown is not specified |
 | Auth: trusted test session; an ID number alone is not identity; access enforced in the service layer | one-time code, JWT, per-query filter | Covered |
 | Label every input as real, de-identified, synthetic, or team-generated | `README.md` data labels | Covered |
-| No private records or credentials in the public repo or external model requests | PDFs and data ignored; the OpenAI request carries booleans and the message text, no profile values | Partial: customer-typed text goes to OpenAI as is (D11); history rewrite pending (§0) |
+| No private records or credentials in the public repo or external model requests | PDFs and data ignored; the OpenAI request carries booleans and the message text, no profile values | Partial: customer-typed text goes to OpenAI as is (D11). History rewritten and purged Sep 28 (§0) |
 | Baseline vs proposed on the same held-out workload; case mix, label quality, model and prompt versions, run variability; LLM-judge rubric validated | §7 | Open (D7) |
 | Results by language and customer segment; offline results labeled as such | §7 | Open (D7) |
 | Deployed link | the same compose stack, Postgres included, on a deploy host | Open: host not chosen (D2) |
