@@ -17,7 +17,7 @@ Sources: the organizer PDFs in `docs/` (problem statement, kickoff deck, dataset
 
 ## 1. The event
 
-- Factored AI & Data Hackathon 2026 (the "Datathon"). Challenge launch Sep 25. **Submissions close Mon Oct 5** (time and time zone not stated). Finalists announced Oct 15, award ceremony Oct 16. About 750 participants and 180 teams. Prizes US$6,000 / 3,000 / 1,000, plus an interview with Factored's engineering and talent team.
+- Factored AI & Data Hackathon 2026 (the "Datathon"). Challenge launch Sep 25. **Submissions close Mon Oct 5 at 11:59 pm UTC-5.** Finalists announced Oct 15, award ceremony Oct 16. About 750 participants and 180 teams. Prizes US$6,000 / 3,000 / 1,000, plus an interview with Factored's engineering and talent team.
 - Deliverables, all sent to `hackathon.admin@factored.ai`:
   1. link to the public GitHub repo `factored-hackathon-2026-<team name>`
   2. link to the deployed tool
@@ -25,13 +25,26 @@ Sources: the organizer PDFs in `docs/` (problem statement, kickoff deck, dataset
   4. a short, mandatory video pitch that demonstrates the working solution and explains the core architecture decisions
 - Judging (kickoff deck): "First and foremost our solution should work." Then: project rationale and documentation; AI engineering (backend, frontend, deployment); data analytics (data quality, relevant insights); data engineering (extraction and transformation); machine learning (model selection, optimization, implementation, tracking).
 - Kickoff framing: "Don't build a chatbot, build a customer-service system." The loop is Understand → Decide → Act → Verify → Escalate. "AI should not be autonomous just because it can be." Final takeaway: "Build something that works, prove that it works, and know when it should not act. And show us what it would take to make it real."
-- Any language or tools are allowed. Mentors are in Slack `#technical-help`.
+- Any language or tools are allowed. Mentors are in Slack `#technical-help`; organizers said teams get mentor details the week of Sep 28.
 
-Questions for the organizers (not yet asked):
+### Organizer clarifications in Slack (read Sep 28)
 
-- [ ] Exact submission time and time zone on Oct 5.
-- [ ] Is machine-translated Portuguese test data acceptable if it is disclosed?
-- [ ] Are external public datasets allowed? The plan does not depend on it.
+Answers from organizer staff in `#general`, `#technical-help`, and `#challenge-help`. They refine the brief; the PDFs stay the primary source.
+
+- **Deadline and video:** Oct 5, 11:59 pm UTC-5. The video is at most 3 minutes (`#challenge-help`, Sep 28).
+- **Team:** up to 4 people, each registered individually. The team is whoever contributed to the GitHub repo at submission (`#general`, Sep 25). A bot account may make commits as long as every member appears in the contributor list (`#general`, Sep 28).
+- **External LLM APIs** are allowed (`#challenge-help`, Sep 25).
+- **External data**, Kaggle included, is allowed if the team justifies it (`#technical-help`, Sep 27).
+- **Learned component:** it does not have to be trained from scratch. A prompted or fine-tuned LLM counts if the team defines what it does, evaluates it rigorously, and justifies it. The baseline is not prescribed (deterministic rules, TF-IDF + logistic regression, a zero-shot LLM, or another justified option); both are compared on the same held-out data with valid labels and leakage prevention (`#technical-help`, Sep 25).
+- **Deployment:** cloud deployment is not a strict requirement. What is judged is a credible path to production: scalability, reproducibility, monitoring, security, reliability, and the remaining work. Local tooling is fine if the deploy and scaling path is explained (`#technical-help`, Sep 26). Paid cloud tiers are allowed at the team's own cost; no credits are given (`#general`, Sep 27-28). The kickoff deck still lists a deployed link among the submission items.
+- **Sizing:** a prototype is not expected to handle full production volume; stating its sizing limits is valued (`#technical-help`, Sep 27).
+- **Data semantics:** organizers decline questions whose answer would shape the problem definition (for example, what `process_date` means). The dataset has features teams are expected to detect and handle; the assumption is ours to make and document (`#technical-help`, Sep 28).
+
+Questions for the organizers:
+
+- [x] Exact submission time and time zone on Oct 5: 11:59 pm UTC-5.
+- [ ] Is machine-translated Portuguese test data acceptable if it is disclosed? Not asked yet. External data is allowed with justification, which suggests yes if disclosed.
+- [x] Are external public datasets allowed? Yes, with justification.
 
 ## 2. Brief requirements against the contract
 
