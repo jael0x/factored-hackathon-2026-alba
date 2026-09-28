@@ -1,0 +1,21 @@
+# Organizer material stays local: page 2 of the data dictionary PDF holds the S3 keys.
+*.pdf
+data/
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+node_modules/
+dist/
