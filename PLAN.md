@@ -252,7 +252,7 @@ Cut list if behind, in order: model comparison, LLM judge, B0, PT templates for 
    4. Evaluation: B0 vs B1 vs P, unsafe outcomes with intervals
    5. Language and segment breakdowns
    6. Route to production and honest limitations
-4. Video (3-4 min): normal pre-qualification in Spanish; ambiguous request and clarification; review case and the packet in the agent console; a Portuguese conversation; an injection or cross-customer attempt blocked; 60 s of metrics and architecture.
+4. Video (at most 3 minutes, per organizers): normal pre-qualification in Spanish; ambiguous request and clarification; review case and the packet in the agent console; a Portuguese conversation; an injection or cross-customer attempt blocked; 60 s of metrics and architecture. Trim the list to fit 3 minutes.
 
 ## 10. Decision log
 
