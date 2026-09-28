@@ -193,6 +193,7 @@ Each entry says what the Sep 27 plan assumed, what the contract says now, and wh
 9. **R9 `product_type` values**: list every distinct value in `products.csv` and record the mapping to product keys.
 10. **R10 Stray files**: a `marketing_campaigns.csv` sits at the bucket root, outside `data/`. Check whether it differs from `data/marketing_campaigns.csv`.
 11. **R11 `gpt-6-luna` on the API**: latency per turn, tokens and cost per turn, Structured Outputs validity rate, whether `temperature` 0 is accepted (it is a reasoning model and the docs do not say), and Spanish and Portuguese intent quality on a small hand-written set. Feeds D1, D6, D7.
+12. **R12 Other call transcripts.** Asked whether dispute transcripts exist, an organizer replied to look in the documentation "to find other call transcripts" (`#technical-help`, Sep 27). Check the data dictionary, the bucket listing, and `data_backup_20260831/` for another transcript source.
 
 ## 7. Evaluation design (carried from Sep 27; pending D1, D3, D7)
 
@@ -231,7 +232,7 @@ The Sep 27 day-by-day assumed the old stack. The dates that were fixed then are 
 
 | Days | A (system) | B (data and eval) |
 |---|---|---|
-| Mon Sep 28 - Tue Sep 29 | Definition: close D2, D8, D9, D10 into `ARCHITECTURE.md`. Repo skeleton, compose with Postgres | Research R1-R11 (R8, R9, R11 first). Close D3, D4, D5, D6. Start the data-quality report |
+| Mon Sep 28 - Tue Sep 29 | Definition: close D2, D8, D9, D10 into `ARCHITECTURE.md`. Repo skeleton, compose with Postgres | Research R1-R12 (R8, R9, R11 first). Close D3, D4, D5, D6. Start the data-quality report |
 | Wed Sep 30 | Migrations, events, rules, worker, policy engine with unit tests (oracle test green) | Pipeline bronze, silver, gold; contracts per D5; eval labels and splits per D3 |
 | Thu Oct 1 | Model adapter, templates ES and PT, auth and login codes | Eval harness, scenario generator, B0 and B1 |
 | Fri Oct 2 | Frontend screens from the mock; deploy per D2. **Feature freeze at night** | First full eval run, error analysis, ranked fix list |
