@@ -10,7 +10,7 @@ Sources: the organizer PDFs in `docs/` (problem statement, kickoff deck, dataset
 
 - [x] Organizer PDFs removed from git history (Sep 28). They stay in `docs/`, ignored by `.gitignore`.
 - [x] Old commit with the PDFs purged (Sep 28): `main` and `rebranch` both start from the clean root, the reflog was expired, and `git gc` found no unreachable objects or PDF blobs.
-- [ ] Before adding any remote: scan the full history for secrets (for example `gitleaks detect`).
+- [x] Secret scan (Sep 28, gitleaks 8.30.1): all 3 commits on every branch and the committable working-tree files, no leaks found. A planted fake AWS key was caught, so the scanner works. Re-run before the first push.
 - [ ] Add a secret scanner as a pre-commit hook.
 - [ ] Commit `.env.example` with empty values for the variables listed in `README.md` (AWS, `S3_BUCKET`, `OPENAI_API_KEY`, `JWT_SECRET`).
 - [ ] The public repo must be named `factored-hackathon-2026-<team name>`. Keep it private until submission day.
