@@ -120,7 +120,7 @@ Consequence: about a third of pre-qualification requests must take a collect-inf
 
 | Trap | Finding | Consequence |
 |---|---|---|
-| Transcripts are template-generated | Jan 2025, n=4,903: 42 distinct `customer_text`, 462 distinct `full_text`, 100% with unfilled `{monto}` / `{moneda}`. Local samples agree: 2025-03-15 (n=113) 27 distinct, 2026-06-01 (n=222) 38 distinct, all with placeholders, all `detected_language = es` | An intent model trained on them memorizes; random splits leak. Do not train on them |
+| Transcripts are template-generated | Jan 2025, n=4,903: 42 distinct `customer_text`, 462 distinct `full_text`, 100% with unfilled `{monto}` / `{moneda}`. Local samples agree: 2025-03-15 (n=113) 27 distinct, 2026-06-01 (n=222) 38 distinct, all with placeholders, all `detected_language = es`. A participant reported the full table (171,321 records) has no dispute dialogue and Queja-labeled calls hold balance inquiries | An intent model trained on them memorizes; random splits leak. Do not train on them |
 | Transcript labels carry no signal | `detected_intents` is `consulta_general` in 95%; the same balance-inquiry text is labeled Queja, Producto, or Transaccional; `main_topics` copies the interaction's `contact_reason` 100% of the time | No usable text-to-intent labels in the supplied data |
 | Complaint text is templated | Jan 2025, n=1,998: 5 distinct `description`, 5 distinct `resolution`; `origin_interaction_id` 0% filled | Complaints cannot be linked to calls or used for NLP |
 | Delinquency label is noise | see §4.4 | No predictive risk model can be learned |
@@ -129,7 +129,7 @@ Consequence: about a third of pre-qualification requests must take a collect-inf
 | Country spelling | "México" and "Mexico" both appear in `transactions.transaction_country` | Normalize in silver if transactions are ever loaded |
 | Age distribution | min 21, 14.1% over 75 | A max-age rule would be a fairness problem; we deliberately use none |
 | Duplicates | Docs claim about 2%; 0 duplicate primary keys in the four loaded files and in the samples | Open: R1 |
-| Timestamps vs partitions | Local sample `call_center_interactions_20260601.csv` (n=857): partition `2026-06-01` holds timestamps from 06-01 08:00 to 06-02 07:59; the 289 rows (33.7%) dated 06-02 are all between 00:00 and 07:59 | Looks like a fixed 08:00 day boundary, not random late arrival. One partition only: R4 |
+| Timestamps vs partitions | Local sample `call_center_interactions_20260601.csv` (n=857): partition `2026-06-01` holds timestamps from 06-01 08:00 to 06-02 07:59; the 289 rows (33.7%) dated 06-02 are all between 00:00 and 07:59 | Looks like a fixed 08:00 day boundary, not random late arrival. A participant reported `transaction_date` later than `process_date` in `transactions` too. Organizers will not define `process_date`, so the assumption goes in the data-quality report. One partition checked: R4 |
 | No Portuguese, no policy documents | The bucket has only Spanish data and no policy or product-terms documents | Product catalog and policy are team-generated synthetic and labeled so |
 
 ### 4.4 The delinquency label is noise (full `products` × `customers`)
