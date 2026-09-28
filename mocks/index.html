@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Alba · precalificación de crédito</title>
+  <style>
+    :root {
+      --ink: #1c1915;
+      --muted: #5e584f;
+      --line: #e3dcd0;
+      --paper: #f3efe7;
+      --card: #fbf8f3;
+      --green: #1e3d32;
+      --green-soft: #e7f0eb;
+      --clay: #7a4b32;
+      --clay-soft: #f6ebe4;
+      --navy: #241f1b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #e7e1d6;
+      font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+    .rail {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 10px 14px;
+      background: var(--navy);
+    }
+    .rail button {
+      font: inherit;
+      font-size: 13px;
+      color: #f3efe7;
+      background: transparent;
+      border: 1px solid #4a433c;
+      border-radius: 999px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+    .rail button.on { background: #f3efe7; color: var(--navy); }
+    .stage { display: none; }
+    .stage.on { display: block; }
+    .app { max-width: 1080px; margin: 0 auto; padding: 36px 24px 80px; }
+    .mark {
+      font-size: 12px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--green);
+    }
+    h1, h2 { font-family: Georgia, "Iowan Old Style", serif; font-weight: 500; }
+    h1 { font-size: 42px; margin: 10px 0 8px; }
+    h2 { font-size: 32px; margin: 0 0 8px; }
+    .lede { color: var(--muted); max-width: 62ch; line-height: 1.5; margin-top: 0; }
+    .grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 18px; margin-top: 22px; }
+    .split { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 18px; align-items: start; }
+    .card, .doc, .bubble, .person, .row {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+    }
+    .card, .doc, .person { padding: 22px; }
+    .person { margin-bottom: 10px; }
+    .person strong { display: block; font-size: 18px; font-weight: 600; }
+    .meta { color: var(--muted); font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+    label { display: block; margin: 16px 0 6px; color: var(--muted); font-size: 13px; }
+    .field {
+      border: 1px solid var(--line);
+      background: white;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 16px;
+    }
+    .btn {
+      display: inline-block;
+      margin-top: 16px;
+      background: var(--green);
+      color: white;
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-size: 15px;
+    }
+    .btn.ghost { background: transparent; color: var(--green); border: 1px solid var(--green); }
+    .inbox { margin-top: 14px; background: var(--green-soft); border-radius: 12px; padding: 12px 14px; }
+    .kicker { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+    .tag {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 12px;
+      background: var(--green-soft);
+      color: var(--green);
+    }
+    .tag.wait { background: var(--clay-soft); color: var(--clay); }
+    .tag.stop { background: #f3e8e4; color: #6d3228; }
+    .products { display: grid; gap: 10px; margin-top: 16px; }
+    .kv, .rule {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      padding: 9px 0;
+      border-top: 1px solid var(--line);
+      font-size: 15px;
+    }
+    .kv span:last-child, .rule span:last-child { text-align: right; }
+    .thread { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+    .bubble { padding: 12px 14px; max-width: 520px; }
+    .bubble.me { margin-left: auto; background: var(--green-soft); }
+    .doc h3 { margin: 18px 0 0; font-size: 16px; font-weight: 600; }
+    .note { font-size: 13px; color: var(--muted); line-height: 1.45; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+    th, td { text-align: left; padding: 10px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <nav class="rail">
+    <button class="on" data-screen="ingreso">Ingreso</button>
+    <button data-screen="inicio">Inicio</button>
+    <button data-screen="aclarar">Aclarar</button>
+    <button data-screen="decision">Precalifica</button>
+    <button data-screen="faltante">Falta el ingreso</button>
+    <button data-screen="revision">Pasa a revisión</button>
+    <button data-screen="no">No precalifica</button>
+    <button data-screen="cola">Cola</button>
+    <button data-screen="expediente">Expediente</button>
+    <button data-screen="registro">Registro</button>
+  </nav>
+
+  <section class="stage on" id="ingreso">
+    <div class="app">
+      <div class="mark">Alba · Crédito</div>
+      <h1>Confirma tu sesión</h1>
+      <p class="lede">Busca a cualquier persona del archivo al 17 de junio de 2026 y escribe el código de un solo uso enviado a su correo.</p>
+      <div class="grid">
+        <div>
+          <div class="field">Buscar por nombre, documento o customer_id</div>
+          <p class="note">Ejemplos del oráculo de pruebas. Cualquier cliente del archivo puede entrar.</p>
+          <article class="person">
+            <span class="tag">Cliente</span>
+            <strong>Juan Alberto Romero González</strong>
+            <div class="meta">Querétaro, México · Premium · CLI-9EDEKZ8OUNUR · DNI ••••4840</div>
+          </article>
+          <article class="person">
+            <strong>Juliana Castro Gómez</strong>
+            <div class="meta">Ciudad de México · Plus · sin ingreso en el expediente</div>
+          </article>
+          <article class="person">
+            <strong>Alicia Mariana Parra Álvarez</strong>
+            <div class="meta">Cali, Colombia · Basic · score 615</div>
+          </article>
+          <article class="person">
+            <strong>Mariana Mónica Acosta Rojas</strong>
+            <div class="meta">Rosario, Argentina · tarjeta con 180 días de atraso</div>
+          </article>
+        </div>
+        <div class="card">
+          <div class="kicker">Sesión de Juan Alberto</div>
+          <label>Correo del expediente</label>
+          <div class="field">ju••••@yahoo.com</div>
+          <div class="inbox">
+            <div class="kicker">Buzón de prueba</div>
+            Código 481 206. En el demo se muestra aquí: no hay envío real.
+          </div>
+          <label>Código</label>
+          <div class="field">481206</div>
+          <div class="btn">Abrir sesión</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="stage" id="inicio">
+    <div class="app">
+      <div class="mark">Alba · Juan Alberto Romero González</div>
+      <h2>Tu banco, al 17 de junio de 2026</h2>
+      <p class="lede">Querétaro · Premium · cliente activo. Los saldos de México en este archivo están en USD.</p>
+      <div class="products">
+        <article class="card">
+          <div class="kicker">Cuenta de ahorro · ••••5725</div>
+          <h2>1,559.57 USD</h2>
+          <div class="meta">Activa · tasa 1.15%</div>
+        </article>
+        <article class="card">
+          <div class="kicker">Préstamo hipotecario · LOAN-31561597</div>
+          <h2>109,159.57 USD</h2>
+          <div class="meta">Activo · tasa 8.38% · al día · 0 días de atraso</div>
+        </article>
+      </div>
+      <div class="btn">Preguntar por una tarjeta de crédito</div>
+    </div>
+  </section>
+
+  <section class="stage" id="aclarar">
+    <div class="app">
+      <div class="mark">Proceso credit_prequalification · ai_active</div>
+      <h2>Qué producto quieres</h2>
+      <div class="thread">
+        <div class="bubble me">
+          <div class="kicker">Juan Alberto</div>
+          Quiero un crédito.
+        </div>
+        <div class="bubble">
+          <div class="kicker">Alba</div>
+          Puedo orientarte sobre una tarjeta de crédito o un préstamo personal. ¿Cuál de los dos?
+        </div>
+      </div>
+      <p class="note">Todavía no hay decisión. El proceso sigue con el asistente. Hipoteca, inversión y aumento de cupo de una tarjeta que ya existe salen de este trámite.</p>
+    </div>
+  </section>
+
+  <section class="stage" id="decision">
+    <div class="app">
+      <div class="mark">Juan Alberto · tarjeta de crédito</div>
+      <h2>Constancia</h2>
+      <p class="lede">Resultado de la política alba-credit-v1. Es una precalificación simulada: no abre la tarjeta.</p>
+      <div class="split">
+        <article class="doc">
+          <span class="tag">Precalifica · simulado</span>
+          <h2 style="margin-top:14px">Tarjeta de crédito</h2>
+          <p>Juan Alberto Romero González precalifica para una tarjeta nueva. Esto no abre la tarjeta ni mueve dinero.</p>
+          <h3>Hechos usados</h3>
+          <div class="kv"><span>Score</span><span>812</span></div>
+          <div class="kv"><span>Ingreso mensual</span><span>306,753.45 MXN</span></div>
+          <div class="kv"><span>Ingreso en USD</span><span>17,988 USD</span></div>
+          <div class="kv"><span>Tipo de cambio</span><span>1 MXN = 0.058641 USD</span></div>
+          <div class="kv"><span>Fecha del tipo de cambio</span><span>17 de junio de 2026</span></div>
+          <div class="kv"><span>Tarjeta activa</span><span>Ninguna</span></div>
+          <div class="kv"><span>Mora del hipotecario</span><span>0 días</span></div>
+          <h3>Regla que decide</h3>
+          <div class="rule"><span>R05</span><span>Score 812, banda de 620 o más</span></div>
+          <p class="note">R01 cliente activo. R02 y R03 sin atraso. R09 no tiene ya el producto. R04 y R06 con score e ingreso presentes. El cupo no se promete: el multiplicador de la política todavía no está fijado.</p>
+        </article>
+        <article class="doc">
+          <div class="kicker">Plantilla en portugués</div>
+          <p>Pré-qualificação simulada. A política registra pré-qualificado para um cartão novo. Score 812, renda mensal no cadastro, hipoteca em dia, sem cartão ativo. Isto não é um desembolso.</p>
+          <p class="note">El archivo del banco está en español. Esta plantilla la escribimos nosotros para mostrar el otro idioma, y así se declara.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="stage" id="faltante">
+    <div class="app">
+      <div class="mark">Juliana Castro Gómez · Ciudad de México · Plus</div>
+      <h2>Falta un dato para decidir</h2>
+      <p class="lede">Score 714. El ingreso mensual en el expediente está vacío. Cuenta corriente ••••7377, saldo 2,528.58 USD. No tiene tarjeta de crédito.</p>
+      <div class="thread">
+        <div class="bubble me">
+          <div class="kicker">Juliana</div>
+          Quiero una tarjeta de crédito.
+        </div>
+        <div class="bubble">
+          <div class="kicker">Alba · regla R06</div>
+          No tengo tu ingreso mensual. Si lo declaras ahora, el caso pasa a una persona para verificarlo. No lo tomo como un sí.
+        </div>
+      </div>
+      <span class="tag wait">Sin decisión · ai_active</span>
+    </div>
+  </section>
+
+  <section class="stage" id="revision">
+    <div class="app">
+      <div class="mark">Alicia Mariana Parra Álvarez · Cali</div>
+      <h2>Este caso lo ve una persona</h2>
+      <p class="lede">Score 615. Ingreso 4,707,334.28 COP, unos 1,167 USD al tipo de cambio del 17 de junio de 2026. No tiene tarjeta de crédito. Cuenta corriente con 13,192,324.57 COP.</p>
+      <article class="doc">
+        <span class="tag wait">En revisión</span>
+        <h3>Regla que decide</h3>
+        <div class="rule"><span>R05</span><span>Score 615, banda 580 a 619</span></div>
+        <p>Un especialista continúa. El asistente deja de escribir en este hilo. No hay tarjeta nueva ni cupo.</p>
+        <div class="kv"><span>Proceso</span><span>human_active</span></div>
+        <div class="kv"><span>Señal</span><span>conversation.thread_taken</span></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="stage" id="no">
+    <div class="app">
+      <div class="mark">Mariana Mónica Acosta Rojas · Rosario</div>
+      <h2>No precalifica</h2>
+      <p class="lede">Pidió una tarjeta nueva. Ya tiene una, ••••5476, con saldo 111,079.25 ARS y 180 días de atraso. Score 515. Ingreso 801,583.70 ARS.</p>
+      <article class="doc">
+        <span class="tag stop">No precalifica · simulado</span>
+        <h3>Regla que decide</h3>
+        <div class="rule"><span>R02</span><span>Mora de 180 días, umbral 30</span></div>
+        <p>La política se detiene aquí. No hace falta llegar al score. La constancia cita la tarjeta y los días de atraso del expediente. No ofrece un plan de pagos ni mueve el saldo.</p>
+        <div class="kv"><span>Proceso</span><span>ended</span></div>
+        <div class="kv"><span>Hecho</span><span>prequalification.decided</span></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="stage" id="cola">
+    <div class="app">
+      <div class="mark">César González Sánchez · Créditos · E75612</div>
+      <h2>Casos en revisión</h2>
+      <p class="lede">Senior · turno mañana · CSAT 4.23. Solo ve hilos que una regla pasó a persona. No abre otro cliente escribiendo su id.</p>
+      <article class="row card">
+        <div>
+          <strong>Alicia Mariana Parra Álvarez</strong>
+          <div class="meta">Cali · tarjeta de crédito · R05 score 615 · human_active</div>
+        </div>
+        <span class="tag wait">Abrir expediente</span>
+      </article>
+    </div>
+  </section>
+
+  <section class="stage" id="expediente">
+    <div class="app">
+      <div class="mark">Expediente · Alicia Mariana Parra Álvarez</div>
+      <h2>Lo que César recibe</h2>
+      <p class="lede">César responde en este hilo. El asistente ya no escribe.</p>
+      <div class="split">
+        <div class="thread">
+          <div class="bubble me">
+            <div class="kicker">Alicia</div>
+            Quiero una tarjeta de crédito.
+          </div>
+          <div class="bubble">
+            <div class="kicker">Alba</div>
+            Tu score está en la banda de revisión. Un especialista continúa este caso.
+          </div>
+          <div class="field">Responder como César</div>
+        </div>
+        <article class="doc">
+          <div class="kicker">Paquete</div>
+          <div class="kv"><span>Pedido</span><span>Tarjeta de crédito</span></div>
+          <div class="kv"><span>Sesión</span><span>CLI-440CO5FZIY6A</span></div>
+          <div class="kv"><span>Score, customers.credit_score</span><span>615</span></div>
+          <div class="kv"><span>Ingreso mensual</span><span>4,707,334.28 COP</span></div>
+          <div class="kv"><span>Ingreso en USD, 17 jun 2026</span><span>1,167 USD</span></div>
+          <div class="kv"><span>Tarjeta activa</span><span>Ninguna</span></div>
+          <div class="kv"><span>Regla</span><span>R05 · REFER</span></div>
+          <div class="kv"><span>Política</span><span>alba-credit-v1</span></div>
+          <h3>Pregunta abierta</h3>
+          <p class="note">El score está a 5 puntos de la banda que precalifica. César confirma si sigue o se cierra. El modelo no sube el score ni aprueba el cupo.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="stage" id="registro">
+    <div class="app">
+      <div class="mark">Registro del caso de Juan Alberto</div>
+      <h2>Hechos, reglas, comandos</h2>
+      <p class="lede">Cada paso cita el anterior. El texto del modelo no es el expediente. Los id de evento son de este demo; los hechos del cliente son del archivo.</p>
+      <table>
+        <thead>
+          <tr><th>Hecho</th><th>Qué quedó sellado</th><th>Qué siguió</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>conversation.message_received</code></td>
+            <td>Sesión CLI-9EDEKZ8OUNUR. Texto: quiero una tarjeta de crédito. Sin proceso abierto.</td>
+            <td>open_process. No relee el cliente en vivo.</td>
+          </tr>
+          <tr>
+            <td><code>process.started</code></td>
+            <td>credit_prequalification en ai_active.</td>
+            <td>El modelo clasifica la frase: prequalify_card.</td>
+          </tr>
+          <tr>
+            <td><code>analysis.completed</code></td>
+            <td>Política alba-credit-v1. R05 con score 812. Mora 0. Sin tarjeta activa.</td>
+            <td>Comando de constancia. El modelo no escribe este hecho.</td>
+          </tr>
+          <tr>
+            <td><code>prequalification.decided</code></td>
+            <td>Plantilla es. Resultado precalifica, simulado. Sin cupo prometido.</td>
+            <td>Cierra el proceso.</td>
+          </tr>
+          <tr>
+            <td><code>process.ended</code></td>
+            <td>ai_active → ended, prequalified. Lo cierra la regla, no una frase.</td>
+            <td>Un segundo clic usa la misma llave y no decide otra vez.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <script>
+    const buttons = document.querySelectorAll(".rail button");
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        buttons.forEach((item) => item.classList.remove("on"));
+        document.querySelectorAll(".stage").forEach((stage) => stage.classList.remove("on"));
+        button.classList.add("on");
+        document.getElementById(button.dataset.screen).classList.add("on");
+      });
+    });
+  </script>
+</body>
+</html>
