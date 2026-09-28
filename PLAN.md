@@ -14,6 +14,7 @@ Sources: the organizer PDFs in `docs/` (problem statement, kickoff deck, dataset
 - [ ] Add a secret scanner as a pre-commit hook.
 - [ ] Commit `.env.example` with empty values for the variables listed in `README.md` (AWS, `S3_BUCKET`, `OPENAI_API_KEY`, `JWT_SECRET`).
 - [ ] The public repo must be named `factored-hackathon-2026-<team name>`. Keep it private until submission day.
+- [ ] Both team members commit to the repo: organizers treat the GitHub contributors at submission as the team. If a registration email differs from the GitHub email, say so in the submission.
 
 ## 1. The event
 
