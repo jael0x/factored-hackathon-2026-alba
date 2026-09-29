@@ -4,12 +4,10 @@ This file sets how Alba looks and moves on screen. It governs the `web/` app (th
 
 `ARCHITECTURE.md` wins over this file. `AGENTS.md` ("Data fetching and UI") binds every screen. If a pattern here needs a field the API does not return, the pattern waits: it is listed under **Open**, and nobody builds around it.
 
-Decided with Jael on Sep 28, 2026:
+Decided with Jael:
 
-- Glass for the conversation, paper for the record (see Principle 1).
-- One sans family. Georgia is dropped from every surface.
-- This file also governs `diagrams/c4.html`.
-- The product web ships light only for the Oct 5 demo. `diagrams/c4.html` keeps the dark token set it already has.
+- Sep 28, 2026: glass for the conversation, a different surface for the record (Principle 1). One sans family; Georgia is dropped. This file also governs `diagrams/c4.html`. The product web ships light only for the Oct 5 demo; the C4 page keeps a dark set.
+- Sep 29, 2026: no cream anywhere. Records are solid white, and the one key record per screen is a deep indigo panel. Glass sits over a blurred color field so the effect shows. Screens fill the browser like the real app; the mock's notes live in a drawer. Buttons stay forest green, so green means both "act" and "pre-qualifies".
 
 ## Sources
 
@@ -17,79 +15,97 @@ Frames were pulled from the videos locally for review. No asset from the Dribbbl
 
 | Source | Taken | Left out |
 |---|---|---|
-| `mocks/index.html` (Sep 28) | Warm paper palette, green brand, uppercase kickers, the screen list, the Spanish labels | Georgia headings; raw state names on customer screens |
-| `diagrams/c4.html` (Sep 28) | Tone set (green, amber, clay, slate), pills with a border, the colored left rule on spec cards, focus outline, reduced-motion handling, its dark set | Georgia headings |
+| `mocks/index.html` (Sep 28) | Green brand, the screen list, the Spanish labels | The cream paper palette (dropped Sep 29); Georgia headings; raw state names on customer screens |
+| `diagrams/c4.html` (Sep 28) | Tone set (green, amber, clay, slate), pills with a border, the colored left rule on spec cards, focus outline, reduced-motion handling, a dark set | Georgia headings; the warm palette in both sets |
 | [AI Phone OS thinking mode](https://dribbble.com/shots/27637405-AI-Phone-OS-thinking-mode), Gleb Kuznetsov (Milkinside), video 50 s | Cards joined by thin connectors; a one-line status under a waiting mark; `--indigo` and `--haze` from the shot's palette (`#2F3954`, `#C7D1DF`) | The visible reasoning; photographs; generated widgets |
-| [Wirely](https://dribbble.com/shots/26277782-Wirely-cloud-based-Fintech-SaaS-platform), Linkup ST, 8 stills | Smaller decimals on large amounts; tabular figures; the "details preserved as of creation" notice; review before confirm; a sticky summary panel on the right; a status pill with a check | Gauges and spending charts; side navigation; avatars |
+| [Wirely](https://dribbble.com/shots/26277782-Wirely-cloud-based-Fintech-SaaS-platform), Linkup ST, 8 stills | Smaller decimals on large amounts; tabular figures; the "details preserved as of creation" notice; review before confirm; the deep blue translucent panel for the key action; a slim sidebar app shell; white cards with soft shadows on a blurred field | Gauges and spending charts; avatars |
 | [GPT4 Chat OS Imagica](https://dribbble.com/shots/20904966-GPT4-Chat-OS-for-mobile-Imagica), Gleb Kuznetsov (Milkinside), video 42 s | The composer as one pill with the assistant mark; question chips | Image cards; pin and edit menus |
 | [Natural Phone Home screen](https://dribbble.com/shots/25098782-Natural-Phone-Home-screen-design), Gleb Kuznetsov (Milkinside), video 28 s | A short action list with a count badge; the soft glow under the composer | Voice and camera input; weather and clock widgets |
 | [Natural AI Phone launcher](https://dribbble.com/shots/24397341-Natural-AI-Phone-launcher), Gleb Kuznetsov (Milkinside), video 35 s | A centered waiting line over a quiet gradient; a row whose status changes in place | The dock; 3D objects |
-| [Gen UI for AI phone OS launcher](https://dribbble.com/shots/27652758-Gen-UI-for-AI-phone-OS-launcher-by-Milkinside), Gleb Kuznetsov (Milkinside), video 36 s | A bottom sheet of chevron rows; a result card followed by next-step rows; dark circular send button; the cool surface range that `--mist-*` and `--lilac` are set from (frames sampled between `#CCD2DC` and `#E7E9ED`, lilac near `#DDCEDB`) | The "Low risk" badge; the reasoning paragraph; the stop button; context counters |
+| [Gen UI for AI phone OS launcher](https://dribbble.com/shots/27652758-Gen-UI-for-AI-phone-OS-launcher-by-Milkinside), Gleb Kuznetsov (Milkinside), video 36 s | Glass over a soft, blurred indigo-silver field; a bottom sheet of chevron rows; a result card followed by next-step rows; the surface range the aurora is set from (frames sampled between `#CCD2DC` and `#E7E9ED`, lilac near `#DDCEDB`, palette `#374772`, `#576692`, `#C0C5D4`) | The "Low risk" badge; the reasoning paragraph; the stop button; context counters |
 
 ## Principles
 
-1. **Glass is the conversation; paper is the record.** What the customer types or the assistant drafts sits on frosted glass over the mist background. What the policy decided, a template wrote, the file holds, or an event recorded sits on opaque paper: the certificate, template messages, product cards, the handoff packet, the trace, the C4 page. The surface tells the reader whether a line is a draft or a fact. The mock says it in one line: "El texto del modelo no es el expediente."
+1. **Glass is the conversation; solid is the record.** What the customer types or the assistant drafts sits on frosted glass. What the policy decided, a template wrote, the file holds, or an event recorded sits on an opaque white surface: template messages, product cards, the trace, the C4 page. The one record a screen exists for (the certificate for the customer, the packet for the agent) is a deep indigo panel. The surface tells the reader whether a line is a draft or a fact. The mock says it in one line: "El texto del modelo no es el expediente."
 2. **Render typed fields, never prose.** Surface, tone, and label come from `messages.author`, `outcome`, `processes.state`, `reason_code`, and the product keys. Each map from a field to a look is defined once, next to the constants. A screen never matches a Spanish sentence to pick a style.
 3. **Show steps, not thoughts.** The reference shots show the model reasoning while it works. Alba does not: the brief asks for explanations from sources, rules, and execution records, with no chain-of-thought (`PLAN.md` §2). While the client waits for the API, the thread shows the typing indicator the contract names, "escribiendo…" (`ARCHITECTURE.md`, "UI wait state"). Afterwards the certificate shows facts and the deciding rule, and the agent sees the events.
 4. **Ask only what the contract asks.** The customer can be asked three things: which product, whether to start the pre-qualification, and their monthly income (`ARCHITECTURE.md`, "What the customer can be asked"). No generated "what next" list, and no offer the system cannot keep: no limit, no rate for the new product, no account opening.
-5. **Every outcome is calm.** `NOT_PREQUALIFIED` is a result, not an error. It uses the same card and the same motion as `PREQUALIFIED`, in a different tone. The word "simulado" is on every certificate tag.
+5. **Every outcome is calm.** `NOT_PREQUALIFIED` is a result, not an error. It uses the same panel and the same motion as `PREQUALIFIED`, in a different tone. The word "simulado" is on every certificate tag.
 6. **Amounts carry their currency code.** `1,559.57 USD`, never `$1,559.57`: MXN, ARS, COP, and USD all write `$`. The amount shows in the currency the API returns.
 
 ## Color
 
-`web/` keeps these values in one tokens stylesheet under `web/src/`. Screens use the variables, never the hex.
+`web/` keeps these values in one tokens stylesheet under `web/src/`. Screens use the variables, never the hex. No surface is cream, beige, or warm paper.
 
-### Mist: the conversation layer
+### Aurora: the page
 
-| Token | Value | Use |
-|---|---|---|
-| `--mist-0` | `#F2F4F8` | Page, top of the gradient |
-| `--mist-1` | `#E4E8F0` | Page, bottom of the gradient |
-| `--lilac` | `#DDD6E8` | Radial glow, top right |
-| `--haze` | `#C7D1DF` | Radial glow, bottom left |
-| `--glass` | `rgba(255, 255, 255, 0.55)` with `backdrop-filter: blur(24px) saturate(1.2)` | Assistant bubbles, composer, sheets |
-| `--glass-edge` | `rgba(255, 255, 255, 0.7)` | 1px inner edge on glass |
-| `--glass-shadow` | `0 8px 32px rgba(47, 57, 84, 0.12)` | Shadow under glass |
-| `--field-edge-cool` | `#7F869A` | Composer outline |
-| `--ink-cool` | `#1C1F2A` | Text on mist and glass |
-| `--muted-cool` | `#545A6B` | Secondary text on mist and glass |
-| `--indigo` | `#2F3954` | Send button, focus ring on glass |
-| `--indigo-8` | `rgba(47, 57, 84, 0.08)` | Customer bubble tint |
-
-The page background is `linear-gradient(180deg, var(--mist-0), var(--mist-1))` with the two radial glows at 40% opacity or less. It does not move. The rainbow light in the shots comes from the 3D render set, not from the interface, and is not copied.
-
-### Paper: the record layer
+Every product screen sits on the aurora: a cool base gradient with large blurred color fields that give the glass something to blur.
 
 | Token | Value | Use |
 |---|---|---|
-| `--bg` | `#E7E1D6` | Page on agent screens and the C4 page |
-| `--paper` | `#F3EFE7` | Raised sections, inactive rows |
-| `--card` | `#FBF8F3` | Certificate, packet, product cards, template messages, C4 boxes |
-| `--line` | `#D9D1C3` | Dividers. Decorative only: never the sole edge of a control |
-| `--field-edge` | `#857D70` | Input and secondary-button borders on paper |
-| `--ink` | `#1C1915` | Text on paper |
-| `--muted` | `#5E584F` | Secondary text on paper |
-| `--green` | `#1E3D32` | Brand, primary button, focus ring on paper |
-| `--arrow` | `#7B7368` | Connectors on the trace and the C4 page |
+| `--aurora-base` | `linear-gradient(160deg, #EEF1F7, #E3E8F2 45%, #DCE1EE)` | The base |
+| `--aurora-indigo` | `#6F7FB8` at 55% | Top-right field, the darkest |
+| `--aurora-lilac` | `#D9CDEB` | Left field |
+| `--aurora-ice` | `#BFD3EA` | Bottom-right field |
+| `--aurora-rose` | `#EBD6E6` at 60% | Small top-left field |
+| `--aurora-periwinkle` | `#788AC4` at 35% | Bottom-left field, under the composer |
+| `--aurora-silk` | a diagonal band of `#374772` at 32% | One soft fold, like the Gen UI fabric |
 
-The mock's `--line #e3dcd0` and `--clay #7a4b32` give way to the C4 values above and below.
+- The fields are fixed to the viewport, blurred 60 to 90px, with a 3.5% grain overlay. They do not move.
+- Text never sits on the bare aurora in `--muted`: it drops to 2.8:1 where the aurora is darkest. Text on the aurora is `--ink`, or it sits on glass or a solid surface.
+- The rainbow light in the shots comes from the 3D render set, not from the interface, and is not copied.
+
+### Glass: the conversation layer
+
+| Token | Value | Use |
+|---|---|---|
+| `--glass` | `rgba(255, 255, 255, 0.55)` with `backdrop-filter: blur(28px) saturate(1.5)` | Assistant and customer bubbles, composer, sheets, app bar, sidebar, the agent's thread panel |
+| `--glass-edge` | 1px `rgba(255, 255, 255, 0.65)` plus an inner top highlight `rgba(255, 255, 255, 0.8)` | Edge of every glass surface |
+| `--glass-shadow` | `0 10px 40px rgba(37, 50, 86, 0.14), 0 1px 2px rgba(37, 50, 86, 0.06)` | Glass floats |
+| `--field-edge-glass` | `#6B7286` | Composer outline |
+| `--tint` | `rgba(55, 71, 114, 0.12)` over `--glass` | Customer bubble |
+
+### Solid: the record layer
+
+| Token | Value | Use |
+|---|---|---|
+| `--surface` | `#FFFFFF` | Template messages, product cards, result rows, the queue, trace cards, dialogs, the session-ended card |
+| `--surface-2` | `#F5F6FA` | Rows and insets inside a white surface |
+| `--line` | `#DCE0E8` | Dividers. Decorative only: never the sole edge of a control |
+| `--field-edge` | `#7F869A` | Input and secondary-button borders on white |
+| `--solid-shadow` | `0 1px 2px rgba(37, 50, 86, 0.06), 0 8px 24px rgba(37, 50, 86, 0.08)` | Solid sits |
+| `--ink` | `#1C1F2A` | All text on the aurora, glass, and white |
+| `--muted` | `#4B5163` | Secondary text on glass and white |
+| `--green` | `#1E3D32` | Brand, primary button, focus ring |
+| `--indigo` | `#2F3954` | The orb, the aurora, the hero |
+| `--arrow` | `#7F869A` | Connectors on the trace and the C4 page |
+
+### Hero: the key record
+
+| Token | Value | Use |
+|---|---|---|
+| `--hero` | `linear-gradient(150deg, #253256, #374772)` | The certificate, the agent packet |
+| `--hero-ink` | `#FFFFFF` | Text |
+| `--hero-muted` | `#C0C5D4` | Keys, captions |
+| `--hero-line` | `rgba(255, 255, 255, 0.16)` | Row dividers |
+| `--hero-edge` | `rgba(255, 255, 255, 0.55)` | Borders of controls on the hero |
+
+The hero has a 1px `rgba(255, 255, 255, 0.18)` edge, a soft inner highlight at the top, and `--glass-shadow`. The focus ring on the hero is white.
 
 ### Tones
 
-A tone is a text color plus a soft fill. It always comes with a text label: color alone never carries meaning.
+A tone is a text color and a border. It always comes with a text label: color alone never carries meaning. On white and glass a tag has a white fill; on the hero it has no fill and uses the light variant.
 
-| Tone | Text | Fill | Used for |
+| Tone | On white and glass | On the hero | Used for |
 |---|---|---|---|
-| green | `#1E3D32` | `#E7F0EB` | `PREQUALIFIED`; C4 "Defined" |
-| stop | `#6D3228` | `#F3E8E4` | `NOT_PREQUALIFIED`, and nothing else |
-| clay | `#8A4F33` | `#F6E8DF` | `REFER`; `human_active`; C4 "To define" |
-| amber | `#7A5D12` | `#F6EED6` | `NEEDS_INFO`; C4 "Partial" |
-| slate | `#34506B` | `#E4ECF3` | `ai_active`; C4 research refs |
-| ink | `#1C1915` | `#F3EFE7` | `ended`; errors |
+| green | `#1E3D32` | `#A8DCC0` | `PREQUALIFIED`; C4 "Defined" |
+| stop | `#6D3228` | `#F2B8AC` | `NOT_PREQUALIFIED`, and nothing else |
+| clay | `#8A4F33` | `#EDBB9C` | `REFER`; `human_active`; C4 "To define" |
+| amber | `#7A5D12` | `#E9D08A` | `NEEDS_INFO`; C4 "Partial" |
+| slate | `#34506B` | `#9FBCD8` | `ai_active`; C4 research refs |
+| ink | `#1C1F2A` | `#FFFFFF` | `ended`; errors |
 
 Errors use ink, not stop. On an Alba screen, the stop tone means one thing: the policy or the agent said no.
-
-C4 box kinds keep their colors: person `#241F1B`, system `#1E3D32`, external `#6F675E`, highlighted link `#8A4F33`.
 
 ## Type
 
@@ -106,65 +122,73 @@ Mono is for identifiers only: `customer_id`, rule ids, event names, state names,
 
 | Role | Size / line | Weight | Tracking | Where |
 |---|---|---|---|---|
-| display | 40 / 44 | 300 | -0.02em | Home greeting, login title |
-| title | 28 / 34 | 400 | -0.01em | Screen titles, certificate product |
-| heading | 20 / 26 | 500 | 0 | Card titles, packet sections |
+| display | 48 / 52 (36 / 40 on phones) | 300 | -0.025em | Home greeting, login title |
+| title | 28 / 34 | 400 | -0.015em | Screen titles, certificate product |
+| heading | 20 / 26 | 500 | -0.01em | Card titles, dialog titles |
 | body | 16 / 24 | 400 | 0 | Messages, paragraphs |
 | label | 14 / 20 | 500 | 0 | Buttons, rows, key-value keys |
-| caption | 13 / 18 | 400 | 0 | Meta lines, notes, footers |
-| kicker | 12 / 16 | 500 | 0.12em, uppercase | Section kickers |
-| amount | 32 / 36 | 300 | -0.01em | Balances. Decimals and code at 0.6em, weight 400 |
+| caption | 13 / 18 | 400 | 0 | Meta lines, footers, author names on bubbles |
+| kicker | 12 / 16 | 500 | 0.12em, uppercase | Section labels inside records and the hero only |
+| amount | 36 / 40 | 300 | -0.02em | Balances. Decimals and code at 0.55em, weight 400 |
 
+- Uppercase kickers are rare: section labels inside a record or the hero. Author names, meta lines, and navigation are sentence case.
 - Weight 300 only at 28px and above.
-- Nothing below 12px. When the C4 page is restyled, its 10.5px and 11px labels move to 12px.
+- Nothing below 12px, including code, which is `max(12px, 0.9em)`.
 - `font-variant-numeric: tabular-nums` on amounts, tables, codes, and timers.
 - One number format everywhere, as the contract and the mock write it: comma thousands, dot decimals, two decimals on money, the code after a space (`306,753.45 MXN`). Scores are integers. Dates are written out in Spanish (`17 de junio de 2026`).
 
 ## Space, shape, elevation
 
-- Spacing steps: 4, 8, 12, 16, 20, 24, 32, 40, 56 px. Side gutter: 16px on phones, 24px on desktop.
+- Spacing steps: 4, 8, 12, 16, 20, 24, 32, 40, 56, 72 px. Side gutter: 16px on phones, 32px on desktop.
 - Radii:
 
 | Token | Value | Use |
 |---|---|---|
-| `--r-sheet` | 28px | Bottom sheets, full panels |
-| `--r-card` | 20px | Cards, bubbles, the packet, C4 panes |
+| `--r-sheet` | 28px | Sheets, dialogs, the hero, glass panels |
+| `--r-card` | 22px | Cards, bubbles, C4 panes |
 | `--r-row` | 14px | List rows, C4 boxes |
 | `--r-field` | 12px | Inputs |
-| `--r-pill` | 999px | Buttons, tags, the composer |
+| `--r-pill` | 999px | Buttons, tags, the composer, the app bar controls |
 
 - A bubble has `--r-card` corners except a 6px corner on the author's side, at the bottom.
-- **Glass floats; paper lies flat.** Glass gets the blur, `--glass-shadow`, and the 1px `--glass-edge`. Paper gets a 1px `--line` border and no shadow. The one shadow on paper is hover and focus on something clickable (as C4 boxes do today).
+- **Glass floats; solid sits.** Glass gets the blur, `--glass-edge`, and the large `--glass-shadow`. Solid white gets the tight `--solid-shadow` and no border. The hero gets the glass shadow, because it is the moment the screen exists for.
 
 ## Layout
 
-- **Customer** (`/login`, `/`, `/case/:id`): mist background, one centered column, 640px max. On `/case/:id` the composer is docked to the bottom of the column, above the safe area. Phone first, like the reference shots.
-- **Agent** (`/agent`, `/agent/case/:id`, `/agent/case/:id/trace`): `--bg` background, desktop first, 1200px max. `/agent/case/:id` has two columns, thread 1.15fr and packet 0.85fr (from the mock), with the packet sticky on the right. Below 1024px the columns stack with the packet first, because the packet is what the agent decides on.
+Screens fill the browser like the real app. There is no device frame.
+
+- **Customer** (`/login`, `/`, `/case/:id`): the aurora, a glass app bar across the top (the orb and "Alba" on the left; the customer's first name and "Salir" on the right), and one centered column. The column is 720px for chat and 1040px for the login and home grids. On `/case/:id` the composer floats at the bottom of the viewport, 680px wide, and the thread scrolls under it.
+- **Agent** (`/agent`, `/agent/case/:id`, `/agent/case/:id/trace`): the aurora, a 248px glass sidebar (the brand, "Casos en revisión" with its count, the agent's name and specialty at the bottom), and a main area up to 1200px. `/agent/case/:id` has two columns, thread 1.1fr and packet 0.9fr, with the packet sticky on the right. Below 1024px the sidebar becomes a glass top bar and the columns stack with the packet first, because the packet is what the agent decides on.
 - **C4 page**: keeps its layout (canvas plus a 350px side panel, one column below 1180px) and takes its tokens from this file.
 
 ## Components
 
+### App bar and sidebar
+
+- Customer app bar: glass, 64px, sticky. The orb (24px) and "Alba" in label weight 600 on the left. On the right, the first name in a glass pill and a text button "Salir". The login shows the brand only.
+- Agent sidebar: glass, full height. The brand at the top; one nav item, "Casos en revisión", with an ink count badge; the agent's name, specialty, and employee id at the bottom.
+
 ### Composer (`/case/:id`)
 
-- A glass pill, 56px tall, 1px `--field-edge-cool` outline, a text field, and a 44px circular send button in `--indigo` with a white arrow.
+- A glass pill, 60px tall, 1px `--field-edge-glass` outline, a text field, and a 44px circular send button in `--green` with a white arrow.
 - No attach, microphone, or camera button: Alba has none of those inputs.
-- A faint lilac-to-haze glow sits under the pill while it has focus.
-- States: empty (send disabled); ready; sending (spinner in the button, field read-only until the API accepts); error (one line under the pill, the text kept, a retry).
+- A soft lilac-to-ice glow sits under the pill; it strengthens while the pill has focus.
+- States: empty (send disabled); ready; sending (spinner in the button, field read-only until the API accepts); error (one line above the pill, the text kept, a retry).
 - Enter sends. Shift+Enter adds a line.
-- In `human_active` the composer stays, because the customer may still write and the message is stored (`ARCHITECTURE.md`, "Process"). A paper banner above it reads "Este caso lo ve una persona." No typing indicator shows, because nobody writes in the thread.
-- In `ended` the certificate sits above the composer. A new message opens a new case (`ARCHITECTURE.md`, "Process").
+- In `human_active` the composer stays, because the customer may still write and the message is stored (`ARCHITECTURE.md`, "Process"). A white banner above it reads "Este caso lo ve una persona." No typing indicator shows, because nobody writes in the thread.
+- In `ended` the certificate sits in the thread above the composer. A new message opens a new case (`ARCHITECTURE.md`, "Process").
 
 ### Messages (`/case/:id`; read-only on `/agent/case/:id`)
 
 The surface follows `messages.author`:
 
-| `author` | Side | Surface | Kicker |
+| `author` | Side | Surface | Name above |
 |---|---|---|---|
-| `customer` | Right | Glass tinted with `--indigo-8` | The customer's first name |
-| `assistant` | Left | Clear glass | Alba |
-| `template` | Left | Paper, 1px `--line` | Alba |
+| `customer` | Right | Glass with `--tint` | The customer's first name |
+| `assistant` | Left | Glass | Alba, with the orb |
+| `template` | Left | White, `--solid-shadow` | Alba, with the orb |
 
-- Bubbles are 520px wide at most.
+- Bubbles are 520px wide at most. The author name is a caption above the bubble, sentence case.
 - The thread carries `lang="pt"` when the process `language` is `pt`.
 - A new message fades in and rises 8px over `--t-enter`. The thread is a polite live region.
 - The screen renders `messages` rows only. A turn whose `reply_ok` is false never reaches it (`ARCHITECTURE.md`, "Events").
@@ -173,19 +197,19 @@ The surface follows `messages.author`:
 
 - Shown while the client waits for the API after a customer send, and only in `ai_active` (`ARCHITECTURE.md`, "UI wait state"). In `human_active` nobody writes in the thread, so it does not show.
 - It lasts exactly as long as the wait. No minimum display time and no added delay: the contract forbids a fixed sleep.
-- Look: the 20px Alba orb (radial blend of `--lilac`, `--haze`, and `--indigo` at low alpha, hue turning once every `--t-orb`) and the contract's text, "escribiendo…", in `--muted-cool`. It sits in the thread where the next Alba message will appear.
+- Look: a glass capsule with the 20px Alba orb (hue turning once every `--t-orb`) and the contract's text, "escribiendo…", in `--muted`. It sits in the thread where the next Alba message will appear.
 - Never shown with it: reasoning text, a list of steps, a percentage, streamed tokens, or a stop button. Alba cannot cancel a command, so a stop button would lie.
 
 ### Product rows (`/`, and `/case/:id` while the thread is empty)
 
-- A glass sheet with two chevron rows, one per product key: `credit_card` "Tarjeta de crédito", `personal_loan` "Préstamo personal".
+- A glass sheet with two rows, one per product key: `credit_card` "Tarjeta de crédito", `personal_loan` "Préstamo personal". Each row has a 40px glass icon tile, the label, and a chevron.
 - Choosing a row sends a customer message through the same endpoint as typing ("Quiero una tarjeta de crédito"). It does not set `product` on the process: the classified turn does.
 - Consent is a template message, `confirm_prequalify`, that the customer answers in the thread ("sí", "no, gracias"). It is not a button or a sheet.
 - After `which_product` or `confirm_prequalify`, reply rows would need a typed field the API does not return yet. Until then the customer types the answer. See **Open**.
 
 ### Certificate (`/case/:id`)
 
-A certificate exists only for `PREQUALIFIED` and `NOT_PREQUALIFIED` (from the policy, or from the agent close). It is paper, the full column width, `--r-card`, with a 6px left rule in the outcome tone (the C4 spec card). From top to bottom:
+A certificate exists only for `PREQUALIFIED` and `NOT_PREQUALIFIED` (from the policy, or from the agent close). It is the hero: the full column width, `--r-sheet`, a 4px bar in the outcome's hero tone along the top. From top to bottom:
 
 1. The outcome tag: "Precalifica · simulado" or "No precalifica · simulado".
 2. The product, in title size.
@@ -194,23 +218,24 @@ A certificate exists only for `PREQUALIFIED` and `NOT_PREQUALIFIED` (from the po
 5. "Regla que decide": the `deciding_rule` row.
 6. A caption footer with `policy_version` and the dates of the facts, the way Wirely states that details are kept as of creation. When `decided_by` is `agent`, the footer adds "Revisado por una persona."
 
-There is no slot for a credit limit, a rate for the new product, or a risk label. The Gen UI "Low risk" badge has no counterpart here: the risk estimate is the `credit_score` fact (`ARCHITECTURE.md`, "Risk estimate"), shown as a fact row, never as a label. The card enters once over `--t-sheet`, with the same motion for both outcomes.
+There is no slot for a credit limit, a rate for the new product, or a risk label. The Gen UI "Low risk" badge has no counterpart here: the risk estimate is the `credit_score` fact (`ARCHITECTURE.md`, "Risk estimate"), shown as a fact row, never as a label. The panel enters once over `--t-sheet`, with the same motion for both outcomes.
 
 ### Tags
 
-A pill with a 1px border in the tone, the soft fill, and tone text at 12/16, weight 500 (the C4 `.pill`). The label is always present.
+A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fill (on the hero: the light variant and no fill). A 6px dot in the tone leads the label. The label is always present.
 
 ### Buttons
 
 | Kind | Look | Use |
 |---|---|---|
 | Primary | `--green` fill, white text, pill | "Abrir sesión", "Volver a entrar" |
-| Decisive | `--ink` fill, white text, pill | "Confirmar" in the agent confirm sheet |
-| Secondary | No fill, 1px `--field-edge`, ink text, pill | "Precalificar", "No precalificar", "Elegir al azar", "Volver" |
-| Send | 44px circle, `--indigo`, white icon | Composer |
+| Decisive | `--ink` fill, white text, pill | "Confirmar" in the agent confirm dialog |
+| Secondary | White fill, 1px `--field-edge`, ink text, pill | "Elegir al azar", "Volver" |
+| Secondary on hero | No fill, 1px `--hero-edge`, white text, pill | "Precalificar", "No precalificar" |
+| Send | 44px circle, `--green`, white icon | Composer |
 
 - Every target on product screens, and every header control on the C4 page, is at least 44 by 44 px. The C4 tree rows and chips are denser and keep at least 24px (the WCAG 2.2 AA minimum).
-- Focus: 2px outline, offset 2px, `--green` on paper and `--indigo` on glass.
+- Focus: 2px outline, offset 2px, `--green`; white on the hero.
 - Press: scale 0.98 over `--t-press`. Disabled: 45% opacity, not clickable.
 
 ### Fields
@@ -220,53 +245,61 @@ A pill with a 1px border in the tone, the soft fill, and tone text at 12/16, wei
 
 ### Login (`/login`)
 
-- Mist background with paper cards, since the search results are rows from the file.
+- A display title with a one-line lede, then two glass panels side by side (stacked on phones): search and code.
 - A two-way switch, "Cliente" and "Agente", picks whether the search covers customers or agents (`POST /session/code` or `POST /agent/session`).
-- A search field, then result rows: name, city, segment, masked document (the mock). "Elegir al azar" asks the API for a random row (`random=true`).
-- The code card: masked email, code field, "Abrir sesión". A caption says the code lasts ten minutes (`ARCHITECTURE.md`, "Auth and screens").
-- The test inbox shows only when the API returns the code (`DEMO_INBOX=1`). It has a dashed 1px `--field-edge` border and the kicker "Buzón de prueba", so nobody reads it as a bank feature.
+- A search field, then white result rows: name, city, segment, masked document. "Elegir al azar" asks the API for a random row (`random=true`).
+- The code panel: masked email, code field, "Abrir sesión". A caption says the code lasts ten minutes (`ARCHITECTURE.md`, "Auth and screens").
+- The test inbox shows only when the API returns the code (`DEMO_INBOX=1`). It has a dashed 1px `--field-edge` border and the label "Buzón de prueba", so nobody reads it as a bank feature.
 
 ### Home (`/`)
 
-- A greeting in display size with the customer's first name, then the product cards, in the order the API returns them.
-- A product card is paper. Kicker: product type and masked number ("Cuenta de ahorro · ••••5725"). Then the amount in amount size with its code, then a meta line (status, rate, days past due).
+- A greeting in display size with the customer's first name, then the product cards in a two-column grid, in the order the API returns them.
+- A product card is white. Top line: product type and masked number ("Cuenta de ahorro · ••••5725"). Then the amount in amount size with its code, then a meta line (status, rate, days past due).
 - A masked number reads to screen readers as "terminada en 5725".
 - The product rows follow the cards.
 
 ### Session ended, loading, errors
 
-- An expired session (401) replaces the screen with a paper card: "Tu sesión terminó", a caption, and "Volver a entrar". Nothing renews it silently (`ARCHITECTURE.md`, "Auth and screens").
+- An expired session (401) replaces the screen with a white card: "Tu sesión terminó", a caption, and "Volver a entrar". Nothing renews it silently (`ARCHITECTURE.md`, "Auth and screens").
 - Every fetch has loading, error, and success (`AGENTS.md`).
 - Loading: blocks in the target surface with a 1.2s opacity pulse, static under reduced motion.
-- Error: a paper card in ink, the API's reason when it sends one, and "Reintentar".
+- Error: a white card in ink, the API's reason when it sends one, and "Reintentar".
 
 ### Agent queue (`/agent`)
 
-- Header: the agent's name, specialty, and employee id in the kicker (the mock). The case count sits in a small ink badge beside the title.
-- Rows are paper, `--r-row`: the customer's name at label weight 600; a caption with city, product, rule, and state (identifiers in mono); a clay "En revisión" tag; a chevron. The whole row is the link to "Abrir expediente".
+- Title "Casos en revisión" with the count badge.
+- One white card holding the cases as table rows: customer (name and city), product, rule and reason (mono), a clay "En revisión" tag, a chevron. The whole row is the link to the case.
 - Empty state: "No hay casos en revisión."
 
 ### Agent case (`/agent/case/:id`)
 
-- Left: the thread, read-only, as glass bubbles on a mist inset with `--r-card`. The conversation layer shows inside the record page. There is no composer, no reply box, and no text field (`ARCHITECTURE.md`, "Agent close").
-- Right: the packet, paper, sticky, kicker "Paquete". Key-value rows from `analysis.completed`, in the mock's order: Pedido, Sesión, Score, Ingreso mensual, Ingreso en USD, Tarjeta activa, Regla, Política.
-- Under the packet, two buttons of the same kind and size: "Precalificar", then "No precalificar". Neither takes focus on load and neither is tinted by outcome, so the layout does not lean toward an answer.
-- Choosing one opens a confirm sheet, the review step Wirely shows before a payment. It names the outcome, says the customer gets a message and the case closes, and offers "Confirmar" (decisive) and "Volver".
+- Left: the thread, read-only, in a glass panel with the heading "Conversación". There is no composer, no reply box, and no text field (`ARCHITECTURE.md`, "Agent close").
+- Right: the packet as the hero, sticky, section label "Paquete". Key-value rows from `analysis.completed` (`specs/08-agent-close.feature`): Pedido, Score, Ingreso mensual, Regla, Política.
+- Under the rows, two hero secondary buttons of the same size: "Precalificar", then "No precalificar". Neither takes focus on load and neither is tinted by outcome, so the layout does not lean toward an answer.
+- Choosing one opens a confirm dialog, the review step Wirely shows before a payment. It names the outcome, says the customer gets a message and the case closes, and offers "Volver" (secondary, focused first) and "Confirmar" (decisive).
 - On success the case leaves the queue. A second close is rejected by the API (`agent_close:{process_id}`) and the screen shows that as an error.
 - This confirm step is the agent's. The customer's consent (`PLAN.md` D8) is the `confirm_prequalify` template, answered in the thread.
 
 ### Trace (`/agent/case/:id/trace`)
 
-- Paper page, kicker "Registro". One card per event, in the order the API returns them: the event name in mono, the time, and the fields the rules match on. State changes show the state tag.
+- Title "Registro del caso". One white card per event, in the order the API returns them: a numbered glass marker, the event name in mono, the time, and the fields the rules match on. State changes show the state tag.
 - A dashed 1.4px `--arrow` connector joins a card to the card named by its `caused_by_event_id`, the way the thinking-mode shot joins cards. No id, no line (`AGENTS.md`, "Events, rules, commands").
 
 ### C4 page
 
-A record surface: paper tokens, the tones above, the box kinds above, the sans stack, nothing under 12px, panes at `--r-card`, pill controls with a `--field-edge` border. It keeps its layout and its dark set; in the dark set `--field-edge` is `#7B7368`.
+A record surface with a cool palette: `#E9EDF4` page, white panes and boxes, `#F5F6FA` raised rows, `--line`, `--field-edge`, `--ink`, `--muted`, the tones above, the sans stack, nothing under 12px, panes at `--r-card`, pill controls with a `--field-edge` border. Box kinds: person `#1C1F2A`, system `#1E3D32`, external `#5D6474`, highlighted link `#8A4F33`.
+
+The dark set is cool as well: page `#0F1218`, raised `#151922`, card `#1A1E28`, ink `#E8EAF0`, muted `#A3A9B8`, line `#2C3240`, field edge `#737A8D`, person `#E8EAF0`, external `#3A4050`, arrow `#8C93A6`, with the light tone variants.
 
 ### Mock
 
-`mocks/index.html` follows this file and the flows in `specs/`. Each stage has two parts: the screen, styled as above, and a dashed "Nota del recorrido" that explains it. Raw identifiers such as `ai_active` appear only in the notes and on agent screens. The dark rail at the top belongs to the walkthrough, not the bank (`README.md`). Template sentences that are not written yet show as a dashed placeholder naming the `template_id`.
+`mocks/index.html` follows this file and the flows in `specs/`. Each screen fills the browser. The walkthrough chrome is dark, so it never reads as part of the bank:
+
+- A 44px bar at the top: "Recorrido", previous and next, and the current screen with its number, which opens a menu of every screen grouped as Cliente and Agente. Left and right arrow keys step through the screens.
+- "Nota" opens a drawer on the right with that screen's walkthrough note. Raw identifiers such as `ai_active` appear only in the notes and on agent screens. Escape closes it.
+- Template sentences that are not written yet show as a dashed placeholder naming the `template_id`.
+
+Walkthrough tokens: background `rgba(22, 25, 34, 0.88)` with blur, text `#F2F4F8`, muted `#A3A9B8`, control edges `rgba(255, 255, 255, 0.4)`.
 
 ## Motion
 
@@ -274,42 +307,47 @@ A record surface: paper tokens, the tones above, the box kinds above, the sans s
 |---|---|---|
 | `--t-press` | 120ms | Button press |
 | `--t-enter` | 200ms | Messages, rows, view changes |
-| `--t-sheet` | 320ms | Sheets, the certificate |
-| `--t-orb` | 4s, linear, loop | The waiting orb |
+| `--t-sheet` | 320ms | Sheets, dialogs, drawers, the certificate |
+| `--t-orb` | 4s, linear, loop | The orb |
 | `--ease` | `cubic-bezier(0.2, 0, 0, 1)` | Everything that is not a loop |
 
-- Movement is 8px or less, except sheets.
-- Only the orb and the loading pulse loop. No confetti or celebration on `PREQUALIFIED`.
+- Movement is 8px or less, except sheets and drawers.
+- Only the orb and the loading pulse loop. The aurora does not move. No confetti or celebration on `PREQUALIFIED`.
 - Under `prefers-reduced-motion: reduce`: fades only, 120ms at most, and the orb stands still.
-- Under `prefers-reduced-transparency: reduce`, or without `backdrop-filter` support, glass becomes opaque `--mist-0` with the same edge.
+- Under `prefers-reduced-transparency: reduce`, or without `backdrop-filter` support, glass becomes `rgba(255, 255, 255, 0.92)` with the same edge.
 
 ## Accessibility
 
-Contrast, WCAG 2.x formula, computed Sep 28, 2026 for the values in this file. Glass is measured as `--glass` composited over `--mist-1` (`#F3F5F8`) and over `--lilac` (`#F0EDF5`).
+Contrast, WCAG 2.x formula, computed Sep 29, 2026 for the values in this file. Glass is measured composited over the darkest aurora pixel measured in the mock at 1440px (`#8F9ABD`), its worst case.
 
 | Foreground | Background | Ratio | Needs |
 |---|---|---|---|
-| `--ink-cool` | `--mist-1` / glass over mist | 13.37 / 15.04 | 4.5 |
-| `--muted-cool` | `--lilac` (lowest case) / `--mist-1` | 4.87 / 5.60 | 4.5 |
-| white | `--indigo` / `--green` | 11.45 / 11.87 | 4.5 |
-| `--ink` | `--bg` / `--card` | 13.46 / 16.53 | 4.5 |
-| `--muted` | `--bg` / `--card` | 5.41 / 6.64 | 4.5 |
-| Tone text | Its fill: green, stop, clay, amber, slate | 10.21, 8.18, 5.40, 5.33, 7.02 | 4.5 |
-| `--field-edge` | `--card` / `--bg` | 3.84 / 3.12 | 3 |
-| `--field-edge` dark `#7B7368` | C4 dark `--card` `#221F1B` | 3.51 | 3 |
-| `--field-edge-cool` | Glass over mist | 3.33 | 3 |
-| `--line` | `--card` | 1.43 | Decorative only |
+| `--ink` | Glass at the worst case / customer bubble there | 10.87 / 9.14 | 4.5 |
+| `--muted` | Glass at the worst case | 5.23 | 4.5 |
+| `--ink` | Bare aurora at the worst case | 5.88 | 4.5 |
+| `--muted` | Bare aurora at the worst case | 2.83 | Not allowed (see Aurora) |
+| `--ink` / `--muted` | `--surface` | 16.42 / 7.91 | 4.5 |
+| white | `--green` | 11.87 | 4.5 |
+| white / `--hero-muted` | `--hero`, lighter end `#374772` | 9.10 / 5.28 | 4.5 |
+| Hero tones: green, stop, clay, amber | `#374772` | 5.92, 5.30, 5.28, 6.01 | 4.5 |
+| Tones: green, stop, clay, amber, slate | `--surface` | 11.87, 9.83, 6.47, 6.17, 8.38 | 4.5 |
+| `--field-edge` | `--surface` / C4 page | 3.63 / 3.09 | 3 |
+| `--field-edge-glass` | Glass at the worst case | 3.18 | 3 |
+| `--hero-edge` | `#374772` | 4.02 | 3 |
+| C4 dark field edge `#737A8D` | Dark card `#1A1E28` | 3.89 | 3 |
+| Walkthrough text / muted | Walkthrough bar over the aurora | 11.46 / 5.36 | 4.5 |
+| `--line` | `--surface` | 1.32 | Decorative only |
 
 - Tones always carry a text label.
 - Focus is always visible (see Buttons).
-- New messages and the waiting line are announced through a polite live region.
+- New messages and the typing indicator are announced through a polite live region.
 - The document is `lang="es"`. A Portuguese thread carries `lang="pt"`.
 
 ## Icons and imagery
 
-- Inline SVG in a 20px box, 1.5px stroke, round caps, `currentColor`: send arrow, chevron, check, close, back, clock. No icon font and no icon package.
-- The Alba mark is the orb, static at 20px, next to the "Alba" kicker.
-- No photographs, avatars, or illustrations. The dataset has no images, so a face or a skyline would be made up.
+- Inline SVG in a 20px box, 1.5px stroke, round caps, `currentColor`: send arrow, chevron, check, close, back, clock, card, loan. No icon font and no icon package.
+- The Alba mark is the orb next to the word "Alba".
+- No photographs, avatars, or illustrations. The dataset has no images, so a face or a skyline would be made up. The aurora is the only decoration.
 
 ## Interface copy
 
@@ -326,7 +364,8 @@ Each item needs a contract change before it is built. None is worked around in t
 
 ## Before a screen is called done
 
-- Surface follows the source: glass for typed or drafted text, paper for decided or recorded facts.
+- Surface follows the source: glass for typed or drafted text, solid white for decided or recorded facts, the hero for the one record the screen exists for.
+- No cream, beige, or warm paper.
 - Colors, radii, and durations come from tokens. No raw hex in a component.
 - Every fetch renders loading, error, and success.
 - No raw state or event names on customer screens.
