@@ -105,7 +105,7 @@ web/
   src/pages/Home.tsx
   src/pages/Case.tsx          # customer: chat, plus the certificate if it exists
   src/pages/AgentQueue.tsx
-  src/pages/AgentCase.tsx     # chat plus handoff packet
+  src/pages/AgentCase.tsx     # handoff packet and the two close actions
   src/pages/Trace.tsx         # the process's events table
 pipeline/
   bronze.py
@@ -155,7 +155,7 @@ States. There are no others.
 | State | Who talks | What can happen |
 |---|---|---|
 | `ai_active` | the assistant, if a rule enqueues `conversation.generate` | clarify, ask for income, decide, hand off to a person |
-| `human_active` | only the agent | the customer writes and the message is stored; the model is not called |
+| `human_active` | nobody in the thread | the customer may write and the message is stored; the model is not called. The agent does not reply. The only action is to close with prequalified or not |
 | `ended` | nobody | the certificate exists. A new message opens another process |
 
 Allowed transitions. Any other is an error and is not written.
@@ -165,29 +165,48 @@ Allowed transitions. Any other is an error and is not written.
 | `ai_active` | `ai_active` | none | clarification or `NEEDS_INFO` |
 | `ai_active` | `ended` | `prequalified` | policy `PREQUALIFIED` |
 | `ai_active` | `ended` | `not_prequalified` | policy `NOT_PREQUALIFIED` |
-| `ai_active` | `human_active` | none | policy `REFER`, request for a human, tool failure, unsupported language, attempt to see another customer |
-| `human_active` | `ended` | `referred_closed` | the agent closes |
+| `ai_active` | `human_active` | none | policy `REFER`, request for a human, tool failure, unsupported language |
+| `human_active` | `ended` | `prequalified` or `not_prequalified` | the agent closes with that choice |
 | `ended` | none | none | not reopened. Another message creates a new process |
+
+`reason_code` is a closed list: `customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`. No others. The policy rule that fired stays on `deciding_rule` (R05, R06, and the rest). `policy_refer` is the one code for every policy `REFER`.
 
 `started` is not persisted. The process `INSERT` is born in `ai_active`, and the `process.started` event records it.
 
+The process row also holds `product` (`credit_card` | `personal_loan` | null) and `language` (`es` | `pt` | null). Both stay null until a turn sets them.
+
 A customer has at most one process with `state <> 'ended'`. A partial unique index guarantees it.
+
+### Agent close
+
+The agent does not send messages, does not chat, and does not leave a comment that becomes an outcome. On a case in `human_active` the only action is `POST /agent/case/:id/close`. The body is `outcome`: `PREQUALIFIED` or `NOT_PREQUALIFIED`. Any other body is rejected. There is no text field.
+
+That POST writes `conversation.agent_closed`, with `outcome`, `agent_id`, and `language` copied from the process. The rule `close_on_agent_decision` then enqueues two commands, in this order, before another event is taken:
+
+1. `decision.render`. An automatic message to the customer for that outcome. The wording is not written in this contract yet. The model does not draft it. The row in `messages` has `author = template`. The event is `prequalification.decided` with `decided_by = agent`.
+2. `process.end`. `end_reason` is `prequalified` or `not_prequalified`, the same choice. The policy engine is not run again.
+
+The same case cannot be closed twice. The event key is `agent_close:{process_id}`.
 
 ## Events
 
 Table `events`. Append-only. No `UPDATE` of `payload`.
 
-Columns: `id uuid`, `event_name text`, `payload jsonb`, `customer_id text`, `process_id uuid`, `actor text` (`customer` | `agent` | `system` | `rule`), `caused_by_event_id uuid`, `caused_by_command_id uuid`, `idempotency_key text unique`, `created_at timestamptz`.
+Columns: `id uuid`, `event_name text`, `payload jsonb`, `customer_id text`, `process_id uuid`, `process_state text`, `actor text` (`customer` | `agent` | `system` | `rule`), `caused_by_event_id uuid`, `caused_by_command_id uuid`, `idempotency_key text unique`, `created_at timestamptz`.
+
+`process_id` and `process_state` are columns. They are not payload fields. The customer does not send them.
 
 Closed names. No others are invented in v1.
 
 | `event_name` | When it is written | Minimum payload |
 |---|---|---|
-| `conversation.message_received` | customer POST | `text`, `process_state`, `customer_id` (from the JWT) |
-| `conversation.agent_message_sent` | agent POST | `text`, `agent_id` |
+| `conversation.message_received` | customer POST | `text`, `client_message_id` |
+| `conversation.turn_classified` | `conversation.generate` finished | `intent`, `product`, `language`, `declared_income_amount`, `declared_income_currency`, `reply_text`, `reply_ok`, `reason_code` |
+| `conversation.template_sent` | a non-terminal template was sent | `locale`, `template_id`, `body` |
+| `conversation.agent_closed` | the agent closes the case | `outcome`, `agent_id`, `language` |
 | `conversation.thread_taken` | the transition to `human_active` | `reason_code`, `from_state`, `to_state` |
-| `analysis.completed` | `policy.run` finished | `policy_version`, `product`, `outcome`, `deciding_rule`, `rule_trace`, `facts` |
-| `prequalification.decided` | the template was rendered | `locale`, `template_id`, `outcome`, `body` |
+| `analysis.completed` | `policy.run` finished | `policy_version`, `product`, `outcome`, `deciding_rule`, `rule_trace`, `facts`, `language` |
+| `prequalification.decided` | the certificate template was rendered | `locale`, `template_id`, `outcome`, `body`, `decided_by` |
 | `process.started` | the process was inserted | `process_key`, `customer_id` |
 | `process.state_changed` | `processes.state` changed | `from_state`, `to_state`, `end_reason` |
 | `process.ended` | reached `ended` | `end_reason`, `policy_version` |
@@ -198,12 +217,29 @@ Idempotency keys:
 
 | Action | Key |
 |---|---|
-| Customer message | `msg:{process_id}:{client_message_id}` |
-| Open process | `process:{customer_id}:credit_prequalification:open` |
+| Customer message | `msg:{client_message_id}` |
+| Classified turn | `turn:{triggered_by_event_id}` |
+| Template sent | `template:{template_id}:{triggered_by_event_id}` |
+| Open process | `process:{customer_id}:credit_prequalification:{triggered_by_event_id}` |
 | Run policy | `policy:{process_id}:alba-credit-v1:{product}` |
 | Transition | `transition:{process_id}:{to_state}:{caused_by_event_id}` |
+| Agent close | `agent_close:{process_id}` |
+| End process | `end:{process_id}` |
 
-The frontend sends `client_message_id` (one uuid per send). Repeating the POST creates no new event and no new decision.
+The frontend sends `client_message_id` (one uuid per send). The message key is that uuid. It does not wait for a `process_id`. Repeating the POST creates no new event and no new decision.
+
+When `conversation.message_received` is inserted, the API stamps the two columns:
+
+- If the customer already has a process with `state <> 'ended'`, `process_id` is that process and `process_state` is its state.
+- If not, `process_id` stays null and `process_state` is `ai_active`, the state a new process is born in. The event does not open the process. The `open_process` rule does.
+
+The message is an event. It is not the case. The case is the process. A new thread is born `ai_active`, so the model rule matches the first message of a new case. The customer message is not copied into a second event.
+
+`conversation.generate` writes `conversation.turn_classified` and does not enqueue the next command. Rules on that event do. When the message column `process_id` is set, the turn copies it. When that column is null, the turn takes the id of the process `process.start` just inserted in this same cycle, the one open process for that `customer_id`. The first message is always the customer's. The partial unique index makes a second open process impossible. The message row is not updated.
+
+`reply_ok` is false when `reply_text` contains `precalifica`, `no precalifica`, `pré-qualificado`, or `não pré-qualifica`, and when the JSON does not validate. That text is not shown. `reason_code` on the turn is `reply_forbidden` or `model_output_invalid`. Otherwise `reason_code` is null and `reply_ok` is true.
+
+If the model sends no product and the process already has one, the turn's `product` is the stored one. If the turn's `product` is set, the process stores it. The turn's `language` is stored on the process.
 
 ## Process rules
 
@@ -213,15 +249,27 @@ A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function o
 
 | Id | Trigger | When | Commands |
 |---|---|---|---|
-| `open_process` | `conversation.message_received` | `payload.process_id` is null | `process.start` |
-| `generate_while_ai` | `conversation.message_received` | `payload.process_state == "ai_active"` | `conversation.generate` |
-| `record_only_when_human` | `conversation.message_received` | `payload.process_state == "human_active"` | none. The message is already in the event |
-| `take_thread` | `analysis.completed` | `payload.outcome == "REFER"` | `process.transition` to `human_active`; that command writes `conversation.thread_taken` |
-| `render_decision` | `analysis.completed` | `outcome` is `PREQUALIFIED` or `NOT_PREQUALIFIED` | `decision.render` |
-| `end_after_decision` | `prequalification.decided` | always | `process.end` |
-| `ask_income` | `analysis.completed` | `outcome == "NEEDS_INFO"` | none. The question text comes from the R06 template, not from the model |
+| `open_process` | `conversation.message_received` | the `process_id` column is null | `process.start` |
+| `generate_while_ai` | `conversation.message_received` | the `process_state` column is `ai_active` | `conversation.generate` |
+| `record_only_when_human` | `conversation.message_received` | the `process_state` column is `human_active` | none. The message is already in the event |
+| `run_policy` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `prequalify_card` or `prequalify_loan` | `policy.run` with that `product` |
+| `run_policy_income` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `provide_income` and `product` is set | `policy.run` with that `product` and the declared amount |
+| `ask_which_product` | `conversation.turn_classified` | `reply_ok` and `intent` is `provide_income` and `product` is null | `template.send` for `which_product`. Stays `ai_active`. The policy is not called |
+| `hand_off_human` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `human_request` | `process.transition` to `human_active`, `reason_code = customer_requested_human` |
+| `hand_off_scope` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `out_of_scope` | `process.transition` to `human_active`, `reason_code = out_of_scope` |
+| `hand_off_language` | `conversation.turn_classified` | `reply_ok` and `language` is `other` | `process.transition` to `human_active`, `reason_code = language_unsupported` |
+| `hand_off_reply` | `conversation.turn_classified` | `reply_ok` is false | `process.transition` to `human_active`, with the turn's `reason_code`. `reply_text` is not shown |
+| `show_reply` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `clarify`, `product_info`, or `chit_chat` | `conversation.show_reply`. The policy is not called |
+| `render_needs_info` | `analysis.completed` | `outcome == "NEEDS_INFO"` | `template.send` for `needs_income`. Stays `ai_active` |
+| `render_refer_notice` | `analysis.completed` | `outcome == "REFER"` | `template.send` for `refer_notice`. The notice does not include the score and does not say whether the customer pre-qualifies |
+| `take_thread` | `analysis.completed` | `payload.outcome == "REFER"` | `process.transition` to `human_active`, `reason_code = policy_refer`; that command writes `conversation.thread_taken` |
+| `render_decision` | `analysis.completed` | `outcome` is `PREQUALIFIED` or `NOT_PREQUALIFIED` | `decision.render`, with `decided_by = policy` |
+| `end_after_decision` | `prequalification.decided` | `payload.decided_by == "policy"` | `process.end` |
+| `close_on_agent_decision` | `conversation.agent_closed` | `outcome` is `PREQUALIFIED` or `NOT_PREQUALIFIED` | `decision.render` with `decided_by = agent`, then `process.end` |
 
-`generate_while_ai` does not run if the state stamped on the event is `human_active`. The prompt is not the brake.
+`generate_while_ai` does not run if the `process_state` column is `human_active`. The prompt is not the brake.
+
+The first message of a new case is stamped `ai_active` with `process_id` null. Both `open_process` and `generate_while_ai` match. The loop inserts those commands in the order of the table and runs them in that order before taking another event. `process.start` creates the process. Then `conversation.generate` classifies the sentence and writes the turn with that new `process_id`.
 
 ## Commands
 
@@ -233,10 +281,12 @@ The worker takes `pending` rows with `FOR UPDATE SKIP LOCKED`, increments `attem
 |---|---|---|
 | `process.start` | inserts `processes` and `process.started` | call the model |
 | `process.transition` | changes `state`, writes `process.state_changed` and, if the target is `human_active`, `conversation.thread_taken` | call the model |
-| `process.end` | `state = ended`, `process.ended` | call the model |
-| `conversation.generate` | one LLM call, persists the JSON | write `analysis.completed` |
-| `policy.run` | reads the profile by the event's `customer_id`, runs the engine, writes `analysis.completed` | write the certificate |
-| `decision.render` | picks the ES or PT template, writes `prequalification.decided` | call the model |
+| `process.end` | `state = ended`. Writes `process.state_changed` and `process.ended`, both with the same `end_reason` | call the model, and does not run the policy again |
+| `conversation.generate` | one LLM call, persists the JSON, writes `conversation.turn_classified`. If the message `process_id` is null, the turn uses the process this cycle just opened for that customer. Stores `language` and, when set, `product` on the process | write `analysis.completed`, enqueue `policy.run` or `process.transition`, copy the customer message, update the message row |
+| `conversation.show_reply` | inserts `messages` with `author = assistant` and the turn's `reply_text` | call the model |
+| `template.send` | writes `conversation.template_sent`. `template_id` is `needs_income`, `refer_notice`, or `which_product`. Locale comes from the triggering event's `language` | call the model, end the process. The sentences are not written in this contract yet |
+| `policy.run` | reads the profile by the event's `customer_id`, runs the engine, writes `analysis.completed`, and copies `language` from the triggering turn | write the certificate |
+| `decision.render` | reads `language` from the triggering event, picks the ES or PT template, writes `prequalification.decided` | call the model. The agent-path sentences are not written in this contract yet |
 
 Order inside `policy.run`: read profile → engine → insert the event. Whether the engine returns `PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, or `NEEDS_INFO`, the worker interprets nothing more. The rules above react to the new event.
 
@@ -270,10 +320,27 @@ Evaluation order. `rule_trace` accumulates. The first rule with a terminal resul
 | R09 | `holds_product` is true | `REFER` |
 | R04 | `credit_score` is null | `REFER`. The customer is not asked for their score |
 | R06 | `income_local` is null and the message carries no declared income | `NEEDS_INFO` |
-| R06 | the message carries declared income | `REFER`. The number is marked `self_declared` |
+| R06 | `income_local` is null and the message carries declared income | not terminal. That amount is this run's income, marked `self_declared`. The gold row stays null. Evaluation continues |
 | R05 | score < 580 | `NOT_PREQUALIFIED` |
 | R05 | score between 580 and 619 inclusive | `REFER` |
 | R05 | score >= 620 | `PREQUALIFIED` |
+
+When `income_local` is present, a number typed in the message is ignored. The file is the income for the run. R06 does not fire.
+
+### What the customer can be asked
+
+Two things, and no others.
+
+| Asked | When |
+|---|---|
+| Which product, credit card or personal loan | the turn names no product |
+| Monthly income | `income_local` is null |
+
+The income amount is read in the country's currency. The gold row is not filled in.
+
+The customer is not asked for `credit_score`, `days_past_due`, `customer_status`, or whether they already hold the product. Those stay on the file. A null score is `REFER` with no question.
+
+Once those asks are done for this case, the engine runs. `PREQUALIFIED` and `NOT_PREQUALIFIED` end it. `REFER` goes to the agent. There is no further question.
 
 R07 and R08 do not exist in the code. An income threshold or a `k * income` limit is not implemented. The certificate carries no limit amount and no rate for the new product.
 
@@ -293,7 +360,7 @@ If the key is missing, Postgres, login, and the policy still start. `conversatio
 
 The model is called only from `conversation.generate`, and only if the `generate_while_ai` rule enqueued that command.
 
-One call, no streaming, Structured Outputs with the `ConversationTurn` JSON schema. `temperature` 0 if the model accepts it; GPT-6 Luna is a reasoning model and its docs do not say (`PLAN.md` R11). The response must also validate as `ConversationTurn` in Pydantic. If it does not, one retry. If the second also fails, `human_active` with `reason_code = model_output_invalid`. The request and the raw response are stored in `llm_turns` either way, including when parsing fails, with the model id and token usage. pytest does not call OpenAI: it injects the JSON.
+One call, no streaming, Structured Outputs with the `ConversationTurn` JSON schema. `temperature` 0 if the model accepts it; GPT-6 Luna is a reasoning model and its docs do not say (`PLAN.md` R11). The response must also validate as `ConversationTurn` in Pydantic. If it does not, one retry. If the second also fails, the turn is written with `reply_ok` false and `reason_code = model_output_invalid`. `hand_off_reply` moves the case to `human_active`. The request and the raw response are stored in `llm_turns` either way, including when parsing fails, with the model id and token usage. pytest does not call OpenAI: it injects the JSON.
 
 ```text
 ConversationTurn
@@ -314,19 +381,9 @@ What goes into the prompt. This is everything that leaves the service for OpenAI
 - The process state.
 - Booleans: `income_on_file`, `score_on_file`, `has_active_card`, `has_active_personal_loan`. Not the amounts, the score, the days past due, the full name, the document, the email, or the address.
 - The catalog: two products, names in Spanish and Portuguese, no rates.
-- The instruction not to state eligibility or a limit. If `reply_text` contains those phrases, the worker discards `reply_text`, stores the turn as invalid, and escalates.
+- The instruction not to state eligibility or a limit. If `reply_text` contains those phrases, the turn is written with `reply_ok` false and `reason_code = reply_forbidden`. The text is not shown. `hand_off_reply` escalates.
 
-What the worker does with the JSON, besides storing it:
-
-| `intent` | Next command |
-|---|---|
-| `clarify`, or `product` null when the text names no product | none. `clarification_question` is shown. Stays `ai_active`. The policy is not called |
-| `prequalify_card` or `prequalify_loan` | `policy.run` with that `product` |
-| `provide_income` | `policy.run`, with `declared_income_amount` in the payload |
-| `human_request` | `process.transition` to `human_active`, `reason_code = customer_requested_human` |
-| `out_of_scope` | `process.transition` to `human_active`, `reason_code = out_of_scope` |
-| `language = other` | same, `reason_code = language_unsupported` |
-| `language = pt` | continues. The certificate, if any, uses the `pt` template. The model may clarify in Portuguese |
+`conversation.generate` stores the JSON and writes the turn. It does not choose the next command. The rules on `conversation.turn_classified` do. A clarification ("tarjeta o préstamo") may be `reply_text`. `language = pt` continues, and the certificate uses the `pt` template.
 
 `out_of_scope` covers a new mortgage, investments, a limit increase, disputing a transaction, a third party's balance, and "el crédito" when it still names no product after one clarification. The first time the customer says only "un crédito", the intent is `clarify`, not `out_of_scope`.
 
@@ -346,7 +403,7 @@ Expired JWT: 401. The customer sees that the session ended. It is not silently r
 | `/` | customer | their products, in the row's currency |
 | `/case/:id` | customer | thread, plus the certificate if `prequalification.decided` exists |
 | `/agent` | agent | processes in `human_active` |
-| `/agent/case/:id` | agent | thread and handoff packet read from `analysis.completed` |
+| `/agent/case/:id` | agent | the handoff packet read from `analysis.completed`, and two actions: prequalify or do not. No reply box |
 | `/agent/case/:id/trace` | agent | the process's `events`, in order |
 
 A customer whose process is `ended` with `prequalified` or `not_prequalified` sees the certificate. They do not see the queue. The agent does not see `ended` processes in the queue. Juan does not appear in César's queue. Neither does Mariana. Alicia does.
@@ -358,7 +415,8 @@ Currency on the home screen: the row's `products.currency` column. For customers
 `db/migrations/001_init.sql` creates:
 
 - `events`, `processes`, `commands`, `login_codes`, `llm_turns`, `messages`, `customer_credit_profile`, `load_batches`
-- `messages`: `id`, `process_id`, `author` (`customer` | `assistant` | `agent` | `template`), `body`, `event_id`
+- `processes` also holds `product` and `language`, null until a turn sets them
+- `messages`: `id`, `process_id`, `author` (`customer` | `assistant` | `template`), `body`, `event_id`
 - `llm_turns`: `id`, `process_id`, `command_id`, `request jsonb`, `raw_response text`, `parsed jsonb`, `parse_ok bool`, `model text`, `input_tokens int`, `output_tokens int`, `latency_ms int`, `created_at`
 - a partial unique index on `processes (customer_id, process_key) where state <> 'ended'`
 - the filter `customer_id = jwt.sub` is in every API query. A test calls `products` with Juan's JWT and asks for Alicia's id: the response carries no rows of Alicia's
@@ -433,10 +491,10 @@ No model is trained on the transcripts. They are templates. They do not feed the
 
 1. Login. JWT `sub = CLI-9EDEKZ8OUNUR`.
 2. Home. Savings `1,559.57 USD`, mortgage `109,159.57 USD`, 0 days past due. No credit card.
-3. He writes "quiero una tarjeta de crédito". Event `conversation.message_received` with `process_state` still empty and the `customer_id` from the JWT.
+3. He writes "quiero una tarjeta de crédito". Event `conversation.message_received`. Columns: `customer_id` from the JWT, `process_id` null, `process_state` `ai_active`. Payload: the text and the `client_message_id`.
 4. `open_process` inserts the process in `ai_active`.
-5. `generate_while_ai` calls the model. The JSON carries `prequalify_card`. `reply_text` does not say he pre-qualifies. (See known gap 1.)
-6. `policy.run` reads the profile: score 812, income 306,753.45 MXN (17,988 USD), 0 days past due, no active card. R05 wins. Event `analysis.completed`.
+5. `generate_while_ai` calls the model. It writes `conversation.turn_classified` with `prequalify_card` and the `process_id` from step 4. The message row stays `process_id` null. The process stores `product = credit_card`. `reply_text` does not say he pre-qualifies.
+6. `run_policy` enqueues `policy.run`. It reads the profile: score 812, income 306,753.45 MXN (17,988 USD), 0 days past due, no active card. R05 wins. Event `analysis.completed`, with `language` copied from the turn.
 7. `render_decision` writes the certificate in Spanish. Event `prequalification.decided`.
 8. `end_after_decision` leaves the process `ended` / `prequalified`.
 9. The customer screen shows the certificate. César does not see it.
@@ -445,9 +503,9 @@ If the text had been "quiero un crédito", step 5 returns `clarify` and `product
 
 ## The other three flows
 
-Juliana, `CLI-MD60UR8PNJDI`, score 714, income null, account `2,528.58 USD`. She asks for a card. R06 returns `NEEDS_INFO`. She stays `ai_active`. The message she sees is the template that asks for her income and says a declared amount goes to a person. If she answers with an amount, the next `policy.run` lands on R06 `REFER` and the process moves to `human_active`.
+Juliana, `CLI-MD60UR8PNJDI`, score 714, income null, account `2,528.58 USD`. She asks for a card. R06 returns `NEEDS_INFO`. `template.send` writes `conversation.template_sent` (`needs_income`). She stays `ai_active`. The message asks for her monthly income. The sentences are not written in this contract yet. If she answers with an amount, that amount is this run's income, marked `self_declared`, and the gold row stays null. The process already holds `credit_card`, so `run_policy_income` runs the policy with that product. Score 714 continues to R05 and the result is `PREQUALIFIED`. She does not go to César.
 
-Alicia, `CLI-440CO5FZIY6A`, score 615, income 4,707,334.28 COP (1,167 USD), no card. R05 `REFER`. `conversation.thread_taken`. César sees the packet: request, score, income, rule R05, policy `alba-credit-v1`. A message from Alicia in that state is stored and does not call the model.
+Alicia, `CLI-440CO5FZIY6A`, score 615, income 4,707,334.28 COP (1,167 USD), no card. R05 `REFER`. `template.send` writes `conversation.template_sent` (`refer_notice`): a person will review. The notice does not include the score and does not say whether she pre-qualifies. The sentences are not written in this contract yet. Then `conversation.thread_taken` with `reason_code = policy_refer`. César sees the packet: request, score, income, rule R05, policy `alba-credit-v1`. He does not answer in the thread. His only action is to close with `PREQUALIFIED` or `NOT_PREQUALIFIED`. That writes `conversation.agent_closed`, then the automatic message and `process.end`. Which of the two he picks for Alicia is not fixed here. A message from Alicia while the case is still `human_active` is stored and does not call the model.
 
 Mariana, `CLI-ZGOY1V6ZC46J`, active card ending in 5476, `days_past_due` 180, balance 111,079.25 ARS, score 515. R02 wins before R05. Certificate: does not pre-qualify. Process `ended`. She does not enter the queue.
 
@@ -467,24 +525,27 @@ Decisions the hackathon brief forces but this contract does not make yet (deploy
 
 ## Known gaps
 
-Found in a review on Sep 28, 2026. Each one blocks a correct implementation, and none is decided here. Close them in the definition phase (`PLAN.md` §5, D10): write the answer into the section it belongs to and delete the entry.
+Found in a review on Sep 28, 2026. Each one is closed. The decision is in the section named on the entry.
 
-1. **The first message never reaches the model.** `open_process` matches when the event has no process. `generate_while_ai` matches only when `process_state == "ai_active"`. The first message of a new process has no state, so no rule enqueues `conversation.generate`, yet Juan's flow (step 5) expects the model to run. No rule reacts to `process.started` either.
-2. **The first message's idempotency key needs a process that does not exist yet.** `msg:{process_id}:{client_message_id}` has no `process_id` before `process.start` runs.
-3. **`open_process` reads `payload.process_id`,** but `process_id` is an `events` column and is not a listed payload field.
-4. **The model turn is not an event.** The worker reads the `ConversationTurn` JSON and enqueues `policy.run` or `process.transition` itself. No event records the classified turn and no rule owns `policy.run`, which breaks "rules react to events" and leaves those commands without a `triggered_by_event_id`. The event list is closed, so closing this is a contract change.
-5. **`NEEDS_INFO` has no renderer.** `ask_income` says the question comes from the R06 template, but `decision.render` runs only for `PREQUALIFIED` and `NOT_PREQUALIFIED`, and no event records the question that was sent.
-6. **The customer-facing message on `REFER` is not specified.** The mock shows Alba telling Alicia her score is in the review band. The model cannot write that (it does not see the score), and no template or command is named for it.
-7. **The template locale is not on the event.** `decision.render` picks `es` or `pt`, but `analysis.completed` does not carry the language, so the command would have to read outside the event.
-8. **`provide_income` does not carry the product.** After `NEEDS_INFO`, the next intent is `provide_income`. `policy.run` needs `product`, and the contract does not say where it comes from.
-9. **R06 with income on file.** "The message carries declared income → `REFER`" does not say whether it applies when `income_local` is present.
-10. **`reason_code` is not a closed list.** Named in the text: `customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`. Policy `REFER`, a forbidden phrase in `reply_text`, and an attempt to see another customer have no named code.
-11. **"Attempt to see another customer" has no detector.** It is listed as a trigger for `human_active`, but no `intent` covers it (`out_of_scope` covers a third party's balance).
-12. **The agent's close has no path.** `human_active → ended` (`referred_closed`) is allowed, but no endpoint, rule, or event is defined for the agent's action, and the agent's own outcome is not recorded.
-13. **Ending writes which events?** It is not stated whether `process.end` writes `process.state_changed` as well as `process.ended`.
+1. **The first message reaches the model.** A new thread is born `ai_active`. The API stamps that column when it inserts `conversation.message_received`, so `generate_while_ai` matches the first message. `open_process` also matches, because `process_id` is still null, and creates the case. No rule on `process.started` is required. See **Events** and **Process rules**, and Juan's flow steps 3–5.
+2. **The message key does not need a process.** It is `msg:{client_message_id}`. The uuid of the send is enough. See **Events**, idempotency keys.
+3. **`open_process` reads the `process_id` column,** not a payload field. The customer does not send `process_id` or `process_state`. See **Events** and the `open_process` row.
+
+The open-process key includes the triggering event id, so a later message after `ended` can open another case. The same send cannot open two.
+
+12. **The agent closes with a credit outcome and does not chat.** `POST /agent/case/:id/close` writes `conversation.agent_closed` with `PREQUALIFIED` or `NOT_PREQUALIFIED`. The rule enqueues the automatic message and `process.end`. There is no reply and no `referred_closed`. See **Agent close**, the transition table, and `/agent/case/:id`.
+13. **`process.end` writes both events.** `process.state_changed` and `process.ended` carry the same `end_reason`. From the agent, that reason is `prequalified` or `not_prequalified`. See the `process.end` command.
+9. **The file is the income when it has one.** A typed amount is ignored if `income_local` is present. If it is null, the typed amount is this run's income, marked `self_declared`, and evaluation continues. It is not by itself `REFER`. See R06 and **What the customer can be asked**.
+11. **Another customer's rows are the JWT filter.** The transition table does not list an attempt to see another customer. No intent detects it. A query for another customer's id returns no rows.
+5. **`NEEDS_INFO` is a template event.** `template.send` writes `conversation.template_sent` with `template_id = needs_income`. The case stays `ai_active`. `prequalification.decided` is not used. The sentences are not in this contract yet. See `render_needs_info` and Juliana's flow.
+6. **The `REFER` notice is a template event.** `template.send` writes `conversation.template_sent` with `template_id = refer_notice`, then the case moves to `human_active` with `reason_code = policy_refer`. The notice does not include the score and does not say whether the customer pre-qualifies. The sentences are not in this contract yet. See `render_refer_notice` and Alicia's flow.
+7. **`language` travels on the event.** The turn carries it. `policy.run` copies it onto `analysis.completed`. `decision.render` and `template.send` read it from the triggering event. The process stores it, and the agent close copies it onto `conversation.agent_closed`. Nothing reads `llm_turns` for the locale.
+8. **`provide_income` carries the product on the turn.** A turn that names a product stores it on the process. A later `provide_income` copies that stored product onto the turn when the model sends none. If it is still null, `ask_which_product` sends `which_product` and the policy waits.
+10. **`reason_code` is a closed list.** `customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`. The policy rule stays on `deciding_rule`. See the list under **Process**.
+4. **The first turn takes the process this cycle just opened.** The first message is always the customer's, and its `process_id` column stays null. `process.start` runs first. `conversation.generate` then writes `conversation.turn_classified` with that process id. There is one open process per customer. The message row is not updated, and the message is not copied. See **Events**, the `conversation.generate` command, and Juan's flow step 5.
 
 ## What we take from Sxxxxx, and what we don't
 
-We take the shape of the cycle and the state names `ai_active` and `human_active`. The agent takes the thread through an event, and from that event on the model rule no longer matches. The certificate and the packet are rebuilt by reading events, not the model's free text.
+We take the shape of the cycle and the state names `ai_active` and `human_active`. The customer's message is an event, `conversation.message_received`, and it is not the case. The case is the process. A new thread is born `ai_active`: the API stamps that column when it inserts the event, and the model rule matches that stamp, including on the first message. The message key is the send id, not `process_id`. The agent takes the thread through an event, and from that event on the model rule no longer matches. The agent does not write in the thread. Closing is `conversation.agent_closed`, and the customer-facing sentence is a template. The certificate and the packet are rebuilt by reading events, not the model's free text.
 
-We do not take the recruiting process catalog, per-organization rules, the Sxxxxx SQL dispatcher, or the analyzer that scores forms. The analyzer of this demo is `api/policy/engine.py`.
+We do not take the recruiting process catalog, the `interactions` table, the SQL trigger that stamps the mode, per-organization rules, the Sxxxxx SQL dispatcher, or the analyzer that scores forms. The analyzer of this demo is `api/policy/engine.py`. This API stamps `process_state` when it inserts the event.
