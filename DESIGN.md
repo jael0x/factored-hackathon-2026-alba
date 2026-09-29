@@ -30,8 +30,8 @@ Frames were pulled from the videos locally for review. No asset from the Dribbbl
 
 1. **Glass is the conversation; paper is the record.** What the customer types or the assistant drafts sits on frosted glass over the mist background. What the policy decided, a template wrote, the file holds, or an event recorded sits on opaque paper: the certificate, template messages, product cards, the handoff packet, the trace, the C4 page. The surface tells the reader whether a line is a draft or a fact. The mock says it in one line: "El texto del modelo no es el expediente."
 2. **Render typed fields, never prose.** Surface, tone, and label come from `messages.author`, `outcome`, `processes.state`, `reason_code`, and the product keys. Each map from a field to a look is defined once, next to the constants. A screen never matches a Spanish sentence to pick a style.
-3. **Show steps, not thoughts.** The reference shots show the model reasoning while it works. Alba does not: the brief asks for explanations from sources, rules, and execution records, with no chain-of-thought (`PLAN.md` §2). While Alba works, the screen shows a mark and one neutral line. Afterwards the certificate shows facts and the deciding rule, and the agent sees the events.
-4. **Ask only what the contract asks.** The customer can be asked which product and their monthly income (`ARCHITECTURE.md`, "What the customer can be asked"). No generated "what next" list, and no offer the system cannot keep: no limit, no rate for the new product, no account opening.
+3. **Show steps, not thoughts.** The reference shots show the model reasoning while it works. Alba does not: the brief asks for explanations from sources, rules, and execution records, with no chain-of-thought (`PLAN.md` §2). While the client waits for the API, the thread shows the typing indicator the contract names, "escribiendo…" (`ARCHITECTURE.md`, "UI wait state"). Afterwards the certificate shows facts and the deciding rule, and the agent sees the events.
+4. **Ask only what the contract asks.** The customer can be asked three things: which product, whether to start the pre-qualification, and their monthly income (`ARCHITECTURE.md`, "What the customer can be asked"). No generated "what next" list, and no offer the system cannot keep: no limit, no rate for the new product, no account opening.
 5. **Every outcome is calm.** `NOT_PREQUALIFIED` is a result, not an error. It uses the same card and the same motion as `PREQUALIFIED`, in a different tone. The word "simulado" is on every certificate tag.
 6. **Amounts carry their currency code.** `1,559.57 USD`, never `$1,559.57`: MXN, ARS, COP, and USD all write `$`. The amount shows in the currency the API returns.
 
@@ -151,7 +151,7 @@ Mono is for identifiers only: `customer_id`, rule ids, event names, state names,
 - A faint lilac-to-haze glow sits under the pill while it has focus.
 - States: empty (send disabled); ready; sending (spinner in the button, field read-only until the API accepts); error (one line under the pill, the text kept, a retry).
 - Enter sends. Shift+Enter adds a line.
-- In `human_active` the composer stays, because the customer may still write and the message is stored (`ARCHITECTURE.md`, "Process"). A paper banner above it reads "Este caso lo ve una persona." No waiting mark shows, because the model is not called.
+- In `human_active` the composer stays, because the customer may still write and the message is stored (`ARCHITECTURE.md`, "Process"). A paper banner above it reads "Este caso lo ve una persona." No typing indicator shows, because nobody writes in the thread.
 - In `ended` the certificate sits above the composer. A new message opens a new case (`ARCHITECTURE.md`, "Process").
 
 ### Messages (`/case/:id`; read-only on `/agent/case/:id`)
@@ -169,17 +169,19 @@ The surface follows `messages.author`:
 - A new message fades in and rises 8px over `--t-enter`. The thread is a polite live region.
 - The screen renders `messages` rows only. A turn whose `reply_ok` is false never reaches it (`ARCHITECTURE.md`, "Events").
 
-### Waiting mark (`/case/:id`)
+### Typing indicator (`/case/:id`)
 
-- Shown when the process is `ai_active` and the newest message is the customer's. Nowhere else.
-- A 28px orb (radial blend of `--lilac`, `--haze`, and `--indigo` at low alpha) whose hue turns once every `--t-orb`, and one line in `--muted-cool`: "Alba está revisando tu mensaje." It sits in the thread where the next Alba message will appear.
+- Shown while the client waits for the API after a customer send, and only in `ai_active` (`ARCHITECTURE.md`, "UI wait state"). In `human_active` nobody writes in the thread, so it does not show.
+- It lasts exactly as long as the wait. No minimum display time and no added delay: the contract forbids a fixed sleep.
+- Look: the 20px Alba orb (radial blend of `--lilac`, `--haze`, and `--indigo` at low alpha, hue turning once every `--t-orb`) and the contract's text, "escribiendo…", in `--muted-cool`. It sits in the thread where the next Alba message will appear.
 - Never shown with it: reasoning text, a list of steps, a percentage, streamed tokens, or a stop button. Alba cannot cancel a command, so a stop button would lie.
 
 ### Product rows (`/`, and `/case/:id` while the thread is empty)
 
 - A glass sheet with two chevron rows, one per product key: `credit_card` "Tarjeta de crédito", `personal_loan` "Préstamo personal".
 - Choosing a row sends a customer message through the same endpoint as typing ("Quiero una tarjeta de crédito"). It does not set `product` on the process: the classified turn does.
-- After `which_product` has been sent, the rows would need a typed field the API does not return yet. Until then the customer types the answer. See **Open**.
+- Consent is a template message, `confirm_prequalify`, that the customer answers in the thread ("sí", "no, gracias"). It is not a button or a sheet.
+- After `which_product` or `confirm_prequalify`, reply rows would need a typed field the API does not return yet. Until then the customer types the answer. See **Open**.
 
 ### Certificate (`/case/:id`)
 
@@ -192,7 +194,7 @@ A certificate exists only for `PREQUALIFIED` and `NOT_PREQUALIFIED` (from the po
 5. "Regla que decide": the `deciding_rule` row.
 6. A caption footer with `policy_version` and the dates of the facts, the way Wirely states that details are kept as of creation. When `decided_by` is `agent`, the footer adds "Revisado por una persona."
 
-There is no slot for a credit limit, a rate for the new product, or a risk label. The Gen UI "Low risk" badge has no counterpart here (`PLAN.md` D4 is open). The card enters once over `--t-sheet`, with the same motion for both outcomes.
+There is no slot for a credit limit, a rate for the new product, or a risk label. The Gen UI "Low risk" badge has no counterpart here: the risk estimate is the `credit_score` fact (`ARCHITECTURE.md`, "Risk estimate"), shown as a fact row, never as a label. The card enters once over `--t-sheet`, with the same motion for both outcomes.
 
 ### Tags
 
@@ -251,7 +253,7 @@ A pill with a 1px border in the tone, the soft fill, and tone text at 12/16, wei
 - Under the packet, two buttons of the same kind and size: "Precalificar", then "No precalificar". Neither takes focus on load and neither is tinted by outcome, so the layout does not lean toward an answer.
 - Choosing one opens a confirm sheet, the review step Wirely shows before a payment. It names the outcome, says the customer gets a message and the case closes, and offers "Confirmar" (decisive) and "Volver".
 - On success the case leaves the queue. A second close is rejected by the API (`agent_close:{process_id}`) and the screen shows that as an error.
-- This confirm step is the agent's, not the customer consent that `PLAN.md` D8 asks about.
+- This confirm step is the agent's. The customer's consent (`PLAN.md` D8) is the `confirm_prequalify` template, answered in the thread.
 
 ### Trace (`/agent/case/:id/trace`)
 
@@ -310,20 +312,18 @@ Contrast, WCAG 2.x formula, computed Sep 28, 2026 for the values in this file. G
 
 ## Interface copy
 
-Interface labels are Spanish, as in the mock. Template sentences (`needs_income`, `refer_notice`, `which_product`, the agent-close message) are not in this file: they live in `api/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
+Interface labels are Spanish, as in the mock. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the agent-close message) are not in this file: they live in `api/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
 
-Labels this file adds to the mock's: "Tarjeta de crédito", "Préstamo personal", "Quiero una tarjeta de crédito", "Alba está revisando tu mensaje.", "Revisado por una persona.", "Cliente", "Agente", "Elegir al azar", "Tu sesión terminó", "Volver a entrar", "Reintentar", "Confirmar", "Volver", "No hay casos en revisión.", "terminada en".
+Labels this file adds to the mock's: "Tarjeta de crédito", "Préstamo personal", "Quiero una tarjeta de crédito", "Revisado por una persona.", "Cliente", "Agente", "Elegir al azar", "Tu sesión terminó", "Volver a entrar", "Reintentar", "Confirmar", "Volver", "No hay casos en revisión.", "terminada en".
 
 ## Open
 
 Each item needs a contract change before it is built. None is worked around in the meantime.
 
-1. **Product rows after `which_product`.** The screen needs a typed field saying which template was sent last. A `messages` row has `author` and `body`, and no `template_id`.
+1. **Reply rows after `which_product` or `confirm_prequalify`.** The screen needs a typed field saying which template was sent last. A `messages` row has `author` and `body`, and no `template_id`.
 2. **A countdown for the login code.** It needs the code's expiry in the `POST /session/code` response. Until then the caption states ten minutes.
-3. **Naming the step in the waiting line.** It needs the pending command in the case response. Until then the line is fixed.
-4. **Portuguese interface labels.** The contract localizes templates, not interface labels.
-5. **How uncertainty shows on the certificate.** `PLAN.md` §2 marks it "Partial". This file gives the certificate no slot for it until that is decided.
-6. **Customer consent before `policy.run`** (`PLAN.md` D8). If it is added, it uses the confirm sheet pattern with the primary button.
+3. **Portuguese interface labels.** The contract localizes templates, not interface labels.
+4. **How uncertainty shows on the certificate.** `PLAN.md` §2 marks it "Partial". This file gives the certificate no slot for it until that is decided.
 
 ## Before a screen is called done
 
