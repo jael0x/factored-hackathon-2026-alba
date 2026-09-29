@@ -21,6 +21,7 @@ Use the deployed link (added once the host is chosen, `PLAN.md` D2) and read thi
 | `PLAN.md` | Hackathon requirements, data evidence, open decisions, research backlog, evaluation design, schedule |
 | `CLAUDE.md` | Entry instructions for Claude Code sessions |
 | `mocks/index.html` | Static screen walkthrough (Spanish UI), not the frontend |
+| `diagrams/c4.html` | Clickable C4 model of the contract, four levels. Level 4 lists, per component, what the contract fixes and what is still open. Open the file in a browser; if it disagrees with `ARCHITECTURE.md`, the contract wins |
 | `docs/` | Organizer PDFs, local only. Never committed: the data dictionary holds the S3 keys |
 | `data/` | Local CSVs, never committed. `data/raw/` for the loader, `data/sample/` for spot checks |
 
