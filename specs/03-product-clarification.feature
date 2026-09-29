@@ -10,10 +10,11 @@ Feature: Product clarification
     And no certificate is shown
     And his case stays with the assistant
 
-  Scenario: Naming the product after the question leads to a decision
+  Scenario: Naming the product after the question leads to the consent question
     Given the assistant asked Juan whether he wants a credit card or a personal loan
     When Juan writes "una tarjeta de crédito"
-    Then Juan sees a certificate for a credit card
+    Then the assistant asks whether to start the pre-qualification for a credit card
+    And no certificate is shown
 
   Scenario: A request that still names no product goes to a person
     Given the assistant already asked Juan once which product he wants

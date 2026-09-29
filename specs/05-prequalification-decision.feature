@@ -7,7 +7,8 @@ Feature: Pre-qualification decision
     Given Juan Alberto Romero González has a credit score of 812 and income on file
     And he has no credit product past due
     And he holds no active credit card
-    When Juan writes "quiero una tarjeta de crédito"
+    And the assistant asked Juan whether to start the pre-qualification for a credit card
+    When Juan writes "sí"
     Then Juan sees a certificate that says he pre-qualifies for a credit card
     And his case ends as pre-qualified
 
@@ -26,13 +27,13 @@ Feature: Pre-qualification decision
   Scenario: Delinquency decides before the credit score
     Given Mariana Mónica Acosta Rojas has a credit card 180 days past due
     And her credit score is 515
-    When Mariana writes "quiero un préstamo personal"
+    When Mariana confirms the pre-qualification for a personal loan
     Then Mariana sees a certificate that says she does not pre-qualify
     And the decision names rule "R02" as the deciding rule
 
   Scenario Outline: Customer status decides before anything else
     Given a customer with status "<status>" and a credit score of 750
-    When the customer asks to pre-qualify for a credit card
+    When the customer confirms the pre-qualification for a credit card
     Then the outcome is "<outcome>"
 
     Examples:
@@ -44,7 +45,7 @@ Feature: Pre-qualification decision
   Scenario Outline: Days past due on a credit product set the outcome
     Given an active customer with a credit score of 750 and income on file
     And the customer's most delinquent credit product is <days> days past due
-    When the customer asks to pre-qualify for a personal loan
+    When the customer confirms the pre-qualification for a personal loan
     Then the outcome is "<outcome>"
 
     Examples:
@@ -56,12 +57,12 @@ Feature: Pre-qualification decision
   Scenario: A customer who already holds the product is referred
     Given an active customer with a credit score of 750 and no credit product past due
     And the customer holds an active credit card
-    When the customer asks to pre-qualify for a credit card
+    When the customer confirms the pre-qualification for a credit card
     Then the outcome is "REFER"
 
   Scenario: A customer with no credit score is referred without being asked for it
     Given an active customer with no credit score on file and no credit product past due
-    When the customer asks to pre-qualify for a personal loan
+    When the customer confirms the pre-qualification for a personal loan
     Then the outcome is "REFER"
     And the assistant does not ask for a credit score
 
@@ -69,7 +70,7 @@ Feature: Pre-qualification decision
     Given an active customer with income on file and no credit product past due
     And the customer holds no active credit card
     And the customer's credit score is <score>
-    When the customer asks to pre-qualify for a credit card
+    When the customer confirms the pre-qualification for a credit card
     Then the outcome is "<outcome>"
 
     Examples:
@@ -80,12 +81,13 @@ Feature: Pre-qualification decision
       | 620   | PREQUALIFIED     |
 
   Scenario: A request in Portuguese gets a Portuguese certificate
-    Given Juan is signed in with no open case
-    When Juan writes "quero um cartão de crédito"
+    Given Juan wrote "quero um cartão de crédito"
+    And the assistant asked him in Portuguese whether to start the pre-qualification
+    When Juan writes "sim"
     Then Juan sees his certificate in Portuguese
 
   Scenario: A message delivered twice does not produce a second decision
-    Given Juan's message "quiero una tarjeta de crédito" produced a certificate
+    Given Juan's confirmation "sí" produced a certificate
     When the app delivers the same message a second time
     Then Juan still has one certificate
 
