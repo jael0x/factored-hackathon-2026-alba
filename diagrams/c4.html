@@ -6,34 +6,31 @@
   <title>Alba C4 Model</title>
   <style>
     :root {
-      --paper: #f3efe7;
-      --bg: #e7e1d6;
-      --card: #fbf8f3;
-      --ink: #1c1915;
-      --muted: #5e584f;
-      --line: #d9d1c3;
-      --field-edge: #857d70;
+      --paper: #f5f6fa;
+      --bg: #e9edf4;
+      --card: #ffffff;
+      --ink: #1c1f2a;
+      --muted: #4b5163;
+      --line: #dce0e8;
+      --field-edge: #7f869a;
       --green: #1e3d32;
       --green-soft: #e7f0eb;
       --clay: #8a4f33;
-      --clay-soft: #f6e8df;
       --amber: #7a5d12;
-      --amber-soft: #f6eed6;
       --slate: #34506b;
-      --slate-soft: #e4ecf3;
-      --person-bg: #241f1b;
-      --person-ink: #f3efe7;
+      --person-bg: #1c1f2a;
+      --person-ink: #f5f6fa;
       --sys-bg: #1e3d32;
-      --sys-ink: #f3efe7;
-      --ext-bg: #6f675e;
-      --ext-ink: #fbf8f3;
-      --box-bg: #fbf8f3;
+      --sys-ink: #f5f6fa;
+      --ext-bg: #5d6474;
+      --ext-ink: #ffffff;
+      --box-bg: #ffffff;
       --box-line: #1e3d32;
-      --arrow: #7b7368;
+      --arrow: #7f869a;
       --hot: #8a4f33;
       --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-      --r-card: 20px;
+      --r-card: 22px;
       --r-row: 14px;
       --r-pill: 999px;
       --t-press: 120ms;
@@ -43,18 +40,18 @@
     }
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme="light"]) {
-        --paper: #1b1916; --bg: #141210; --card: #221f1b; --ink: #eee8de; --muted: #a79e91; --line: #3b352e; --field-edge: #7b7368;
-        --green: #9ccbb3; --green-soft: #1f2e27; --clay: #e0a483; --clay-soft: #33241c; --amber: #e2c46f; --amber-soft: #302814;
-        --slate: #9fbcd8; --slate-soft: #1f2833; --person-bg: #eee8de; --person-ink: #1b1916; --sys-bg: #2e5b49; --sys-ink: #f3efe7;
-        --ext-bg: #4d4740; --ext-ink: #eee8de; --box-bg: #221f1b; --box-line: #6fa088; --arrow: #8d8478; --hot: #e0a483;
+        --paper: #151922; --bg: #0f1218; --card: #1a1e28; --ink: #e8eaf0; --muted: #a3a9b8; --line: #2c3240; --field-edge: #737a8d;
+        --green: #9ccbb3; --green-soft: #1c2b26; --clay: #e0a483; --amber: #e2c46f; --slate: #9fbcd8;
+        --person-bg: #e8eaf0; --person-ink: #151922; --sys-bg: #2e5b49; --sys-ink: #f5f6fa; --ext-bg: #3a4050; --ext-ink: #e8eaf0;
+        --box-bg: #1a1e28; --box-line: #6fa088; --arrow: #8c93a6; --hot: #e0a483;
         color-scheme: dark;
       }
     }
     :root[data-theme="dark"] {
-      --paper: #1b1916; --bg: #141210; --card: #221f1b; --ink: #eee8de; --muted: #a79e91; --line: #3b352e; --field-edge: #7b7368;
-      --green: #9ccbb3; --green-soft: #1f2e27; --clay: #e0a483; --clay-soft: #33241c; --amber: #e2c46f; --amber-soft: #302814;
-      --slate: #9fbcd8; --slate-soft: #1f2833; --person-bg: #eee8de; --person-ink: #1b1916; --sys-bg: #2e5b49; --sys-ink: #f3efe7;
-      --ext-bg: #4d4740; --ext-ink: #eee8de; --box-bg: #221f1b; --box-line: #6fa088; --arrow: #8d8478; --hot: #e0a483;
+      --paper: #151922; --bg: #0f1218; --card: #1a1e28; --ink: #e8eaf0; --muted: #a3a9b8; --line: #2c3240; --field-edge: #737a8d;
+      --green: #9ccbb3; --green-soft: #1c2b26; --clay: #e0a483; --amber: #e2c46f; --slate: #9fbcd8;
+      --person-bg: #e8eaf0; --person-ink: #151922; --sys-bg: #2e5b49; --sys-ink: #f5f6fa; --ext-bg: #3a4050; --ext-ink: #e8eaf0;
+      --box-bg: #1a1e28; --box-line: #6fa088; --arrow: #8c93a6; --hot: #e0a483;
       color-scheme: dark;
     }
     * { box-sizing: border-box; }
@@ -141,9 +138,9 @@
     .dimming svg.links path.ln:not(.hot) { opacity: 0.25; }
     .dimming .lab:not(.hot) { opacity: 0.2; }
     .pill { display: inline-block; border-radius: var(--r-pill); padding: 1px 9px; font-size: 12px; line-height: 16px; font-weight: 500; border: 1px solid currentColor; }
-    .pill.st-defined { color: var(--green); background: var(--green-soft); }
-    .pill.st-partial { color: var(--amber); background: var(--amber-soft); }
-    .pill.st-open { color: var(--clay); background: var(--clay-soft); }
+    .pill.st-defined { color: var(--green); background: var(--card); }
+    .pill.st-partial { color: var(--amber); background: var(--card); }
+    .pill.st-open { color: var(--clay); background: var(--card); }
     .k-system .pill, .k-external .pill, .k-person .pill { color: inherit; background: transparent; }
     .open-count { color: var(--clay); font-weight: 600; }
     .k-system .open-count, .k-external .open-count, .k-person .open-count { color: inherit; }
@@ -157,12 +154,12 @@
     aside ul { margin: 0; padding-left: 18px; }
     aside li { margin: 4px 0; }
     aside p { margin: 6px 0; }
-    .ref { display: inline-block; font-size: 12px; line-height: 16px; font-weight: 600; border-radius: 6px; padding: 1px 6px; margin-right: 5px; white-space: nowrap; }
-    .ref.gap { background: var(--clay-soft); color: var(--clay); }
-    .ref.dec { background: var(--amber-soft); color: var(--amber); }
-    .ref.res { background: var(--slate-soft); color: var(--slate); }
-    .ref.new { border: 1px solid var(--ink); }
-    .ref.todo { background: var(--green-soft); color: var(--green); }
+    .ref { display: inline-block; font-size: 12px; line-height: 16px; font-weight: 600; border-radius: 6px; padding: 0 6px; margin-right: 5px; white-space: nowrap; border: 1px solid currentColor; background: var(--card); }
+    .ref.gap { color: var(--clay); }
+    .ref.dec { color: var(--amber); }
+    .ref.res { color: var(--slate); }
+    .ref.new { color: var(--ink); }
+    .ref.todo { color: var(--green); }
     .kids { display: flex; flex-wrap: wrap; gap: 6px; }
     .kids button, .jump { min-height: 32px; border: 1px solid var(--field-edge); background: var(--paper); border-radius: var(--r-pill); padding: 0 12px; font-size: 13px; line-height: 18px; cursor: pointer; }
     .src { font-size: 12px; line-height: 16px; color: var(--muted); margin-top: 16px; }
