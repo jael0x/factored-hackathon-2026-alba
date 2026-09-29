@@ -1,6 +1,6 @@
 # Plan: Alba at the Factored AI & Data Hackathon 2026
 
-Status on Mon Sep 28, 2026: **research and definition phase.** There is no application code yet.
+Status on Tue Sep 29, 2026: **build phase.** The compose load path is merged (PR #1): Postgres, the one-shot `load` (bronze, silver, gold, quality checks, lineage), API health checks, and a placeholder web app. Login, conversation, policy, and agent screens are not built yet.
 
 `ARCHITECTURE.md` is the contract. This file tracks what the brief asks for, what the data shows, what is still open, and when each piece happens. Where this file and the contract disagree, the contract wins and the disagreement is an open decision in §5. A closed decision is written into `ARCHITECTURE.md` in the same change, and its entry here moves to the decision log (§10).
 
@@ -10,11 +10,12 @@ Sources: the organizer PDFs in `docs/` (problem statement, kickoff deck, dataset
 
 - [x] Organizer PDFs removed from git history (Sep 28). They stay in `docs/`, ignored by `.gitignore`.
 - [x] Old commit with the PDFs purged (Sep 28): `main` and `rebranch` both start from the clean root, the reflog was expired, and `git gc` found no unreachable objects or PDF blobs.
-- [x] Secret scan (Sep 28, gitleaks 8.30.1): all 3 commits on every branch and the committable working-tree files, no leaks found. A planted fake AWS key was caught, so the scanner works. Re-run before the first push.
+- [x] Secret scan (Sep 28, gitleaks 8.30.1): all 3 commits on every branch and the committable working-tree files, no leaks found. A planted fake AWS key was caught, so the scanner works.
+- [x] Secret scan after the repo reached GitHub (Sep 29, gitleaks 8.30.1): 44 commits on every branch, no leaks found. The purged PDF commit is not in the object store.
 - [ ] Add a secret scanner as a pre-commit hook.
-- [ ] Commit `.env.example` with empty values for the variables listed in `README.md` (AWS, `S3_BUCKET`, `OPENAI_API_KEY`, `JWT_SECRET`).
-- [ ] The public repo must be named `factored-hackathon-2026-<team name>`. Keep it private until submission day.
-- [ ] Both team members commit to the repo: organizers treat the GitHub contributors at submission as the team. If a registration email differs from the GitHub email, say so in the submission.
+- [x] `.env.example` committed (Sep 29, PR #1) with the six variable names and empty values.
+- [ ] The public repo must be named `factored-hackathon-2026-<team name>`. Today it is `jael0x/alba` on GitHub. Keep it private until submission day.
+- [ ] Both team members commit to the repo: organizers treat the GitHub contributors at submission as the team. Both have commits as of Sep 29. Before submission, check that every commit email is linked to its author's GitHub account. If a registration email differs from the GitHub email, say so in the submission.
 
 ## 1. The event
 
@@ -64,7 +65,7 @@ Source: the problem statement PDF. "Status" says whether `ARCHITECTURE.md` answe
 | 4. Repeatable prep with contracts, quality checks, lineage, update/freshness policy | `load` checks, `load_batches` sha256, update fixture (D5). No policy freshness rule | Covered for the static snapshot |
 | 4. At least one learned component against a baseline; valid labels, no leakage, justified splits | `ConversationTurn` vs B0 keyword baseline (D3) | Covered in design; harness is D7 |
 | 5. Held-out eval incl. bad or missing data, expired sessions, unauthorized access, prompt injection, tool failures, multilingual ambiguity; report success, unsafe outcomes, handoffs, latency, cost, sample sizes | `eval/` "comes later" | Open (D7); design carried in §7 |
-| 6. Tracing, bounded retries, safe fallback, reproducible setup | events and trace screen, 3 attempts, fallback to `human_active`, `docker compose up` with a documented `.env` | Covered |
+| 6. Tracing, bounded retries, safe fallback, reproducible setup | events and trace screen, 3 attempts, fallback to `human_active`, `docker compose up` with a documented `.env` | Covered in design. The reproducible setup is built (Sep 29) |
 | 6. Capacity limits, monitoring, access control, data retention, remaining deployment work | per-query `customer_id` filter | Partial: capacity, monitoring, retention not written. Organizers value stated sizing limits (§1). Deploy path documented only (D2) |
 | 6. Explanations from sources, rules, execution records; no chain-of-thought | `rule_trace`, `facts` with source column, `events` | Covered |
 | Credit: separate conversation, predictive risk estimate, eligibility policy | model; dataset `credit_score` as risk estimate; pure policy (D4) | Covered |
