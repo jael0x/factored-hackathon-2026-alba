@@ -589,7 +589,7 @@ These points are left open on purpose. Implementing them on your own breaks the 
 - A separate intent router beside `ConversationTurn`.
 - Full pandera/Great Expectations suites or a policy freshness rule (R10).
 
-Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI). Each one that gets decided is written into this file.
+Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), and D12 to D16, found by the Sep 29 spec review (the policy run key after `NEEDS_INFO`, a second vague request, an income typed before consent, handoffs that are not `REFER`, and three wording fixes). Each one that gets decided is written into this file.
 
 ## Known gaps
 
