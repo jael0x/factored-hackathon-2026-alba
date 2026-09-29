@@ -209,7 +209,7 @@ A pill with a 1px border in the tone, the soft fill, and tone text at 12/16, wei
 | Secondary | No fill, 1px `--field-edge`, ink text, pill | "Precalificar", "No precalificar", "Elegir al azar", "Volver" |
 | Send | 44px circle, `--indigo`, white icon | Composer |
 
-- Every target is at least 44 by 44 px.
+- Every target on product screens, and every header control on the C4 page, is at least 44 by 44 px. The C4 tree rows and chips are denser and keep at least 24px (the WCAG 2.2 AA minimum).
 - Focus: 2px outline, offset 2px, `--green` on paper and `--indigo` on glass.
 - Press: scale 0.98 over `--t-press`. Disabled: 45% opacity, not clickable.
 
@@ -262,11 +262,11 @@ A pill with a 1px border in the tone, the soft fill, and tone text at 12/16, wei
 
 ### C4 page
 
-A record surface: paper tokens, the tones above, the box kinds above. When it is restyled, Georgia goes to the sans stack, labels under 12px go to 12px, and panes go to `--r-card`. It keeps its dark set and its layout.
+A record surface: paper tokens, the tones above, the box kinds above, the sans stack, nothing under 12px, panes at `--r-card`, pill controls with a `--field-edge` border. It keeps its layout and its dark set; in the dark set `--field-edge` is `#7B7368`.
 
 ### Mock
 
-`mocks/index.html` follows this file when it is next edited. The dark rail at the top stays: it belongs to the walkthrough, not the bank (`README.md`). Raw identifiers such as `ai_active` belong in the walkthrough notes, not in the customer screen chrome.
+`mocks/index.html` follows this file and the flows in `specs/`. Each stage has two parts: the screen, styled as above, and a dashed "Nota del recorrido" that explains it. Raw identifiers such as `ai_active` appear only in the notes and on agent screens. The dark rail at the top belongs to the walkthrough, not the bank (`README.md`). Template sentences that are not written yet show as a dashed placeholder naming the `template_id`.
 
 ## Motion
 
@@ -296,6 +296,7 @@ Contrast, WCAG 2.x formula, computed Sep 28, 2026 for the values in this file. G
 | `--muted` | `--bg` / `--card` | 5.41 / 6.64 | 4.5 |
 | Tone text | Its fill: green, stop, clay, amber, slate | 10.21, 8.18, 5.40, 5.33, 7.02 | 4.5 |
 | `--field-edge` | `--card` / `--bg` | 3.84 / 3.12 | 3 |
+| `--field-edge` dark `#7B7368` | C4 dark `--card` `#221F1B` | 3.51 | 3 |
 | `--field-edge-cool` | Glass over mist | 3.33 | 3 |
 | `--line` | `--card` | 1.43 | Decorative only |
 
@@ -312,9 +313,7 @@ Contrast, WCAG 2.x formula, computed Sep 28, 2026 for the values in this file. G
 
 ## Interface copy
 
-Interface labels are Spanish, as in the mock. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the agent-close message) are not in this file: they live in `api/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
-
-Labels this file adds to the mock's: "Tarjeta de crédito", "Préstamo personal", "Quiero una tarjeta de crédito", "Revisado por una persona.", "Cliente", "Agente", "Elegir al azar", "Tu sesión terminó", "Volver a entrar", "Reintentar", "Confirmar", "Volver", "No hay casos en revisión.", "terminada en".
+Interface labels are Spanish. Until `web/` exists, the labels are the ones this file names and the ones in `mocks/index.html`. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the agent-close message) are not in this file: they live in `api/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
 
 ## Open
 
