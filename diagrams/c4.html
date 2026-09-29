@@ -1,0 +1,1858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Alba C4 Model</title>
+  <style>
+    :root {
+      --paper: #f3efe7;
+      --bg: #e7e1d6;
+      --card: #fbf8f3;
+      --ink: #1c1915;
+      --muted: #5e584f;
+      --line: #d9d1c3;
+      --green: #1e3d32;
+      --green-soft: #e7f0eb;
+      --clay: #8a4f33;
+      --clay-soft: #f6e8df;
+      --amber: #7a5d12;
+      --amber-soft: #f6eed6;
+      --slate: #34506b;
+      --slate-soft: #e4ecf3;
+      --person-bg: #241f1b;
+      --person-ink: #f3efe7;
+      --sys-bg: #1e3d32;
+      --sys-ink: #f3efe7;
+      --ext-bg: #6f675e;
+      --ext-ink: #fbf8f3;
+      --box-bg: #fbf8f3;
+      --box-line: #1e3d32;
+      --arrow: #7b7368;
+      --hot: #8a4f33;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --paper: #1b1916; --bg: #141210; --card: #221f1b; --ink: #eee8de; --muted: #a79e91; --line: #3b352e;
+        --green: #9ccbb3; --green-soft: #1f2e27; --clay: #e0a483; --clay-soft: #33241c; --amber: #e2c46f; --amber-soft: #302814;
+        --slate: #9fbcd8; --slate-soft: #1f2833; --person-bg: #eee8de; --person-ink: #1b1916; --sys-bg: #2e5b49; --sys-ink: #f3efe7;
+        --ext-bg: #4d4740; --ext-ink: #eee8de; --box-bg: #221f1b; --box-line: #6fa088; --arrow: #8d8478; --hot: #e0a483;
+        color-scheme: dark;
+      }
+    }
+    :root[data-theme="dark"] {
+      --paper: #1b1916; --bg: #141210; --card: #221f1b; --ink: #eee8de; --muted: #a79e91; --line: #3b352e;
+      --green: #9ccbb3; --green-soft: #1f2e27; --clay: #e0a483; --clay-soft: #33241c; --amber: #e2c46f; --amber-soft: #302814;
+      --slate: #9fbcd8; --slate-soft: #1f2833; --person-bg: #eee8de; --person-ink: #1b1916; --sys-bg: #2e5b49; --sys-ink: #f3efe7;
+      --ext-bg: #4d4740; --ext-ink: #eee8de; --box-bg: #221f1b; --box-line: #6fa088; --arrow: #8d8478; --hot: #e0a483;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 "Segoe UI", Helvetica, Arial, sans-serif; }
+    h1, h2 { font-family: Georgia, "Iowan Old Style", serif; font-weight: 500; margin: 0; }
+    code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.9em; }
+    button { font: inherit; color: inherit; }
+    header { padding: 16px 24px 12px; display: grid; gap: 10px; }
+    footer.intro { padding: 4px 24px 40px; display: grid; gap: 8px; }
+    .mark { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--green); }
+    h1 { font-size: 30px; }
+    .lede { color: var(--muted); max-width: 90ch; margin: 0; }
+    .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+    .steps { display: flex; flex-wrap: wrap; gap: 6px; }
+    .step { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 5px 12px; font-size: 13px; cursor: pointer; color: var(--muted); }
+    .step b { color: var(--ink); margin-right: 4px; }
+    .step.on { background: var(--green); border-color: var(--green); color: var(--paper); }
+    .step.on b { color: var(--paper); }
+    .step:disabled { cursor: default; opacity: 0.55; }
+    .tools { display: flex; gap: 6px; }
+    .tool { border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 5px 10px; font-size: 13px; cursor: pointer; }
+    .tool:disabled { opacity: 0.45; cursor: default; }
+    .crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 13px; color: var(--muted); }
+    .crumbs button { background: none; border: 0; padding: 2px 4px; cursor: pointer; color: var(--green); text-decoration: underline; text-underline-offset: 3px; }
+    .crumbs span.cur { color: var(--ink); font-weight: 600; padding: 2px 4px; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 14px; padding: 0 24px 24px; align-items: start; }
+    .side { position: sticky; top: 12px; display: grid; gap: 12px; grid-template-rows: minmax(0, 1fr) auto; max-height: calc(100vh - 24px); }
+    .pane { background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
+    nav.pane { position: relative; padding: 10px 8px; max-height: 34vh; overflow: auto; font-size: 13px; }
+    nav ul { list-style: none; margin: 0; padding-left: 12px; }
+    nav > ul { padding-left: 0; }
+    nav li button { display: flex; gap: 6px; width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: 3px 6px; cursor: pointer; }
+    nav li button:hover { background: var(--green-soft); }
+    nav li button.view { font-weight: 600; background: var(--green-soft); }
+    nav li button.sel { outline: 2px solid var(--green); outline-offset: -2px; }
+    nav .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex: none; background: var(--line); }
+    .dot.d-defined { background: var(--green); } .dot.d-partial { background: var(--amber); } .dot.d-open { background: var(--clay); }
+    .dot.d-person { background: var(--person-bg); border: 1px solid var(--muted); } .dot.d-system { background: var(--sys-bg); } .dot.d-external { background: var(--ext-bg); }
+    .dot.d-container, .dot.d-store, .dot.d-component, .dot.d-file, .dot.d-tables { background: var(--box-line); } .dot.d-planned { background: transparent; border: 1px dashed var(--muted); }
+    .viewport { overflow-x: auto; padding: 4px; }
+    .title-row { padding: 14px 18px 0; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+    .title-row h2 { font-size: 22px; }
+    .title-row p { margin: 0; color: var(--muted); font-size: 13px; }
+    .stage { position: relative; padding: 48px 36px 60px; transform-origin: 0 0; }
+    .stage.enter { animation: zoom 0.22s ease-out; }
+    @keyframes zoom { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }
+    @media (prefers-reduced-motion: reduce) { .stage.enter { animation: none; } }
+    .grid { position: relative; z-index: 2; display: grid; column-gap: 48px; row-gap: 76px; }
+    .boundary { position: absolute; z-index: 0; border: 2px dashed var(--muted); border-radius: 18px; pointer-events: none; }
+    .boundary span { position: absolute; left: 14px; bottom: 9px; font-size: 12px; color: var(--muted); }
+    .boundary span b { color: var(--ink); font-size: 13px; }
+    svg.links { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: visible; }
+    svg.links path.ln { fill: none; stroke: var(--arrow); stroke-width: 1.4; stroke-dasharray: 5 4; }
+    svg.links path.ln.hot { stroke: var(--hot); stroke-width: 2.2; stroke-dasharray: none; }
+    .labels { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+    .lab { position: absolute; transform: translate(-50%, -50%); max-width: 170px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 2px 7px; font-size: 11.5px; line-height: 1.3; text-align: center; color: var(--muted); }
+    .lab i { display: block; font-style: normal; font-size: 10.5px; opacity: 0.85; }
+    .lab.hot { color: var(--ink); border-color: var(--hot); z-index: 2; }
+    .lab.tight { display: none; }
+    .lab.tight.hot { display: block; }
+    .box { position: relative; display: flex; flex-direction: column; gap: 4px; text-align: left; min-height: 104px; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--box-line); background: var(--box-bg); cursor: pointer; transition: opacity 0.15s, box-shadow 0.15s; }
+    .box:hover, .box:focus-visible { box-shadow: 0 0 0 3px var(--green-soft), 0 6px 18px rgba(0, 0, 0, 0.12); outline: none; }
+    .box .kind { font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.75; }
+    .box .tech { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -3px; }
+    .box strong { font-size: 15px; line-height: 1.25; }
+    .box .desc { font-size: 12.5px; opacity: 0.88; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .box .foot { margin-top: auto; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 11.5px; padding-top: 4px; }
+    .box .drill { font-weight: 600; }
+    .k-person { background: var(--person-bg); color: var(--person-ink); border-color: var(--person-bg); border-radius: 40px 40px 14px 14px; padding-top: 16px; }
+    .k-system { background: var(--sys-bg); color: var(--sys-ink); border-color: var(--sys-bg); min-height: 130px; }
+    .k-external { background: var(--ext-bg); color: var(--ext-ink); border-color: var(--ext-bg); }
+    .k-store { border-radius: 26px / 14px; border-top-width: 6px; }
+    .k-planned { border-style: dashed; border-color: var(--muted); background: transparent; }
+    .k-spec { border-width: 1px; border-color: var(--line); border-left: 6px solid var(--line); min-height: 92px; }
+    .k-spec.st-defined { border-left-color: var(--green); } .k-spec.st-partial { border-left-color: var(--amber); } .k-spec.st-open { border-left-color: var(--clay); }
+    .box.sel { box-shadow: 0 0 0 3px var(--hot); }
+    .dimming .box:not(.hot) { opacity: 0.35; }
+    .dimming svg.links path.ln:not(.hot) { opacity: 0.25; }
+    .dimming .lab:not(.hot) { opacity: 0.2; }
+    .pill { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 11px; font-weight: 600; border: 1px solid currentColor; }
+    .pill.st-defined { color: var(--green); background: var(--green-soft); }
+    .pill.st-partial { color: var(--amber); background: var(--amber-soft); }
+    .pill.st-open { color: var(--clay); background: var(--clay-soft); }
+    .k-system .pill, .k-external .pill, .k-person .pill { color: inherit; background: transparent; }
+    .open-count { color: var(--clay); font-weight: 600; }
+    .k-system .open-count, .k-external .open-count, .k-person .open-count { color: inherit; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 0 18px 16px; font-size: 12px; color: var(--muted); }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend i { width: 18px; height: 12px; border-radius: 4px; display: inline-block; border: 2px solid var(--box-line); }
+    aside.pane { padding: 18px; overflow: auto; min-height: 0; }
+    aside h2 { font-size: 22px; margin: 6px 0 2px; }
+    aside .tech { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+    aside h3 { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; }
+    aside ul { margin: 0; padding-left: 18px; }
+    aside li { margin: 4px 0; }
+    aside p { margin: 6px 0; }
+    .ref { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 0 5px; margin-right: 5px; white-space: nowrap; }
+    .ref.gap { background: var(--clay-soft); color: var(--clay); }
+    .ref.dec { background: var(--amber-soft); color: var(--amber); }
+    .ref.res { background: var(--slate-soft); color: var(--slate); }
+    .ref.new { border: 1px solid var(--ink); }
+    .ref.todo { background: var(--green-soft); color: var(--green); }
+    .kids { display: flex; flex-wrap: wrap; gap: 6px; }
+    .kids button, .jump { border: 1px solid var(--line); background: var(--paper); border-radius: 8px; padding: 3px 8px; font-size: 12.5px; cursor: pointer; }
+    .src { font-size: 12px; color: var(--muted); margin-top: 16px; }
+    dialog { border: 1px solid var(--line); border-radius: 16px; background: var(--card); color: var(--ink); width: min(820px, calc(100vw - 32px)); max-height: 85vh; padding: 0; }
+    dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
+    .dlg-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--card); }
+    .dlg-body { padding: 4px 20px 20px; }
+    .dlg-body h3 { font-size: 13px; margin: 18px 0 6px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+    .dlg-body li { margin: 6px 0; }
+    @media (max-width: 1180px) {
+      main { grid-template-columns: minmax(0, 1fr); padding: 0 16px 32px; }
+      header { padding: 16px 16px 10px; }
+      footer.intro { padding: 4px 16px 32px; }
+      .side { position: static; max-height: none; }
+      nav.pane { max-height: 50vh; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <div class="steps" id="steps"></div>
+      <div class="tools">
+        <button class="tool" id="up" title="Up one level (Esc)">Up one level</button>
+        <button class="tool" id="backlog">Open spec items</button>
+      </div>
+    </div>
+    <div class="crumbs" id="crumbs"></div>
+  </header>
+  <main>
+    <section class="pane">
+      <div class="title-row"><h2 id="vtitle"></h2><p id="vhint"></p></div>
+      <div class="viewport"><div id="sizer"><div class="stage" id="stage"></div></div></div>
+      <div class="legend">
+        <span><i style="background:var(--person-bg);border-color:var(--person-bg)"></i>Person</span>
+        <span><i style="background:var(--sys-bg);border-color:var(--sys-bg)"></i>System in scope</span>
+        <span><i style="background:var(--ext-bg);border-color:var(--ext-bg)"></i>External system</span>
+        <span><i></i>Container or component</span>
+        <span><i style="border-style:dashed;border-color:var(--muted)"></i>Planned, not in the running stack</span>
+        <span><span class="pill st-defined">Defined</span> fixed by the contract</span>
+        <span><span class="pill st-partial">Partial</span> fixed in part</span>
+        <span><span class="pill st-open">To define</span> open</span>
+      </div>
+    </section>
+    <div class="side">
+      <aside class="pane" id="panel" aria-live="polite"></aside>
+      <nav class="pane" id="tree" aria-label="Model tree"></nav>
+    </div>
+  </main>
+  <footer class="intro">
+    <div class="mark">Alba · credit pre-qualification</div>
+    <h1>C4 model</h1>
+    <p class="lede">A clickable view of <code>ARCHITECTURE.md</code> as of Sep 28, 2026, after the thirteen known gaps were closed. Click any system, container, or component to open the level below it; the side tree shows every sub level. Level 4 lists the specs each component needs: what the contract already fixes and what the definition phase still has to decide. If this page and <code>ARCHITECTURE.md</code> disagree, the contract wins.</p>
+  </footer>
+  <dialog id="dlg">
+    <div class="dlg-head"><strong>Open spec items</strong><button class="tool" id="dlg-close">Close</button></div>
+    <div class="dlg-body" id="dlg-body"></div>
+  </dialog>
+
+<script>
+const N = {};
+const V = {};
+const node = (id, o) => { N[id] = { id, ...o }; };
+const view = (id, o) => { V[id] = o; };
+/*DATA-START*/
+const REF_TITLES = {
+  D1: 'Model choice evidence and cost',
+  D2: 'Deployment target',
+  D3: 'The evaluated learned component',
+  D4: 'Risk-estimate layer',
+  D5: 'Data engineering scope',
+  D6: 'Portuguese coverage',
+  D7: 'Evaluation harness and baselines',
+  D8: 'Confirmation step',
+  D9: 'Prompt-injection defense',
+  D11: 'Customer text sent to OpenAI',
+  R2: 'data_backup_20260831/ vs data/',
+  R7: 'FX sanity check',
+  R8: 'Oracle rows',
+  R9: 'product_type values',
+  R11: 'gpt-6-luna on the API',
+  Copy: 'Template sentences not written yet',
+  New: 'Raised while drawing this view',
+};
+
+const spec = (parent, id, o) => node(id, { parent, kind: 'spec', ...o });
+
+node('context', {
+  kind: 'root', name: 'Alba in context',
+  desc: [
+    'Level 1 shows Alba as one box, the people who use it, and the two external systems it depends on.',
+    'Click Alba to open its containers. Click a container to open its components. Click a component to open its specs.',
+  ],
+  src: 'ARCHITECTURE.md, "What gets built"',
+});
+
+node('customer', {
+  parent: 'context', kind: 'person', name: 'Customer', tech: 'bank customer',
+  summary: 'Any of the 150,000 rows of `customers.csv`. Asks about a credit card or a personal loan.',
+  desc: [
+    'Any row of `customers.csv` can open a session. The four oracle profiles are the test oracle, not an allowlist.',
+    'Asks about a credit card or a personal loan and gets a certificate (`constancia`): pre-qualifies, does not pre-qualify, or goes to a person. Sees only their own products. Can be asked two things only: which product, and monthly income when the file has none.',
+  ],
+  fixed: [
+    'Juan `CLI-9EDEKZ8OUNUR`: `PREQUALIFIED`, R05, score 812.',
+    'Juliana `CLI-MD60UR8PNJDI`: `NEEDS_INFO`, R06, empty income. If she states an amount, R05 pre-qualifies her (score 714). She does not go to the queue.',
+    'Alicia `CLI-440CO5FZIY6A`: `REFER`, R05, score 615.',
+    'Mariana `CLI-ZGOY1V6ZC46J`: `NOT_PREQUALIFIED`, R02, 180 days past due.',
+    'A national id or a `customer_id` does not open a session. A one-time code does.',
+    'Spanish or Portuguese. Another language goes to a person (`language_unsupported`).',
+  ],
+  src: 'ARCHITECTURE.md, "What gets built", "Oracle fixtures", "What the customer can be asked"',
+});
+
+node('agent', {
+  parent: 'context', kind: 'person', name: 'Credit agent', tech: 'bank staff',
+  summary: 'Any of the 1,200 rows of `service_agents.csv`. Closes handed-off cases as pre-qualified or not.',
+  desc: [
+    'Sees only processes in `human_active`. Reads the handoff packet and the trace. Does not chat: the only action is to close the case with `PREQUALIFIED` or `NOT_PREQUALIFIED`, and a template tells the customer.',
+    'The mock uses César González Sánchez (`AGT-OJ9N4FGYV9`, employee `E75612`, specialty Créditos, Senior, morning shift). He is not the only agent.',
+  ],
+  fixed: [
+    'Juan, Juliana, and Mariana never reach the queue. Alicia does.',
+    'No reply box and no text field. The close is `POST /agent/case/:id/close`.',
+  ],
+  src: 'ARCHITECTURE.md, "Oracle fixtures", "Agent close", "Auth and screens"',
+});
+
+node('alba', {
+  parent: 'context', kind: 'system', name: 'Alba', tech: 'credit pre-qualification assistant',
+  summary: 'A versioned policy decides. The model only classifies the sentence and drafts a clarification.',
+  desc: [
+    'A web service for the synthetic LATAM bank of the hackathon. If the request names no product, the assistant asks which one. If income is missing, it asks for it and the case stays with the assistant. If the data is enough, the policy `alba-credit-v1` decides and a template writes the certificate. A borderline score, a missing score, or an out-of-scope request goes to a person, who closes it as pre-qualified or not.',
+    'It is not a production bank and moves no money. Reviewers use the deployed link and read the repo; they are not expected to run the stack.',
+  ],
+  fixed: [
+    'One process, `credit_prequalification`, with the states `ai_active`, `human_active`, `ended`.',
+    'Four outcomes: `PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, `NEEDS_INFO`. End reasons: `prequalified`, `not_prequalified`.',
+    'No credit limit, no rate for the new product, no delinquency prediction.',
+    'The same `docker compose` stack runs locally and on the deploy host, Postgres included.',
+  ],
+  open: [
+    ['D2', 'The deploy host, and whether the public deploy runs with `DEMO_INBOX=1`.'],
+    ['D8', 'Whether `policy.run` needs explicit customer consent first.'],
+    ['D4', 'Whether `credit_score` is presented as the external risk estimate, or a separate risk service exists.'],
+  ],
+  src: 'ARCHITECTURE.md, "Contract for implementers", "Process", "Closed stack", "Docker"',
+});
+
+node('openai', {
+  parent: 'context', kind: 'external', name: 'OpenAI API', tech: 'GPT-6 Luna, gpt-6-luna',
+  summary: 'Classifies the message and drafts a clarification. Sees the text and four booleans, no profile values.',
+  desc: [
+    'A reasoning model on the OpenAI API, called once per `conversation.generate` with Structured Outputs returning `ConversationTurn`. It does not decide eligibility, compute a limit, write the certificate, or choose the next step.',
+    'List price on Sep 28, 2026: $0.10 input, $0.01 cached input, $0.50 output per 1M tokens (`PLAN.md` D1).',
+  ],
+  fixed: [
+    'What leaves the service: the message text, the process state, four booleans (`income_on_file`, `score_on_file`, `has_active_card`, `has_active_personal_loan`), and the two-product catalog.',
+    '`OPENAI_API_KEY` lives in `.env` and in the host secrets. Never in git, the image, a log, or a prompt.',
+    'A failed call is a failed command attempt. After 3, `human_active` with `tool_failed`. No silent fallback model.',
+  ],
+  src: 'ARCHITECTURE.md, "How the model is called"',
+});
+
+node('s3', {
+  parent: 'context', kind: 'external', name: 'Organizer S3 bucket', tech: 'read-only, us-east-2',
+  summary: 'Source of the four CSVs. Only `load` reads it, with `aws s3 cp`.',
+  desc: ['Organizer dataset v1.0.0, synthetic, snapshot of June 17, 2026. The bucket name and keys come from the organizers and live only in `.env`.'],
+  fixed: [
+    '`load` runs `aws s3 cp` for four keys under `data/`: `customers.csv`, `products.csv`, `daily_exchange_rates.csv`, `service_agents.csv`. It does not list the bucket.',
+    'No transactions, transcripts, or digital events: they feed neither login nor the policy.',
+    'The API does not call S3.',
+  ],
+  src: 'ARCHITECTURE.md, "Database", "Docker"',
+});
+
+node('web', {
+  parent: 'alba', kind: 'container', name: 'web', tech: 'TypeScript, React, Vite',
+  noun: 'pages',
+  summary: 'One app for customers and agents. Renders what the API returns.',
+  desc: [
+    'One app with six pages. It renders products, messages, the certificate, and the process state as the API returns them. It does not compute the policy, convert currency, or write certificate prose.',
+    'The `web` service proxies to the API.',
+  ],
+  files: ['web/src/pages/', 'docker/web.Dockerfile'],
+  fixed: [
+    'Business logic does not live in the client. Vitest only if the client has logic.',
+    'Every fetch handles loading, error, and success.',
+    'An expired JWT returns 401 and the customer sees that the session ended. It is not silently renewed.',
+  ],
+  src: 'ARCHITECTURE.md, "File tree", "Auth and screens"; AGENTS.md, "Data fetching and UI"; DESIGN.md',
+});
+
+node('api', {
+  parent: 'alba', kind: 'container', name: 'api', tech: 'Python 3.12, FastAPI, Pydantic v2',
+  summary: 'HTTP endpoints and the command worker, in one process. Owns the policy and the model call.',
+  desc: [
+    'The HTTP API plus a worker loop that takes `commands` rows with `status = pending`, in the same process. It stores events, matches process rules, runs commands, runs the pure policy, and makes the one model call.',
+    'Starts only after `load` exits with code 0. Reads Postgres only; it never calls S3.',
+  ],
+  files: ['api/', 'docker/api.Dockerfile'],
+  fixed: [
+    'No Kafka, Redis, or Inngest. The worker is a loop inside the API process.',
+    'The `customer_id` of every query comes from the session JWT.',
+    'If `OPENAI_API_KEY` is missing, Postgres, login, and the policy still start. `conversation.generate` fails saying the key is missing.',
+  ],
+  src: 'ARCHITECTURE.md, "Closed stack", "Process-native loop", "Database", "Docker"',
+});
+
+node('postgres', {
+  parent: 'alba', kind: 'store', name: 'postgres', tech: 'PostgreSQL 16, named volume',
+  noun: 'table groups',
+  summary: 'Read tables, the gold profile, and the cycle tables: events, processes, commands.',
+  desc: [
+    'A service of the same compose stack, locally and on the deploy host. No managed database. `db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`.',
+    'The volume keeps gold. Deleting the volume reloads.',
+  ],
+  files: ['db/migrations/001_init.sql'],
+  fixed: [
+    'Nobody runs SQL by hand. `load` applies the schema.',
+    'Parameterized SQL only. `events` are append-only.',
+  ],
+  src: 'ARCHITECTURE.md, "Closed stack", "Database", "Docker"',
+});
+
+node('load', {
+  parent: 'alba', kind: 'container', name: 'load', tech: 'Python pipeline, AWS CLI, runs once',
+  summary: 'Applies the schema, copies missing CSVs with `aws s3 cp`, builds silver and gold, exits 0.',
+  desc: [
+    'Waits for Postgres, applies `db/migrations/`, copies the four CSVs if missing, fills the read tables and gold, and exits with code 0. `api` starts after that. It is the only process that reads S3.',
+    'A second `docker compose up` does not reload if `load_batches` already holds the same sha256 of the four files.',
+  ],
+  files: ['pipeline/', 'docker/load.Dockerfile'],
+  fixed: [
+    'Without the AWS variables and without the CSVs, it exits with an error naming what is missing. It never starts an empty demo or one with the four profiles made up.',
+    'DuckDB only if the aggregate needs it. The result lands in Postgres.',
+  ],
+  src: 'ARCHITECTURE.md, "Docker", "Pipeline"',
+});
+
+node('raw', {
+  parent: 'alba', kind: 'store', name: 'data/raw/', tech: 'local CSV folder, not committed',
+  noun: 'files',
+  summary: 'The four source CSVs. Excluded by `.gitignore`. Copied only when missing.',
+  desc: ['The folder the loader reads. Raw CSVs are never committed. If the four files are already here, `load` does not copy them again.'],
+  open: [['New', 'How `data/raw/` reaches the `load` container (bind mount or volume) is not written.']],
+  src: 'ARCHITECTURE.md, "Database", "Docker"',
+});
+
+node('eval', {
+  parent: 'alba', kind: 'planned', name: 'eval', tech: 'evaluation harness',
+  noun: 'parts',
+  summary: 'Held-out scenarios, baselines, and metrics. Not in the running stack.',
+  desc: [
+    'The contract says `eval/` "comes later; does not block the flow". The brief makes the evaluation mandatory. The Sep 27 design is carried in `PLAN.md` §7 and is pending D1, D3, and D7.',
+  ],
+  files: ['eval/'],
+  src: 'ARCHITECTURE.md, "File tree"; PLAN.md §5 and §7',
+});
+
+view('context', {
+  cols: 3, minCol: 200, inside: [],
+  place: [['customer', 0, 0], ['agent', 2, 0], ['alba', 1, 1], ['openai', 0, 2], ['s3', 2, 2]],
+  rels: [
+    ['customer', 'alba', 'Logs in with a one-time code, asks about a card or a loan, reads the certificate', 'HTTPS'],
+    ['agent', 'alba', 'Reads the packet, closes as pre-qualified or not', 'HTTPS'],
+    ['alba', 'openai', 'Classifies the message, drafts a clarification', 'HTTPS, Structured Outputs'],
+    ['alba', 's3', 'Copies four CSVs when missing', 'aws s3 cp, read-only'],
+  ],
+});
+
+view('alba', {
+  cols: 5, minCol: 150,
+  place: [
+    ['customer', 1, 0], ['agent', 2, 0],
+    ['web', 1, 1, 2], ['eval', 3, 1],
+    ['openai', 0, 2], ['api', 1, 2, 2], ['load', 3, 2], ['s3', 4, 2],
+    ['postgres', 1, 3, 2], ['raw', 3, 3],
+  ],
+  rels: [
+    ['customer', 'web', 'Uses', 'HTTPS'],
+    ['agent', 'web', 'Uses', 'HTTPS'],
+    ['web', 'api', 'Calls', 'JSON over HTTP'],
+    ['api', 'openai', 'One call per conversation.generate', 'HTTPS'],
+    ['api', 'postgres', 'Events, commands, processes, gold', 'SQL'],
+    ['load', 's3', 'Copies missing CSVs', 'aws s3 cp'],
+    ['load', 'raw', 'Writes, then reads', 'files'],
+    ['load', 'postgres', 'Schema, read tables, gold', 'SQL'],
+  ],
+});
+node('routers', {
+  parent: 'api', kind: 'component', name: 'HTTP routers', tech: 'api/main.py',
+  summary: 'Login, search, the customer message, the agent close, and the reads behind each page.',
+  desc: ['FastAPI app and routers. A customer message or an agent close appends an event; what happens next is a rule and a command, not an `if` in the handler. Every query filters by the id on the JWT.'],
+  files: ['api/main.py'],
+  src: 'ARCHITECTURE.md, "Auth and screens", "Agent close"; AGENTS.md, "Owners in this system"',
+});
+node('auth', {
+  parent: 'api', kind: 'component', name: 'Auth', tech: 'api/auth.py',
+  summary: 'One-time code, own JWT (HS256, 15 min), and the `get_session` dependency.',
+  desc: ['Issues and checks the one-time code and the JWT. `get_session` hands every handler the `customer_id` or `agent_id` from the token, never from the request body or the chat.'],
+  files: ['api/auth.py'],
+  src: 'ARCHITECTURE.md, "Auth and screens"',
+});
+node('events', {
+  parent: 'api', kind: 'component', name: 'Event store', tech: 'api/events.py',
+  summary: 'Appends immutable events with idempotency keys, and stamps the process columns on a message.',
+  desc: ['Appends to `events`. No `UPDATE` of a payload. Repeating a POST with the same key creates no new event and no new decision.'],
+  files: ['api/events.py'],
+  src: 'ARCHITECTURE.md, "Events"',
+});
+node('rules', {
+  parent: 'api', kind: 'component', name: 'Process rules', tech: 'api/rules.py',
+  summary: 'An in-memory catalog of 17 rules. A pure match over the event just written; the output is commands.',
+  desc: ['A list in code. No `rules` table in v1 and no per-organization override. Each rule appears once; a copy would fire twice. The rules, not the worker, choose what follows a classified turn.'],
+  files: ['api/rules.py'],
+  src: 'ARCHITECTURE.md, "Process rules"',
+});
+node('worker', {
+  parent: 'api', kind: 'component', name: 'Command worker', tech: 'api/worker.py',
+  summary: 'Takes pending commands with `FOR UPDATE SKIP LOCKED` and runs one of 8 handlers. At most 3 attempts.',
+  desc: ['A loop inside the API process. A finished command may write another event, and the rules react to that event. A handler never enqueues the next command itself.'],
+  files: ['api/worker.py'],
+  src: 'ARCHITECTURE.md, "Commands"',
+});
+node('processes', {
+  parent: 'api', kind: 'component', name: 'Process lifecycle', tech: 'api/processes.py',
+  summary: 'Start, transition, end of `credit_prequalification`. The row in `processes` is the projection.',
+  desc: ['Owns the process row and the allowed transitions. Any transition not in the table is an error and is not written.'],
+  files: ['api/processes.py'],
+  src: 'ARCHITECTURE.md, "Process"',
+});
+node('policy', {
+  parent: 'api', kind: 'component', name: 'Policy engine', tech: 'api/policy/engine.py',
+  summary: '`decide(profile, product) -> Decision`. Pure: same input, same output. Lives in git.',
+  desc: ['The only owner of eligibility. It is synthetic, because the dataset ships no credit manual, and the certificate says so. The model does not use it and cannot call it.'],
+  files: ['api/policy/engine.py', 'api/policy/alba-credit-v1.yaml'],
+  src: 'ARCHITECTURE.md, "Policy alba-credit-v1"',
+});
+node('templates', {
+  parent: 'api', kind: 'component', name: 'Templates', tech: 'api/policy/templates.py',
+  summary: 'The certificate and three notices, in `es` or `pt`. The model never writes this text.',
+  desc: ['The only place outcome wording and notices come from. The Portuguese text is written by the team; the dataset has none.'],
+  files: ['api/policy/templates.py'],
+  src: 'ARCHITECTURE.md, "Policy alba-credit-v1", "Commands"',
+});
+node('llm', {
+  parent: 'api', kind: 'component', name: 'LLM adapter', tech: 'api/llm/',
+  summary: 'The only module that imports the OpenAI SDK. One call, Structured Outputs, returns `ConversationTurn`.',
+  desc: ['Classifies the sentence and drafts the clarification. It gets no tool that accepts a `customer_id` and no path into the policy. Swapping the model changes only this module.'],
+  files: ['api/llm/conversation.py', 'api/llm/schema.py'],
+  src: 'ARCHITECTURE.md, "How the model is called"',
+});
+node('tools', {
+  parent: 'api', kind: 'component', name: 'Data tools', tech: 'api/tools/',
+  summary: 'Reads the gold profile, the session customer products, and the two-product catalog.',
+  desc: ['Thin readers over Postgres, always scoped to one `customer_id`. The model gets none of them as a tool.'],
+  files: ['api/tools/profile.py', 'api/tools/products.py', 'api/tools/catalog.py'],
+  src: 'ARCHITECTURE.md, "File tree", "Database"',
+});
+node('config', {
+  parent: 'api', kind: 'component', name: 'Settings and DB', tech: 'api/settings.py, api/db.py',
+  summary: 'Environment settings and the Postgres connection every other component uses.',
+  files: ['api/settings.py', 'api/db.py'],
+  src: 'ARCHITECTURE.md, "File tree"',
+});
+
+view('api', {
+  cols: 5, minCol: 150,
+  place: [
+    ['web', 1, 0], ['openai', 4, 0],
+    ['auth', 0, 1], ['routers', 1, 1], ['tools', 2, 1], ['llm', 4, 1],
+    ['events', 2, 2], ['worker', 3, 2], ['templates', 4, 2],
+    ['config', 0, 3], ['rules', 2, 3], ['processes', 3, 3], ['policy', 4, 3],
+    ['postgres', 0, 4, 2],
+  ],
+  rels: [
+    ['web', 'routers', 'Calls', 'JSON over HTTP'],
+    ['routers', 'auth', 'get_session'],
+    ['routers', 'events', 'Message and close events'],
+    ['routers', 'tools', 'Reads products'],
+    ['events', 'rules', 'match_rules(event)'],
+    ['rules', 'worker', 'commands rows', 'pending'],
+    ['worker', 'events', 'Writes the next event'],
+    ['worker', 'processes', 'start, transition, end'],
+    ['worker', 'llm', 'conversation.generate'],
+    ['worker', 'policy', 'policy.run'],
+    ['worker', 'tools', 'Reads the profile'],
+    ['worker', 'templates', 'template.send, decision.render'],
+    ['llm', 'openai', 'One call', 'Structured Outputs'],
+    ['config', 'postgres', 'Connection', 'SQL'],
+  ],
+});
+
+spec('routers', 'r-search', {
+  name: 'GET /customers/search', tech: 'login search', status: 'partial',
+  summary: 'Search over the 150,000 customers by name, document, or id. Limit 20.',
+  fixed: [
+    '`GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20.',
+    'Backed by indexes on `customers.document_number` and `(last_name, first_name)`.',
+    'Any customer in gold can log in. Login does not hardcode the four oracle profiles.',
+  ],
+  open: [
+    ['New', 'The agent search over the 1,200 agents "works the same" but has no named endpoint.'],
+    ['New', 'No file in the tree owns the search query.'],
+  ],
+  tests: ['Login is not restricted to the four oracle customers.'],
+  src: 'ARCHITECTURE.md, "Auth and screens", "Indexes"',
+});
+spec('routers', 'r-login', {
+  name: 'POST /session/code, POST /session', tech: 'customer login', status: 'defined',
+  summary: 'A code for an existing or random customer, then a 15-minute JWT.',
+  fixed: [
+    '`POST /session/code` takes an existing `customer_id`, or `random=true`. It creates a 6-digit code valid 10 minutes in `login_codes`.',
+    'With `DEMO_INBOX=1` the response includes the code. There is no SMS.',
+    '`POST /session` with the code returns the JWT: `sub` = `customer_id`, `role` = `customer`, `exp` 15 minutes.',
+  ],
+  open: [['D2', 'Whether the public deploy runs with `DEMO_INBOX=1`.']],
+  src: 'ARCHITECTURE.md, "Auth and screens"',
+});
+spec('routers', 'r-agent-session', {
+  name: 'POST /agent/session', tech: 'agent login', status: 'partial',
+  summary: 'Agent login against `service_agents`, by search or at random.',
+  fixed: ['Works like the customer login, against the 1,200 rows of `service_agents`. Claims: `sub` = `agent_id`, `role` = `agent`.'],
+  open: [['New', 'Whether the agent also goes through a one-time code, and the request shape.']],
+  src: 'ARCHITECTURE.md, "Auth and screens"',
+});
+spec('routers', 'r-customer-msg', {
+  name: 'Customer message POST', tech: 'path not named', status: 'partial',
+  summary: 'Writes `conversation.message_received`. Idempotent on `client_message_id`.',
+  fixed: [
+    'Payload: `text`, `client_message_id`. The `customer_id` comes from the JWT. The customer does not send `process_id` or `process_state`.',
+    'Key `msg:{client_message_id}`. It does not wait for a process. Repeating the POST creates no new event and no new decision.',
+    'In `human_active` the message is stored and the model is not called.',
+  ],
+  open: [['New', 'The route path and the response shape.']],
+  tests: ['A second POST with the same `client_message_id` creates no event.'],
+  src: 'ARCHITECTURE.md, "Events"',
+});
+spec('routers', 'r-agent-close', {
+  name: 'POST /agent/case/:id/close', tech: 'agent close', status: 'partial',
+  summary: 'The agent only action: `PREQUALIFIED` or `NOT_PREQUALIFIED`. No text.',
+  fixed: [
+    'Body: `outcome`, `PREQUALIFIED` or `NOT_PREQUALIFIED`. Any other body is rejected. There is no text field.',
+    'Writes `conversation.agent_closed` with `outcome`, `agent_id`, and `language` copied from the process.',
+    'Key `agent_close:{process_id}`. The same case cannot be closed twice.',
+    'The agent does not send messages and does not chat.',
+  ],
+  open: [['New', 'A case handed off before a product was named (a first-message human request, out of scope, unsupported language) has `product` null, so a close would render a certificate for no product.']],
+  src: 'ARCHITECTURE.md, "Agent close"',
+});
+spec('routers', 'r-reads', {
+  name: 'Read endpoints', tech: 'paths not named', status: 'open',
+  summary: 'Products, thread, certificate, queue, handoff packet, trace.',
+  fixed: [
+    'The filter `customer_id = jwt.sub` is in every API query.',
+    'The customer API does not list `customer_credit_profile`.',
+    'The agent queue shows processes in `human_active` only. The trace shows the process `events` in order.',
+  ],
+  open: [
+    ['New', 'Paths and response shapes for home products, case thread and certificate, agent queue, agent case, and trace.'],
+    ['New', 'The brief asks for "open questions" in the handoff; `PLAN.md` §2 notes that field is not in the contract.'],
+  ],
+  tests: ['A `products` call with Juan\'s JWT asking for Alicia\'s id returns no rows of Alicia\'s.'],
+  src: 'ARCHITECTURE.md, "Auth and screens", "Database"; PLAN.md §2',
+});
+
+spec('auth', 'a-code', {
+  name: 'One-time code', tech: 'login_codes', status: 'partial',
+  summary: '6 digits, valid 10 minutes. The code opens the session, not the id.',
+  fixed: [
+    '`login_codes` holds the 6-digit code, the customer or agent it belongs to, and the 10-minute expiry.',
+    'A document number or a `customer_id` does not prove identity.',
+  ],
+  open: [['New', 'Whether the code is stored hashed, and whether wrong attempts are limited.']],
+  src: 'ARCHITECTURE.md, "Auth and screens", "Cycle"; AGENTS.md, "Model"',
+});
+spec('auth', 'a-jwt', {
+  name: 'JWT', tech: 'HS256, JWT_SECRET', status: 'defined',
+  summary: 'Own token, 15 minutes. 401 when expired, no silent renewal.',
+  fixed: [
+    'Own JWT, HS256, 15 minutes, issued by this API with `JWT_SECRET`.',
+    'Claims: `sub` (`customer_id` or `agent_id`), `role` (`customer` or `agent`), `exp`.',
+    'Expired JWT: 401. The customer sees that the session ended. Not renewed during the case being shown.',
+  ],
+  src: 'ARCHITECTURE.md, "Closed stack", "Auth and screens"',
+});
+spec('auth', 'a-session', {
+  name: 'get_session', tech: 'FastAPI dependency', status: 'partial',
+  summary: 'Gives each handler the id and role from the token.',
+  fixed: [
+    'The `customer_id` of every query comes from the JWT. Never from chat text or a model argument.',
+    'Another customer\'s rows are the JWT filter: a query for another id returns no rows.',
+  ],
+  open: [['New', 'Which routes require `role = agent`. The screen table implies it; no rule states it.']],
+  tests: ['Juan\'s session does not return Alicia\'s products.'],
+  src: 'ARCHITECTURE.md, "Contract for implementers", "Known gaps" 11',
+});
+
+spec('events', 'e-table', {
+  name: 'events table', tech: 'db/migrations/001_init.sql', status: 'defined',
+  summary: 'Append-only facts with actor, cause, process columns, and a unique key.',
+  fixed: [
+    'Columns: `id uuid`, `event_name`, `payload jsonb`, `customer_id`, `process_id uuid`, `process_state`, `actor` (`customer`, `agent`, `system`, `rule`), `caused_by_event_id`, `caused_by_command_id`, `idempotency_key` unique, `created_at`.',
+    '`process_id` and `process_state` are columns, not payload fields.',
+    'Append-only. No `UPDATE` of `payload`. Index on `(process_id, created_at)`.',
+  ],
+  src: 'ARCHITECTURE.md, "Events", "Indexes"',
+});
+spec('events', 'e-stamp', {
+  name: 'Message stamping', tech: 'process_id, process_state', status: 'defined',
+  summary: 'The API stamps the process columns when it inserts a customer message.',
+  fixed: [
+    'An open process exists: `process_id` is that process and `process_state` its state.',
+    'None open: `process_id` stays null and `process_state` is `ai_active`, the state a new process is born in.',
+    'The event does not open the process; `open_process` does. The message row is never updated or copied.',
+  ],
+  src: 'ARCHITECTURE.md, "Events"',
+});
+spec('events', 'e-names', {
+  name: 'Event names', tech: 'closed set of 10', status: 'defined',
+  summary: 'Conversation, analysis, decision, and process events. No others in v1.',
+  fixed: [
+    '`conversation.message_received`, `conversation.turn_classified`, `conversation.template_sent`, `conversation.agent_closed`, `conversation.thread_taken`.',
+    '`analysis.completed`, `prequalification.decided`, `process.started`, `process.state_changed`, `process.ended`.',
+    'Defined once as constants. Call sites never repeat the literal.',
+  ],
+  src: 'ARCHITECTURE.md, "Events"; AGENTS.md, "No magic strings"',
+});
+spec('events', 'e-payloads', {
+  name: 'Payload minimums', tech: 'per event', status: 'defined',
+  summary: 'Each event carries every fact a downstream rule needs, `language` included.',
+  fixed: [
+    'Turn: `intent`, `product`, `language`, `declared_income_amount`, `declared_income_currency`, `reply_text`, `reply_ok`, `reason_code`.',
+    '`analysis.completed` adds `language` to the policy fields. `prequalification.decided` carries `decided_by` (`policy` or `agent`).',
+    '`rule_trace` is a list of `{rule_id, input, result}`. `facts` cite name, value, source column, and `as_of`.',
+  ],
+  src: 'ARCHITECTURE.md, "Events"',
+});
+spec('events', 'e-idem', {
+  name: 'Idempotency keys', tech: '8 actions', status: 'partial',
+  summary: 'Every action has a key derived from facts, never from a clock.',
+  fixed: [
+    'Message `msg:{client_message_id}`. Turn `turn:{triggered_by_event_id}`. Template `template:{template_id}:{triggered_by_event_id}`. Open process `process:{customer_id}:credit_prequalification:{triggered_by_event_id}`.',
+    'Run policy `policy:{process_id}:alba-credit-v1:{product}`. Transition `transition:{process_id}:{to_state}:{caused_by_event_id}`. Agent close `agent_close:{process_id}`. End `end:{process_id}`.',
+  ],
+  open: [['New', 'The run-policy key has no triggering event in it. Juliana\'s second run, after she states her income, repeats the key of her first `NEEDS_INFO` run for the same process and product, so it would be dropped.']],
+  tests: ['A second message with the same key creates no event and no decision.'],
+  src: 'ARCHITECTURE.md, "Events"; AGENTS.md, "Database"',
+});
+spec('events', 'e-dispatch', {
+  name: 'Event to rules hand-off', tech: 'owner not named', status: 'partial',
+  summary: 'Who calls `match_rules` after an insert, and in which transaction.',
+  fixed: [
+    'Insert the event, then `match_rules(event)`, then `commands` rows.',
+    'Commands from one event are inserted in rule-table order and run in that order before another event is taken.',
+  ],
+  open: [['New', 'Which module calls `match_rules` and inserts the commands, and whether an event and its commands commit in one transaction.']],
+  src: 'ARCHITECTURE.md, "Process-native loop", "Process rules"',
+});
+spec('rules', 'ru-shape', {
+  name: 'Rule shape', tech: 'api/rules.py', status: 'partial',
+  summary: '`{id, trigger_event_name, when, actions}`, in memory, sorted by priority.',
+  fixed: [
+    'A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function over the event. `actions` is an ordered list of commands.',
+    'An in-memory list sorted by ascending `priority`. Commands from one event run in the order of the rule table.',
+  ],
+  open: [['New', 'The list is sorted by `priority`, but the rule shape has no `priority` field. The table order is the only order given.']],
+  src: 'ARCHITECTURE.md, "Process rules"',
+});
+spec('rules', 'ru-message', {
+  name: 'On a customer message', tech: '3 rules', status: 'defined',
+  summary: 'Open the case, call the model, or only record.',
+  fixed: [
+    '`open_process`: the `process_id` column is null, then `process.start`.',
+    '`generate_while_ai`: the `process_state` column is `ai_active`, then `conversation.generate`.',
+    '`record_only_when_human`: the `process_state` column is `human_active`, then nothing.',
+    'The first message of a new case matches both `open_process` and `generate_while_ai`. `process.start` runs first, then `conversation.generate`.',
+  ],
+  tests: ['`human_active` does not call the model.'],
+  src: 'ARCHITECTURE.md, "Process rules"',
+});
+spec('rules', 'ru-turn', {
+  name: 'On a classified turn', tech: '8 rules', status: 'partial',
+  summary: 'Run the policy, ask which product, hand off, or show the reply.',
+  fixed: [
+    '`run_policy`: `prequalify_card` or `prequalify_loan`, then `policy.run` with that product. `run_policy_income`: `provide_income` with a product, then `policy.run` with the declared amount.',
+    '`ask_which_product`: `provide_income` with no product, then `template.send` for `which_product`.',
+    '`hand_off_human`, `hand_off_scope`, `hand_off_language`, `hand_off_reply`: to `human_active` with `customer_requested_human`, `out_of_scope`, `language_unsupported`, or the turn\'s own code.',
+    '`show_reply`: `clarify`, `product_info`, or `chit_chat`, then `conversation.show_reply`. The policy is not called.',
+    'Every rule except `hand_off_language` and `hand_off_reply` requires `reply_ok` and `language` `es` or `pt`.',
+  ],
+  open: [['New', '`ask_which_product` does not check `language`, so a `provide_income` turn with `language = other` matches it and `hand_off_language` at once.']],
+  tests: ['Every rule has a test that it does not fire.'],
+  src: 'ARCHITECTURE.md, "Process rules"; AGENTS.md, "Tests"',
+});
+spec('rules', 'ru-analysis', {
+  name: 'On a policy result', tech: '4 rules', status: 'defined',
+  summary: 'Ask for income, notify and hand off, or render the certificate.',
+  fixed: [
+    '`render_needs_info`: `NEEDS_INFO`, then `template.send` for `needs_income`. Stays `ai_active`.',
+    '`render_refer_notice`: `REFER`, then `template.send` for `refer_notice`.',
+    '`take_thread`: `REFER`, then `process.transition` to `human_active` with `policy_refer`.',
+    '`render_decision`: `PREQUALIFIED` or `NOT_PREQUALIFIED`, then `decision.render` with `decided_by = policy`.',
+  ],
+  src: 'ARCHITECTURE.md, "Process rules"',
+});
+spec('rules', 'ru-end', {
+  name: 'On a decision or a close', tech: '2 rules', status: 'defined',
+  summary: 'End after the policy certificate, or render and end after the agent close.',
+  fixed: [
+    '`end_after_decision`: `prequalification.decided` with `decided_by == "policy"`, then `process.end`.',
+    '`close_on_agent_decision`: `conversation.agent_closed`, then `decision.render` with `decided_by = agent`, then `process.end`. The policy is not run again.',
+  ],
+  src: 'ARCHITECTURE.md, "Process rules", "Agent close"',
+});
+spec('rules', 'ru-purity', {
+  name: 'Pure match', tech: 'no customer reads', status: 'defined',
+  summary: 'The match reads only the event already written.',
+  fixed: [
+    'No `SELECT` on `customers`, `products`, or `customer_credit_profile` inside `match_rules`.',
+    '`generate_while_ai` does not run if the `process_state` column is `human_active`. The prompt is not the brake.',
+    'One owner per trigger. Two paths that can enqueue the same command are a bug.',
+  ],
+  src: 'ARCHITECTURE.md, "Process-native loop"; AGENTS.md, "Events, rules, commands"',
+});
+
+spec('worker', 'w-loop', {
+  name: 'Worker loop', tech: 'FOR UPDATE SKIP LOCKED', status: 'partial',
+  summary: 'Takes pending commands, counts attempts, stops at 3.',
+  fixed: [
+    'Takes `pending` rows with `FOR UPDATE SKIP LOCKED`, increments `attempt_count`, runs the command, marks it `done` or `failed`. Index on pending `commands (status)`.',
+    'At most 3 attempts. On the third failure it transitions to `human_active` with `reason_code = tool_failed`. It does not retry in a loop.',
+  ],
+  open: [['New', 'How often the loop polls, and whether a failed attempt is retried at once or after a delay.']],
+  src: 'ARCHITECTURE.md, "Commands", "Indexes"',
+});
+spec('worker', 'w-table', {
+  name: 'commands table', tech: 'db/migrations/001_init.sql', status: 'defined',
+  summary: 'Queued work with its causing event, emitting rule, and status.',
+  fixed: ['Columns: `id`, `command_name`, `payload jsonb`, `triggered_by_event_id`, `emitted_by_rule_id`, `idempotency_key` unique, `status` (`pending`, `done`, `failed`), `attempt_count`, `last_error`, `created_at`.'],
+  src: 'ARCHITECTURE.md, "Commands"',
+});
+spec('worker', 'w-generate', {
+  name: 'conversation.generate', tech: 'model command', status: 'defined',
+  summary: 'One model call, then `conversation.turn_classified`. It does not pick the next step.',
+  fixed: [
+    'Persists the JSON and writes `conversation.turn_classified`. It does not enqueue `policy.run` or `process.transition`.',
+    'If the message `process_id` is null, the turn takes the process this cycle just opened for that customer.',
+    'Stores `language` on the process, and `product` when set. If the model sends no product and the process has one, the turn uses the stored one.',
+  ],
+  tests: ['Unit tests inject `ConversationTurn` JSON. They do not call OpenAI.'],
+  src: 'ARCHITECTURE.md, "Events", "Commands"',
+});
+spec('worker', 'w-handlers', {
+  name: 'Other handlers', tech: '7 commands', status: 'defined',
+  summary: 'What each command does and must not do.',
+  fixed: [
+    '`process.start`: inserts `processes` and `process.started`. `process.transition`: changes `state`, writes `process.state_changed`, plus `conversation.thread_taken` into `human_active`.',
+    '`process.end`: `state = ended`, writes `process.state_changed` and `process.ended` with the same `end_reason`.',
+    '`conversation.show_reply`: inserts `messages` with `author = assistant` and the turn\'s `reply_text`.',
+    '`template.send`: writes `conversation.template_sent`, locale from the triggering event.',
+    '`policy.run`: reads the profile by the event `customer_id`, runs the engine, writes `analysis.completed` with `language` from the turn.',
+    '`decision.render`: reads `language` from the triggering event, writes `prequalification.decided`.',
+  ],
+  src: 'ARCHITECTURE.md, "Commands"',
+});
+spec('worker', 'w-guard', {
+  name: 'Reply guard', tech: 'reply_ok', status: 'partial',
+  summary: 'Invalid JSON and forbidden phrases never reach the customer.',
+  fixed: [
+    '`reply_ok` is false when `reply_text` contains `precalifica`, `no precalifica`, `pré-qualificado`, or `não pré-qualifica` (`reply_forbidden`), or when the JSON fails twice (`model_output_invalid`).',
+    'That text is not shown. `hand_off_reply` moves the case to `human_active`.',
+  ],
+  open: [
+    ['New', 'How a stated credit limit is detected in `reply_text`. Only the outcome phrases are listed.'],
+    ['D9', 'Whether this structure is enough against prompt injection, and how that is evaluated.'],
+  ],
+  src: 'ARCHITECTURE.md, "Events", "How the model is called"',
+});
+
+spec('processes', 'p-catalog', {
+  name: 'Process catalog', tech: 'credit_prequalification', status: 'defined',
+  summary: 'One process, born `ai_active`, at most one open per customer.',
+  fixed: [
+    'One row: `process_key = credit_prequalification`, initial state `ai_active`, opened by `open_process` on the first message of a customer with no open process.',
+    '`started` is not persisted. The row is born `ai_active` and `process.started` records it.',
+    'A customer has at most one process with `state <> ended`, guaranteed by a partial unique index.',
+  ],
+  src: 'ARCHITECTURE.md, "Process"',
+});
+spec('processes', 'p-states', {
+  name: 'States and transitions', tech: 'ai_active, human_active, ended', status: 'partial',
+  summary: 'Six allowed transitions. Any other is an error and is not written.',
+  fixed: [
+    '`ai_active` to `ai_active`: clarification or `NEEDS_INFO`. `ai_active` to `ended`: `prequalified` or `not_prequalified`.',
+    '`ai_active` to `human_active`: policy `REFER`, request for a human, tool failure, unsupported language.',
+    '`human_active`: nobody talks in the thread. The customer may write; the message is stored. The agent closes with `prequalified` or `not_prequalified`.',
+    '`ended` is not reopened. Another message opens a new process.',
+  ],
+  open: [['New', 'The `ai_active` to `human_active` triggers omit `out_of_scope`, `reply_forbidden`, and `model_output_invalid`, which `hand_off_scope` and `hand_off_reply` also cause.']],
+  src: 'ARCHITECTURE.md, "Process", "Process rules"',
+});
+spec('processes', 'p-row', {
+  name: 'processes row', tech: 'projection of events', status: 'partial',
+  summary: 'The current state of one case, plus its product and language.',
+  fixed: [
+    'Fields named in the contract: `customer_id`, `process_key`, `state`, `end_reason`, `product` (`credit_card`, `personal_loan`, or null), `language` (`es`, `pt`, or null).',
+    '`product` and `language` stay null until a turn sets them.',
+  ],
+  open: [['New', 'The full `processes` column list (id, timestamps) is not written.']],
+  src: 'ARCHITECTURE.md, "Process", "Cycle"',
+});
+spec('processes', 'p-reasons', {
+  name: 'Reason codes', tech: 'closed set of 7', status: 'defined',
+  summary: 'Why a thread went to a person.',
+  fixed: [
+    '`customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`. No others.',
+    '`policy_refer` is the one code for every policy `REFER`. The rule that fired stays on `deciding_rule`.',
+  ],
+  src: 'ARCHITECTURE.md, "Process"',
+});
+spec('processes', 'p-end', {
+  name: 'Ending', tech: 'process.end', status: 'partial',
+  summary: 'Both end events, with the same reason, from the policy or the agent.',
+  fixed: [
+    '`process.end` writes `process.state_changed` and `process.ended`, both with the same `end_reason`.',
+    'From the agent, the reason is `prequalified` or `not_prequalified`, the same choice. There is no `referred_closed`.',
+  ],
+  open: [['New', '`process.end` sets `state = ended`, yet "Process-native loop" says only `process.transition` changes `processes.state`.']],
+  src: 'ARCHITECTURE.md, "Process-native loop", "Commands", "Agent close"',
+});
+spec('policy', 'po-decide', {
+  name: 'decide(profile, product)', tech: 'api/policy/engine.py', status: 'partial',
+  summary: 'Pure function. `product` is `credit_card` or `personal_loan`.',
+  fixed: [
+    'Same input, same output. Lives in git. `product` is `credit_card` or `personal_loan`.',
+    'A bug on Juan is a bug for every customer with those facts. No `customer_id` branch inside the policy.',
+  ],
+  open: [['New', 'The signature takes no declared income, yet R06 uses a stated amount as this run\'s income.']],
+  tests: ['Break the function on purpose once and confirm the exact test goes red.'],
+  src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; AGENTS.md, "Tests"',
+});
+spec('policy', 'po-profile', {
+  name: 'Profile input', tech: 'customer_credit_profile', status: 'partial',
+  summary: 'Status, score, income in local and USD, max days past due, holds product.',
+  fixed: [
+    '`customer_status`; `credit_score`, null if empty; `income_local`, null if empty; `income_currency` by country (MXN, COP, ARS); `income_usd` at the June 17, 2026 rate.',
+    '`max_days_past_due` over active `Tarjeta Crédito`, `Préstamo Personal`, and `Préstamo Hipotecario`; empty counts as 0. `as_of` 2026-06-17.',
+    '`holds_product` is the gold boolean of the requested product: `has_active_card` or `has_active_personal_loan`.',
+    'Rates from `daily_exchange_rates` for June 17, 2026: 1 MXN = 0.058641 USD, 1 COP = 0.000248 USD, 1 ARS = 0.002873 USD.',
+  ],
+  open: [
+    ['R7', 'Convert incomes to USD per country and check the medians land in a similar range.'],
+    ['R9', 'List every `product_type` value and record its mapping to product keys.'],
+  ],
+  src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; PLAN.md §6',
+});
+spec('policy', 'po-rules', {
+  name: 'Rules in order', tech: 'alba-credit-v1.yaml', status: 'defined',
+  summary: 'R01, R02, R03, R09, R04, R06, R05. The first terminal result wins.',
+  fixed: [
+    'R01: `Suspended` or `Inactive` refer; `Closed` does not pre-qualify.',
+    'R02: `max_days_past_due >= 30` does not pre-qualify. R03: 1 to 29 refers. R09: already holds the product, refer.',
+    'R04: no score, refer. The customer is not asked for it.',
+    'R06: no income and none stated, `NEEDS_INFO`. No income and an amount stated: not terminal; the amount is this run\'s income, marked `self_declared`, the gold row stays null. Income on file: a typed number is ignored and R06 does not fire.',
+    'R05: score below 580 does not pre-qualify, 580 to 619 refers, 620 or more pre-qualifies.',
+  ],
+  tests: [
+    'Income None, score None, delinquency 30 and 29, status `Closed`, product already held.',
+    'Mariana is decided by R02 even though her score would also fail.',
+  ],
+  src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; AGENTS.md, "Tests"',
+});
+spec('policy', 'po-asks', {
+  name: 'What the customer is asked', tech: 'two questions', status: 'defined',
+  summary: 'Which product, and monthly income when the file has none. Nothing else.',
+  fixed: [
+    'Which product, when the turn names none. Monthly income, when `income_local` is null, read in the country\'s currency.',
+    'Never asked: score, days past due, status, or whether they hold the product. A null score is `REFER` with no question.',
+    'After those asks the engine runs. `REFER` goes to the agent; there is no further question.',
+  ],
+  src: 'ARCHITECTURE.md, "What the customer can be asked"',
+});
+spec('policy', 'po-decision', {
+  name: 'Decision', tech: 'engine output', status: 'defined',
+  summary: 'One outcome plus the evidence that produced it.',
+  fixed: [
+    '`outcome`, `deciding_rule`, `rule_trace`, `facts`, `policy_version = "alba-credit-v1"`.',
+    'One outcome, not `is_prequalified` plus `needs_human`.',
+  ],
+  src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; AGENTS.md, "Types"',
+});
+spec('policy', 'po-absent', {
+  name: 'What does not exist', tech: 'negative spec', status: 'partial',
+  summary: 'No limit, no rate, no delinquency model, no R07 or R08.',
+  fixed: [
+    'R07 and R08 do not exist in the code.',
+    'No income threshold, no `k * income` limit, no rate for the new product, no delinquency prediction.',
+  ],
+  open: [['D4', 'Whether `credit_score` is presented as the external risk estimate, with a model card for the rejected delinquency model.']],
+  src: 'ARCHITECTURE.md, "Policy alba-credit-v1", "Not decided"',
+});
+spec('policy', 'po-oracle', {
+  name: 'Oracle fixtures', tech: 'api/fixtures/oracle_customers.json', status: 'partial',
+  summary: 'Four real rows that cover every outcome, plus César.',
+  fixed: [
+    'Juan `PREQUALIFIED` R05; Juliana `NEEDS_INFO` R06, then `PREQUALIFIED` once she states an amount; Alicia `REFER` R05; Mariana `NOT_PREQUALIFIED` R02.',
+    'If an outcome changes, the integration test fails.',
+  ],
+  open: [['R8', 'Re-read the four customers and César from `data/raw/` and confirm every value in the contract.']],
+  src: 'ARCHITECTURE.md, "Oracle fixtures", "The other three flows"',
+});
+
+spec('templates', 't-locales', {
+  name: 'Locales', tech: 'es, pt', status: 'partial',
+  summary: 'Two locales, picked from the `language` on the triggering event.',
+  fixed: [
+    'Two locales: `es` and `pt`. The dataset has no Portuguese.',
+    '`decision.render` and `template.send` read `language` from the triggering event. Nothing reads `llm_turns` for the locale.',
+  ],
+  open: [['D6', 'Where Portuguese test utterances come from and how they are disclosed.']],
+  src: 'ARCHITECTURE.md, "Commands", "Known gaps" 7',
+});
+spec('templates', 't-cert', {
+  name: 'Certificate', tech: 'prequalification.decided', status: 'partial',
+  summary: 'The `constancia`, from the policy or from the agent close.',
+  fixed: [
+    'Written to `prequalification.decided` with `locale`, `template_id`, `outcome`, `body`, `decided_by` (`policy` or `agent`).',
+    'Income in local currency, with the USD equivalent and the exchange-rate date beside it. No limit amount, no rate.',
+    'On the agent path the row in `messages` has `author = template`. The model does not draft it.',
+    'Only templates emit `precalifica`, `no precalifica`, `pré-qualificado`, `não pré-qualifica`.',
+  ],
+  open: [['Copy', 'The certificate sentences in both locales, the agent-path message, and the line that says the policy is synthetic.']],
+  src: 'ARCHITECTURE.md, "Events", "Agent close", "Auth and screens"',
+});
+spec('templates', 't-notices', {
+  name: 'Notices', tech: 'conversation.template_sent', status: 'partial',
+  summary: '`needs_income`, `which_product`, `refer_notice`. Non-terminal.',
+  fixed: [
+    '`needs_income` on `NEEDS_INFO`: asks for monthly income. The case stays `ai_active`.',
+    '`which_product` when a stated income names no product. The policy waits.',
+    '`refer_notice` on `REFER`: a person will review. No score, and no word on whether the customer pre-qualifies.',
+  ],
+  open: [['Copy', 'The sentences for all three, in `es` and `pt`.']],
+  src: 'ARCHITECTURE.md, "Process rules", "Commands", "The other three flows"',
+});
+spec('templates', 't-handoff', {
+  name: 'Other handoff notices', tech: 'no template named', status: 'open',
+  summary: 'What the customer reads when a case leaves the assistant for another reason.',
+  fixed: ['Only a policy `REFER` sends a notice (`refer_notice`).'],
+  open: [['New', 'Nothing tells the customer about a handoff for `customer_requested_human`, `out_of_scope`, `language_unsupported`, `tool_failed`, `model_output_invalid`, or `reply_forbidden`.']],
+  src: 'ARCHITECTURE.md, "Process rules"',
+});
+
+spec('llm', 'l-schema', {
+  name: 'ConversationTurn', tech: 'api/llm/schema.py', status: 'defined',
+  summary: 'The one JSON shape the model returns.',
+  fixed: [
+    '`intent`: `product_info`, `prequalify_card`, `prequalify_loan`, `provide_income`, `human_request`, `out_of_scope`, `clarify`, `chit_chat`.',
+    '`product`: `credit_card`, `personal_loan`, or null. `declared_income_amount`, and `declared_income_currency` (MXN, COP, ARS), or null.',
+    '`language`: `es`, `pt`, `other`. Plus `needs_clarification`, `clarification_question`, `reply_text`.',
+  ],
+  src: 'ARCHITECTURE.md, "How the model is called"',
+});
+spec('llm', 'l-call', {
+  name: 'The call', tech: 'api/llm/conversation.py', status: 'partial',
+  summary: 'One call, no streaming, Structured Outputs, then Pydantic validation.',
+  fixed: [
+    'One call, no streaming, Structured Outputs with the `ConversationTurn` JSON schema. It must also validate in Pydantic; one retry, then `model_output_invalid`.',
+    'Only this module imports the OpenAI SDK. `LLM_MODEL` defaults to `gpt-6-luna`.',
+    'Missing key: `conversation.generate` fails saying so. Timeout, rate limit, or server error: a failed attempt under the limit of 3.',
+    '`temperature` 0 if the model accepts it.',
+  ],
+  open: [
+    ['R11', 'Whether `temperature` 0 is accepted; latency, tokens, and Structured Outputs validity per turn; ES and PT intent quality.'],
+    ['New', 'Chat Completions or Responses. Both support Structured Outputs; the contract leaves it to the adapter.'],
+  ],
+  src: 'ARCHITECTURE.md, "How the model is called"',
+});
+spec('llm', 'l-prompt', {
+  name: 'Prompt', tech: 'what leaves the service', status: 'partial',
+  summary: 'The message, the state, four booleans, the catalog. Nothing else.',
+  fixed: [
+    'The message text as typed, the process state, `income_on_file`, `score_on_file`, `has_active_card`, `has_active_personal_loan`, and the two-product catalog without rates.',
+    'The instruction not to state eligibility or a limit.',
+    'Not the amounts, score, days past due, full name, document, email, or address.',
+  ],
+  open: [
+    ['D11', 'Whether ID-like numbers typed by the customer are masked before the call.'],
+    ['New', 'The prompt carries no earlier turns, yet `out_of_scope` depends on whether one clarification already happened.'],
+    ['New', 'The prompt text itself, and where it is versioned so eval runs can cite it.'],
+    ['D9', 'Prompt-injection defense beyond the structure.'],
+  ],
+  src: 'ARCHITECTURE.md, "How the model is called"',
+});
+spec('llm', 'l-turns', {
+  name: 'llm_turns', tech: 'db/migrations/001_init.sql', status: 'partial',
+  summary: 'Every request and raw response, with model id and token usage.',
+  fixed: [
+    'Columns: `id`, `process_id`, `command_id`, `request jsonb`, `raw_response text`, `parsed jsonb`, `parse_ok bool`, `model text`, `input_tokens`, `output_tokens`, `latency_ms`, `created_at`.',
+    'Stored either way, including when parsing fails.',
+  ],
+  open: [['D1', 'Cost per case from stored usage times the list price, and whether a second model is compared.']],
+  src: 'ARCHITECTURE.md, "How the model is called", "Cycle"',
+});
+
+spec('tools', 'to-profile', {
+  name: 'profile.py', tech: 'reads gold', status: 'partial',
+  summary: 'One `customer_credit_profile` row for one `customer_id`.',
+  fixed: [
+    'Reads one row of `customer_credit_profile`, the one for the event or session `customer_id`.',
+    'Gold carries `has_active_card` and `has_active_personal_loan`, two of the four prompt booleans.',
+  ],
+  open: [['New', 'Which module builds the prompt input (the four booleans) from the profile.']],
+  src: 'ARCHITECTURE.md, "File tree", "Gold"',
+});
+spec('tools', 'to-products', {
+  name: 'products.py', tech: 'home screen', status: 'partial',
+  summary: 'The session customer\'s products, in the row\'s currency.',
+  fixed: [
+    'Only the session customer\'s products, through the index on `products (customer_id)`.',
+    'Amounts in the row\'s `products.currency`. Balances of customers in Mexico stay in USD; they are not converted to MXN.',
+  ],
+  open: [['New', 'The response shape and which product fields the home screen shows.']],
+  src: 'ARCHITECTURE.md, "Auth and screens", "Indexes"',
+});
+spec('tools', 'to-catalog', {
+  name: 'catalog.py', tech: 'two products', status: 'partial',
+  summary: 'Credit card and personal loan, Spanish and Portuguese names, no rates.',
+  fixed: [
+    'Two products, `credit_card` and `personal_loan`, with names in Spanish and Portuguese and no rates.',
+    'Out of scope: a new mortgage, investments, a limit increase, a disputed transaction, a third party\'s balance.',
+  ],
+  open: [['New', 'The catalog text in both languages.']],
+  src: 'ARCHITECTURE.md, "How the model is called"',
+});
+
+spec('config', 'c-settings', {
+  name: 'settings.py', tech: 'environment', status: 'defined',
+  summary: 'Five settings. Secrets come from `.env` or the host.',
+  fixed: [
+    '`DATABASE_URL`, `JWT_SECRET`, `OPENAI_API_KEY`, `LLM_MODEL` (default `gpt-6-luna`), `DEMO_INBOX`.',
+    'Secrets live in `.env` or the host secrets. Never in git, the image, a log, or a prompt.',
+    '`.env.example` lists the names with empty values.',
+  ],
+  src: 'ARCHITECTURE.md, "File tree", "Docker"',
+});
+spec('config', 'c-db', {
+  name: 'db.py', tech: 'Postgres connection', status: 'partial',
+  summary: 'The connection the handlers and the worker share.',
+  fixed: ['Parameterized SQL only. Select only the needed columns. Customer queries filter by `customer_id = jwt.sub`.'],
+  open: [['New', 'Driver and connection pooling for the HTTP handlers and the worker loop in one process.']],
+  src: 'AGENTS.md, "Database"',
+});
+node('pg-login', {
+  parent: 'web', kind: 'component', name: 'Login', tech: 'Login.tsx',
+  summary: '`/login`, both roles. Search or random, then the code.',
+  src: 'ARCHITECTURE.md, "Auth and screens"',
+});
+node('pg-home', {
+  parent: 'web', kind: 'component', name: 'Home', tech: 'Home.tsx',
+  summary: '`/`, customer. Their products, in the row currency.',
+  src: 'ARCHITECTURE.md, "Auth and screens"',
+});
+node('pg-case', {
+  parent: 'web', kind: 'component', name: 'Case', tech: 'Case.tsx',
+  summary: '`/case/:id`, customer. The thread, plus the certificate if one exists.',
+  src: 'ARCHITECTURE.md, "Auth and screens"',
+});
+node('pg-queue', {
+  parent: 'web', kind: 'component', name: 'Agent queue', tech: 'AgentQueue.tsx',
+  summary: '`/agent`. Processes in `human_active`, nothing else.',
+  src: 'ARCHITECTURE.md, "Auth and screens"',
+});
+node('pg-agentcase', {
+  parent: 'web', kind: 'component', name: 'Agent case', tech: 'AgentCase.tsx',
+  summary: '`/agent/case/:id`. The handoff packet and two close actions. No reply box.',
+  src: 'ARCHITECTURE.md, "Auth and screens", "Agent close"',
+});
+node('pg-trace', {
+  parent: 'web', kind: 'component', name: 'Trace', tech: 'Trace.tsx',
+  summary: '`/agent/case/:id/trace`. The process events, in order.',
+  src: 'ARCHITECTURE.md, "Auth and screens"',
+});
+
+view('web', {
+  cols: 6, minCol: 140,
+  place: [
+    ['customer', 0, 0, 2], ['agent', 3, 0, 3],
+    ['pg-home', 0, 1], ['pg-case', 1, 1], ['pg-login', 2, 1], ['pg-queue', 3, 1], ['pg-agentcase', 4, 1], ['pg-trace', 5, 1],
+    ['api', 0, 2, 6],
+  ],
+  rels: [
+    ['customer', 'pg-home', ''], ['customer', 'pg-case', ''], ['customer', 'pg-login', ''],
+    ['agent', 'pg-login', ''], ['agent', 'pg-queue', ''], ['agent', 'pg-agentcase', ''], ['agent', 'pg-trace', ''],
+    ['pg-home', 'api', 'products'],
+    ['pg-case', 'api', 'messages, certificate'],
+    ['pg-login', 'api', 'search, code, JWT'],
+    ['pg-queue', 'api', 'queue'],
+    ['pg-agentcase', 'api', 'packet, close'],
+    ['pg-trace', 'api', 'events'],
+  ],
+});
+
+spec('pg-login', 'lg-customer', {
+  name: 'Customer login', tech: 'search, code, JWT', status: 'partial',
+  summary: 'Any of the 150,000 customers, by search or at random.',
+  fixed: [
+    'Search by name, document, or `customer_id`, or pick at random. Then the 6-digit code, then the JWT.',
+    'With `DEMO_INBOX=1` the code shows in a test inbox, because there is no SMS.',
+  ],
+  open: [['D2', 'Whether the public deploy shows the code (`DEMO_INBOX=1`).']],
+  src: 'ARCHITECTURE.md, "Auth and screens"; README.md, "What a bank would see"',
+});
+spec('pg-login', 'lg-agent', {
+  name: 'Agent login', tech: 'service_agents', status: 'partial',
+  summary: 'Any of the 1,200 agents, by search or at random.',
+  fixed: ['Works like the customer login, against `service_agents`.'],
+  open: [['New', 'How one page serves both roles, and where the agent lands after login.']],
+  src: 'ARCHITECTURE.md, "Auth and screens"',
+});
+
+spec('pg-home', 'hm-products', {
+  name: 'Product list', tech: 'products.currency', status: 'partial',
+  summary: 'Only this customer\'s products. No conversion.',
+  fixed: [
+    'Amounts in the row\'s `products.currency`. Balances of customers in Mexico are shown in USD, not converted to MXN.',
+    'Juan sees savings 1,559.57 USD and a mortgage of 109,159.57 USD, 0 days past due, no credit card.',
+  ],
+  open: [['New', 'Which product fields are shown, and how the customer starts a request from this page.']],
+  src: 'ARCHITECTURE.md, "Auth and screens", "Juan\'s flow"',
+});
+
+spec('pg-case', 'cs-thread', {
+  name: 'Thread', tech: 'messages', status: 'partial',
+  summary: 'Customer, assistant, and template messages. No agent messages.',
+  fixed: [
+    '`messages` rows with `author` `customer`, `assistant`, or `template`.',
+    'Each send carries a new `client_message_id`.',
+    'After the handoff the customer can still write; nobody replies until the agent closes and the template message arrives.',
+  ],
+  open: [['New', 'How messages the worker writes later reach the page: polling or push.']],
+  src: 'ARCHITECTURE.md, "Process", "Events", "Cycle"',
+});
+spec('pg-case', 'cs-cert', {
+  name: 'Certificate', tech: 'prequalification.decided', status: 'defined',
+  summary: 'Shown when the decision event exists. Rendered by the API, not the client.',
+  fixed: [
+    'Shown if `prequalification.decided` exists, from the policy or the agent close. The page renders its `body`; it does not build certificate prose.',
+    'A customer whose process ended `prequalified` or `not_prequalified` sees the certificate and never the queue.',
+  ],
+  src: 'ARCHITECTURE.md, "Auth and screens"; AGENTS.md, "Data fetching and UI"',
+});
+spec('pg-case', 'cs-session', {
+  name: 'Session end', tech: '401', status: 'defined',
+  summary: 'An expired token shows that the session ended.',
+  fixed: ['A 401 shows the customer that the session ended. It is not silently renewed during the case.'],
+  src: 'ARCHITECTURE.md, "Auth and screens"',
+});
+
+spec('pg-queue', 'aq-list', {
+  name: 'Queue', tech: 'human_active', status: 'partial',
+  summary: 'Only handed-off, open processes.',
+  fixed: [
+    'Processes in `human_active`. `ended` processes are not shown.',
+    'Alicia appears. Juan, Juliana, and Mariana do not.',
+  ],
+  open: [['New', 'The sort order and its tie-break, and what each queue card shows.']],
+  src: 'ARCHITECTURE.md, "Auth and screens"; AGENTS.md, "Database"',
+});
+
+spec('pg-agentcase', 'ac-packet', {
+  name: 'Handoff packet', tech: 'analysis.completed', status: 'partial',
+  summary: 'Request, score, income, deciding rule, policy version.',
+  fixed: [
+    'Read from `analysis.completed`: request, score, income, deciding rule, `policy_version`.',
+    'The packet may show the rule id and the facts. An internal reason code is not customer copy.',
+  ],
+  open: [['New', 'A handoff that is not a policy `REFER` (human request, out of scope, unsupported language, tool or reply failure) has no `analysis.completed`, so there is no packet, and a close there has no policy result behind it.']],
+  src: 'ARCHITECTURE.md, "Auth and screens", "The other three flows"',
+});
+spec('pg-agentcase', 'ac-close', {
+  name: 'Close actions', tech: 'POST /agent/case/:id/close', status: 'defined',
+  summary: 'Two buttons: pre-qualify or do not. No reply box.',
+  fixed: [
+    'The only actions are `PREQUALIFIED` and `NOT_PREQUALIFIED`. No text field, no comment.',
+    'The close writes `conversation.agent_closed`; a template tells the customer and the process ends.',
+    'Which outcome César picks for Alicia is not fixed by the contract.',
+  ],
+  src: 'ARCHITECTURE.md, "Agent close", "The other three flows"',
+});
+
+spec('pg-trace', 'tr-events', {
+  name: 'Event list', tech: 'events', status: 'partial',
+  summary: 'The process events in order: the audit trail reviewers see.',
+  fixed: [
+    'Lists the process `events` in order, backed by the index on `events (process_id, created_at)`.',
+    'Explanations come from sources, rules, and execution records. No chain-of-thought.',
+  ],
+  open: [['New', 'The ordering key. `created_at` can tie, and AGENTS.md asks for an explicit tie-break.']],
+  src: 'ARCHITECTURE.md, "Auth and screens", "Indexes"; PLAN.md §2',
+});
+node('ld-entry', {
+  parent: 'load', kind: 'component', name: 'Startup sequence', tech: 'entrypoint, file not named',
+  summary: 'Waits for Postgres, applies the schema, runs the pipeline, exits.',
+  src: 'ARCHITECTURE.md, "Docker"',
+});
+node('ld-migrations', {
+  parent: 'load', kind: 'component', name: 'Schema migrations', tech: 'db/migrations/',
+  summary: 'Read tables, gold, cycle tables, `load_batches`, and their indexes.',
+  src: 'ARCHITECTURE.md, "Database"',
+});
+node('ld-bronze', {
+  parent: 'load', kind: 'component', name: 'Bronze', tech: 'pipeline/bronze.py',
+  summary: '`aws s3 cp` into `data/raw/`, plus a manifest in `load_batches`.',
+  src: 'ARCHITECTURE.md, "Pipeline"',
+});
+node('ld-silver', {
+  parent: 'load', kind: 'component', name: 'Silver', tech: 'pipeline/silver.py',
+  summary: 'The four read tables, only the listed columns. Nulls kept, names untranslated.',
+  src: 'ARCHITECTURE.md, "Pipeline"',
+});
+node('ld-gold', {
+  parent: 'load', kind: 'component', name: 'Gold', tech: 'pipeline/gold.py',
+  summary: '`customer_credit_profile`: one row for each of the 150,000 customers.',
+  src: 'ARCHITECTURE.md, "Pipeline"',
+});
+
+view('load', {
+  cols: 5, minCol: 150,
+  place: [
+    ['s3', 0, 0], ['ld-entry', 1, 0], ['ld-migrations', 4, 0],
+    ['raw', 0, 1], ['ld-bronze', 1, 1], ['ld-silver', 2, 1], ['ld-gold', 3, 1],
+    ['postgres', 1, 2, 4],
+  ],
+  rels: [
+    ['ld-entry', 'ld-migrations', 'Applies first'],
+    ['ld-entry', 'ld-bronze', 'Then runs the pipeline'],
+    ['ld-bronze', 's3', 'aws s3 cp', '', 0.75],
+    ['ld-bronze', 'raw', 'Writes, hashes'],
+    ['ld-bronze', 'ld-silver', 'then'],
+    ['ld-silver', 'ld-gold', 'then'],
+    ['ld-migrations', 'postgres', 'Schema', 'SQL'],
+    ['ld-bronze', 'postgres', 'load_batches'],
+    ['ld-silver', 'postgres', 'Read tables'],
+    ['ld-gold', 'postgres', 'Gold profile'],
+  ],
+});
+
+spec('ld-entry', 'en-order', {
+  name: 'Startup order', tech: 'compose depends_on', status: 'partial',
+  summary: 'Postgres, schema, copy, tables, exit 0, then `api`.',
+  fixed: [
+    'Waits for Postgres, applies `db/migrations/`, copies the four CSVs if missing, fills the read tables and gold, exits with code 0.',
+    '`api` starts only when `load` finished successfully.',
+  ],
+  open: [['New', 'The entrypoint file. The tree names only bronze, silver, and gold.']],
+  src: 'ARCHITECTURE.md, "Docker"',
+});
+spec('ld-entry', 'en-skip', {
+  name: 'Reload rule', tech: 'sha256 on disk', status: 'defined',
+  summary: 'Same four files, no reload. A new volume reloads.',
+  fixed: [
+    'Files already in `data/raw/` are not copied again.',
+    'The `sha256` is of the file on disk. If `load_batches` already holds that hash, the file is not copied into Postgres again.',
+    'Deleting the volume reloads.',
+  ],
+  src: 'ARCHITECTURE.md, "Docker"',
+});
+spec('ld-entry', 'en-fail', {
+  name: 'Failure', tech: 'fail loud', status: 'defined',
+  summary: 'Missing inputs stop the load with a named error.',
+  fixed: [
+    'Without the AWS variables and without the CSVs, `load` exits with an error naming what is missing.',
+    'It never starts an empty demo or one with the four profiles made up.',
+    'Null scores and incomes do not fail startup.',
+  ],
+  src: 'ARCHITECTURE.md, "Docker", "Data: what is touched and what is not"',
+});
+spec('ld-entry', 'en-report', {
+  name: 'Load report', tech: 'counts', status: 'partial',
+  summary: 'Rows read, null scores, null incomes, active products by type.',
+  fixed: ['The report writes counts: rows read, null scores, null incomes, active products by type.'],
+  open: [
+    ['New', 'Where the report is written: log or table.'],
+    ['D5', 'Which data contracts, quality checks, lineage, freshness policy, and update-correctness fixture enter the contract.'],
+  ],
+  src: 'ARCHITECTURE.md, "Data: what is touched and what is not"; PLAN.md §5',
+});
+
+spec('ld-migrations', 'mg-tables', {
+  name: 'Tables and indexes', tech: '001_init.sql', status: 'defined',
+  summary: 'Four read tables, gold, six cycle tables, `load_batches`.',
+  fixed: [
+    'Read: `customers`, `products`, `daily_exchange_rates`, `service_agents`. Gold: `customer_credit_profile`. Cycle: `events`, `processes`, `commands`, `login_codes`, `llm_turns`, `messages`. Plus `load_batches`.',
+    'Indexes: `customers` on `document_number` and `(last_name, first_name)`; `products (customer_id)`; pending `commands (status)`; `events (process_id, created_at)`.',
+    'A partial unique index on `processes (customer_id, process_key) where state <> ended`.',
+  ],
+  src: 'ARCHITECTURE.md, "Database"',
+});
+spec('ld-migrations', 'mg-rules', {
+  name: 'Migration rules', tech: 'one-way', status: 'defined',
+  summary: 'Safe while old code runs. Views run as the invoker.',
+  fixed: [
+    'One-way, and safe while old code might still run. No destructive drop in the step that adds the replacement.',
+    'A view gets `security_invoker = true` in the same migration.',
+    'Nobody runs SQL by hand.',
+  ],
+  src: 'AGENTS.md, "Database"',
+});
+
+spec('ld-bronze', 'br-files', {
+  name: 'Source files', tech: 'aws s3 cp', status: 'defined',
+  summary: 'Only the four files login and the policy need.',
+  fixed: [
+    '`aws s3 cp` for `customers.csv`, `products.csv`, `daily_exchange_rates.csv`, `service_agents.csv`, under `data/`. No bucket listing.',
+    'UTF-8 with a BOM, read with `utf-8-sig`.',
+  ],
+  src: 'ARCHITECTURE.md, "Docker", "Pipeline"; README.md, "Data"',
+});
+spec('ld-bronze', 'br-manifest', {
+  name: 'Manifest', tech: 'load_batches', status: 'partial',
+  summary: '`{path, bytes, sha256}` for each file on disk.',
+  fixed: ['`load_batches`: `path`, `bytes`, `sha256` of each file on disk.'],
+  open: [
+    ['New', 'Gold rows carry a `batch_id`, but `load_batches` lists no id column for it to point at.'],
+    ['R2', 'How `data_backup_20260831/` differs from `data/`; possibly the late-arrival or schema-evolution case.'],
+  ],
+  src: 'ARCHITECTURE.md, "Cycle", "Gold"; PLAN.md §6',
+});
+
+spec('ld-silver', 'sv-rules', {
+  name: 'Typing rules', tech: 'no cleaning', status: 'defined',
+  summary: 'Types applied. Nothing imputed, converted, translated, or dropped.',
+  fixed: [
+    'Empty `days_past_due` stays null. `currency` copied as is. Product names not translated.',
+    'Empty scores (22,492) and incomes (30,033) are not imputed: they are the R04 and R06 paths.',
+    'No deduplication by name. `Inactive`, `Suspended`, and `Closed` customers are kept (14,914, 4,407, 2,979).',
+  ],
+  src: 'ARCHITECTURE.md, "Data: what is touched and what is not"',
+});
+spec('ld-silver', 'sv-tables', {
+  name: 'Read tables', tech: 'listed columns only', status: 'partial',
+  summary: 'Other columns in the data dictionary are not copied.',
+  fixed: [
+    '`customers`: `customer_id`, `document_number`, `first_name`, `last_name`, `country`, `segment`, `credit_score`, `estimated_monthly_income`, `customer_status`.',
+    '`products`: `product_id`, `customer_id`, `product_type`, `product_number`, `currency`, `current_balance`, `product_status`, `days_past_due`.',
+    '`daily_exchange_rates`: `date`, `source_currency`, `target_currency`, `exchange_rate`. `service_agents`: `agent_id`, `employee_code`, `first_name`, `last_name`.',
+  ],
+  open: [['R9', 'The `product_type` values and their mapping to `credit_card` and `personal_loan`.']],
+  src: 'ARCHITECTURE.md, "Read tables"',
+});
+
+spec('ld-gold', 'gd-profile', {
+  name: 'customer_credit_profile', tech: 'one row per customer', status: 'defined',
+  summary: 'The only table `policy.run` reads.',
+  fixed: [
+    'One row per `customer_id`, 150,000 rows. Primary key `customer_id`.',
+    'Columns: the policy inputs, plus `country`, `segment`, `first_name`, `last_name`, `as_of`, `batch_id`, `has_active_card`, `has_active_personal_loan`.',
+    'The customer API does not list this table. `policy.run` reads one row.',
+  ],
+  src: 'ARCHITECTURE.md, "Gold", "Indexes"',
+});
+spec('ld-gold', 'gd-derive', {
+  name: 'Derived fields', tech: 'aggregates', status: 'partial',
+  summary: 'Max days past due, two product flags, income in USD.',
+  fixed: [
+    '`max_days_past_due` over active credit products, empty counted as 0.',
+    '`has_active_card` and `has_active_personal_loan` cache `products` for this version. A new product type is computed from `products`, not added as a flag.',
+    '`income_usd` is `income_local` times the June 17, 2026 rate.',
+  ],
+  open: [['R7', 'Check the USD income medians per country.']],
+  src: 'ARCHITECTURE.md, "Policy alba-credit-v1", "Gold", "Pipeline"',
+});
+
+node('db-auth', {
+  parent: 'postgres', kind: 'tables', name: 'Sessions', tech: 'login_codes',
+  summary: 'One-time codes, valid 10 minutes.',
+  fixed: ['The 6-digit code, the customer or agent it belongs to, and the 10-minute expiry.'],
+  src: 'ARCHITECTURE.md, "Cycle"',
+});
+node('db-process', {
+  parent: 'postgres', kind: 'tables', name: 'Process store', tech: 'events, processes, commands',
+  summary: 'Facts, the projection, and the queue.',
+  fixed: [
+    '`events`: append-only facts, with `process_id` and `process_state` as columns.',
+    '`processes`: the projection, with `product` and `language`, and a partial unique index on `(customer_id, process_key) where state <> ended`.',
+    '`commands`: the queue the worker takes rows from.',
+  ],
+  src: 'ARCHITECTURE.md, "Events", "Cycle", "Indexes"',
+});
+node('db-conv', {
+  parent: 'postgres', kind: 'tables', name: 'Conversation', tech: 'messages, llm_turns',
+  summary: 'What the customer sees, and every model request and response.',
+  fixed: [
+    '`messages`: `id`, `process_id`, `author` (`customer`, `assistant`, `template`), `body`, `event_id`.',
+    '`conversation.show_reply` writes `assistant` rows. The agent-path `decision.render` writes a `template` row.',
+    '`llm_turns`: request, raw response, parsed JSON, model id, token usage, latency.',
+  ],
+  open: [
+    ['New', 'Who writes the customer\'s own `messages` row, and whether `template.send` and the policy-path `decision.render` write one too.'],
+    ['New', 'How long messages and stored prompts are kept. Retention is not written (`PLAN.md` §2).'],
+  ],
+  src: 'ARCHITECTURE.md, "Commands", "Agent close", "Cycle"',
+});
+node('db-gold', {
+  parent: 'postgres', kind: 'tables', name: 'Gold', tech: 'customer_credit_profile',
+  summary: 'The policy inputs and two product flags, one row per customer.',
+  fixed: ['One row per customer. Not listed by the customer API. `policy.run` reads one row.'],
+  src: 'ARCHITECTURE.md, "Gold"',
+});
+node('db-read', {
+  parent: 'postgres', kind: 'tables', name: 'Read tables', tech: 'silver',
+  summary: 'Customers, products, exchange rates, agents. Listed columns only.',
+  fixed: ['Filled by `load`. Read by search, the home screen, and agent login. `match_rules` never reads them.'],
+  src: 'ARCHITECTURE.md, "Read tables", "Process-native loop"',
+});
+node('db-lineage', {
+  parent: 'postgres', kind: 'tables', name: 'Lineage', tech: 'load_batches',
+  summary: 'The hashes that decide whether a second `up` reloads.',
+  fixed: ['`path`, `bytes`, `sha256` of each file on disk.'],
+  src: 'ARCHITECTURE.md, "Cycle"',
+});
+
+view('postgres', {
+  cols: 6, minCol: 140,
+  place: [
+    ['api', 0, 0, 5],
+    ['db-auth', 0, 1], ['db-process', 1, 1], ['db-conv', 2, 1], ['db-gold', 3, 1], ['db-read', 4, 1], ['db-lineage', 5, 1],
+    ['load', 3, 2, 3],
+  ],
+  rels: [
+    ['api', 'db-auth', 'codes'],
+    ['api', 'db-process', 'append, project, queue'],
+    ['api', 'db-conv', 'messages, turns'],
+    ['api', 'db-gold', 'one row per run'],
+    ['api', 'db-read', 'search, products'],
+    ['load', 'db-gold', 'builds'],
+    ['load', 'db-read', 'fills'],
+    ['load', 'db-lineage', 'hashes'],
+  ],
+});
+
+node('f-customers', {
+  parent: 'raw', kind: 'file', name: 'customers.csv', tech: '150,000 rows',
+  summary: 'Status, score, income, country, segment, names.',
+  fixed: [
+    '150,000 rows, 0 duplicate `customer_id`, 0 empty. Countries: only `México`, `Colombia`, `Argentina`.',
+    'Empty score 22,492 (15.0%). Empty income 30,033 (20.0%). At least one of the two empty: 48,002 (32.0%).',
+  ],
+  src: 'ARCHITECTURE.md, "Data: what is touched and what is not" (measured Sep 27, 2026 over data/raw/)',
+});
+node('f-products', {
+  parent: 'raw', kind: 'file', name: 'products.csv', tech: '400,000 rows',
+  summary: 'Accounts, cards, and loans, with balance, currency, and days past due.',
+  fixed: [
+    '400,000 rows, 0 duplicate `product_id`, 0 orphan `customer_id`.',
+    'Product names are Spanish: `Tarjeta Crédito`, `Préstamo Personal`, `Préstamo Hipotecario`.',
+    'Products of customers in Mexico are stored in USD.',
+  ],
+  src: 'ARCHITECTURE.md, "Data: what is touched and what is not"',
+});
+node('f-fx', {
+  parent: 'raw', kind: 'file', name: 'daily_exchange_rates.csv', tech: 'USD per local unit',
+  summary: 'The rates behind `income_usd`.',
+  fixed: ['June 17, 2026: 1 MXN = 0.058641 USD, 1 COP = 0.000248 USD, 1 ARS = 0.002873 USD.'],
+  src: 'ARCHITECTURE.md, "Policy alba-credit-v1"',
+});
+node('f-agents', {
+  parent: 'raw', kind: 'file', name: 'service_agents.csv', tech: '1,200 rows',
+  summary: 'The agents who can log in.',
+  fixed: ['1,200 rows, 0 duplicate `agent_id`.'],
+  src: 'ARCHITECTURE.md, "Data: what is touched and what is not"',
+});
+
+node('ev-suite', {
+  parent: 'eval', kind: 'component', name: 'Scenario suite', tech: '~300 held-out cases', status: 'open',
+  summary: 'Stratified by outcome, country, segment, and language.',
+  fixed: [
+    'Sep 27 design: normal ~45%, ambiguous or unsupported ~20%, human-required ~15% (review-band score, DPD 1-29, missing score, asks for a human), adversarial or failure ~20%.',
+    'Each case has an `expected_route` and an `expected_decision`. Test customers are disjoint from prompt tuning.',
+  ],
+  open: [
+    ['D7', 'How many cases and repeated runs fit the API budget and rate limits, and the spend cap.'],
+    ['D6', 'Where Portuguese utterances come from and how they are disclosed.'],
+  ],
+  src: 'PLAN.md §7.1',
+});
+node('ev-systems', {
+  parent: 'eval', kind: 'component', name: 'Systems compared', tech: 'B0, B1, P', status: 'open',
+  summary: 'Rules bot, naive LLM agent, and the proposed system on the same suite.',
+  fixed: ['B0: keyword menu plus the policy. B1: the policy described in the prompt, no enforcement. P: the proposed system.'],
+  open: [
+    ['D7', 'Whether B0, B1, and P stay as designed. B1 would also run on `gpt-6-luna`.'],
+    ['D1', 'Whether a second model is compared on the eval subset.'],
+  ],
+  src: 'PLAN.md §7.2',
+});
+node('ev-learned', {
+  parent: 'eval', kind: 'component', name: 'Learned component', tech: 'brief requirement', status: 'open',
+  summary: 'At least one learned component against a baseline.',
+  fixed: ['Organizers said on Sep 25 that a prompted LLM counts if it is defined, evaluated, and justified. The `ConversationTurn` classifier on a team-labeled held-out set qualifies with no contract change.'],
+  open: [['D3', 'Which component is evaluated, its baseline, and the label set.']],
+  src: 'PLAN.md §5, D3',
+});
+node('ev-metrics', {
+  parent: 'eval', kind: 'component', name: 'Metrics', tech: 'the brief\'s names', status: 'open',
+  summary: 'Safe resolution, escalation quality, unsafe outcomes, latency, cost.',
+  fixed: [
+    'Safe automated resolution; containment reported apart, never as success; escalation quality; unsafe outcomes with Wilson 95% intervals.',
+    'p50 and p95 latency; cost per attempted case and per safe resolution, from token usage times the list price.',
+    'Breakdowns by language and segment. An LLM judge only for tone, clarity, and language, with a validated rubric.',
+  ],
+  open: [['D7', 'Confirm the metric set once the harness scope is fixed.']],
+  src: 'PLAN.md §7.3',
+});
+/*DATA-END*/
+</script>
+<script>
+(() => {
+  const LEVELS = ['System context', 'Containers', 'Components', 'Code and specs'];
+  const KIND = { root: 'View', person: 'Person', system: 'Software system', external: 'External system', container: 'Container', store: 'Data store', planned: 'Container, planned', component: 'Component', file: 'File', tables: 'Table group', spec: 'Spec' };
+  const STATUS = { defined: 'Defined', partial: 'Partial', open: 'To define' };
+  const REF_HOME = { gap: 'ARCHITECTURE.md, Known gaps', dec: 'PLAN.md §5, open decisions', res: 'PLAN.md §6, research backlog', todo: 'Named in ARCHITECTURE.md as not written yet', new: 'Raised while drawing this view; not tracked in the docs yet' };
+  const NOUN = ['elements', 'containers', 'components', 'specs'];
+  const state = { view: 'context', sel: 'context' };
+
+  Object.values(N).forEach(n => { n.children = []; });
+  Object.values(N).forEach(n => { if (n.parent) N[n.parent].children.push(n.id); });
+
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const md = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+  const path = id => { const p = []; for (let n = N[id]; n; n = N[n.parent]) p.unshift(n.id); return p; };
+  const depth = id => path(id).length - 1;
+  const hasView = id => Boolean(V[id]) || N[id].children.length > 0;
+  const refKind = r => r.startsWith('Gap') ? 'gap' : r === 'Copy' ? 'todo' : /^D\d/.test(r) ? 'dec' : /^R\d/.test(r) ? 'res' : 'new';
+  const refTitle = r => (REF_TITLES[r] ? REF_TITLES[r] + ' · ' : '') + REF_HOME[refKind(r)];
+  const refTag = r => `<span class="ref ${refKind(r)}" title="${esc(refTitle(r))}">${esc(r)}</span>`;
+  const openItems = id => [...(N[id].open || []).map(([ref, t]) => ({ ref, t, id })), ...N[id].children.flatMap(openItems)];
+  const noun = id => N[id].noun || NOUN[Math.min(depth(id), 3)];
+  const currentView = () => V[state.view] || autoView(state.view);
+
+  function autoView(id) {
+    const kids = N[id].children;
+    const cols = kids.length > 4 ? 3 : 2;
+    return { cols, minCol: 200, rowGap: 28, place: kids.map((k, i) => [k, i % cols, Math.floor(i / cols)]), rels: [] };
+  }
+
+  function box(id, [c, r, cs = 1, rs = 1]) {
+    const n = N[id];
+    const drill = hasView(id) && id !== state.view;
+    const open = openItems(id).length;
+    const foot = [
+      n.status ? `<span class="pill st-${n.status}">${STATUS[n.status]}</span>` : '',
+      drill ? `<span class="drill">${n.children.length} ${noun(id)} ›</span>` : '',
+      open && n.kind !== 'spec' ? `<span class="open-count">${open} open</span>` : '',
+    ].join('');
+    return `<button class="box k-${n.kind}${n.status ? ' st-' + n.status : ''}${state.sel === id ? ' sel' : ''}" data-id="${id}"
+      style="grid-column:${c + 1} / span ${cs};grid-row:${r + 1} / span ${rs}" aria-label="${esc(n.name)}${drill ? ', open level below' : ''}">
+      <span class="kind">${KIND[n.kind]}</span>
+      ${n.tech ? `<span class="tech">${esc(n.tech)}</span>` : ''}
+      <strong>${esc(n.name)}</strong>
+      ${n.summary ? `<span class="desc">${md(n.summary)}</span>` : ''}
+      ${foot ? `<span class="foot">${foot}</span>` : ''}
+    </button>`;
+  }
+
+  function renderStage(animate) {
+    const v = currentView();
+    const minCol = v.minCol || 150;
+    const stage = $('#stage');
+    stage.dataset.natural = v.cols * minCol + (v.cols - 1) * 48 + 72;
+    stage.innerHTML = `
+      <div class="boundary" hidden><span></span></div>
+      <svg class="links"><defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--arrow)"/></marker>
+        <marker id="ah-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--hot)"/></marker>
+      </defs></svg>
+      <div class="grid" style="grid-template-columns:repeat(${v.cols}, minmax(${minCol}px, 1fr))${v.rowGap ? `;row-gap:${v.rowGap}px` : ''}">${v.place.map(p => box(p[0], p.slice(1))).join('')}</div>
+      <div class="labels"></div>`;
+    stage.classList.remove('enter');
+    if (animate) { void stage.offsetWidth; stage.classList.add('enter'); }
+    fit();
+    requestAnimationFrame(layout);
+  }
+
+  function fit() {
+    const vp = $('.viewport'), stage = $('#stage'), sizer = $('#sizer');
+    const natural = Number(stage.dataset.natural || 0), avail = vp.clientWidth - 8;
+    const k = natural > avail ? Math.max(0.72, avail / natural) : 1;
+    stage.style.width = k < 1 ? `${natural}px` : '100%';
+    stage.style.transform = k < 1 ? `scale(${k})` : '';
+    sizer.style.width = k < 1 ? `${natural * k}px` : '';
+    sizer.style.height = k < 1 ? `${stage.offsetHeight * k}px` : '';
+  }
+
+  function clip(r, from, to) {
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const t = Math.min(dx ? r.w / 2 / Math.abs(dx) : Infinity, dy ? r.h / 2 / Math.abs(dy) : Infinity);
+    return { x: from.x + dx * t, y: from.y + dy * t };
+  }
+
+  function ends(a, b) {
+    const ox = [Math.max(a.x, b.x), Math.min(a.x + a.w, b.x + b.w)];
+    const oy = [Math.max(a.y, b.y), Math.min(a.y + a.h, b.y + b.h)];
+    if (ox[1] - ox[0] > 30) {
+      const x = (ox[0] + ox[1]) / 2;
+      return a.y < b.y ? [x, a.y + a.h, x, b.y] : [x, a.y, x, b.y + b.h];
+    }
+    if (oy[1] - oy[0] > 30) {
+      const y = (oy[0] + oy[1]) / 2;
+      return a.x < b.x ? [a.x + a.w, y, b.x, y] : [a.x, y, b.x + b.w, y];
+    }
+    const ca = { x: a.x + a.w / 2, y: a.y + a.h / 2 }, cb = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+    const p = clip(a, ca, cb), q = clip(b, cb, ca);
+    return [p.x, p.y, q.x, q.y];
+  }
+
+  function layout() {
+    const stage = $('#stage'), grid = stage.querySelector('.grid');
+    if (!grid) return;
+    const v = currentView();
+    const R = {};
+    grid.querySelectorAll('.box').forEach(el => {
+      R[el.dataset.id] = { x: el.offsetLeft + grid.offsetLeft, y: el.offsetTop + grid.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
+    });
+    const inside = (v.inside || N[state.view].children).filter(k => R[k]);
+    const bd = stage.querySelector('.boundary');
+    if (inside.length && state.view !== 'context') {
+      const rs = inside.map(k => R[k]);
+      const x0 = Math.min(...rs.map(r => r.x)) - 22, y0 = Math.min(...rs.map(r => r.y)) - 22;
+      const x1 = Math.max(...rs.map(r => r.x + r.w)) + 22, y1 = Math.max(...rs.map(r => r.y + r.h)) + 40;
+      Object.assign(bd.style, { left: `${x0}px`, top: `${y0}px`, width: `${x1 - x0}px`, height: `${y1 - y0}px` });
+      const f = N[state.view];
+      bd.querySelector('span').innerHTML = `<b>${esc(f.name)}</b> [${KIND[f.kind]}${f.tech ? ': ' + esc(f.tech) : ''}]`;
+      bd.hidden = false;
+    }
+    const svg = stage.querySelector('svg');
+    svg.querySelectorAll('path.ln').forEach(p => p.remove());
+    const labels = stage.querySelector('.labels');
+    labels.innerHTML = '';
+    (v.rels || []).forEach(([a, b, label, tech, at = 0.5]) => {
+      if (!R[a] || !R[b]) return;
+      const [x1, y1, x2, y2] = ends(R[a], R[b]);
+      const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      p.setAttribute('d', `M${x1},${y1} L${x2},${y2}`);
+      p.setAttribute('class', 'ln');
+      p.setAttribute('marker-end', 'url(#ah)');
+      p.dataset.a = a; p.dataset.b = b;
+      svg.appendChild(p);
+      if (!label) return;
+      const l = document.createElement('div');
+      l.className = Math.hypot(x2 - x1, y2 - y1) < 64 ? 'lab tight' : 'lab';
+      l.dataset.a = a; l.dataset.b = b;
+      l.style.left = `${x1 + (x2 - x1) * at}px`;
+      l.style.top = `${y1 + (y2 - y1) * at}px`;
+      l.innerHTML = `${md(label)}${tech ? `<i>[${esc(tech)}]</i>` : ''}`;
+      labels.appendChild(l);
+    });
+  }
+
+  function heat(id) {
+    const stage = $('#stage');
+    const rels = (currentView().rels || []).filter(([a, b]) => a === id || b === id);
+    stage.classList.toggle('dimming', rels.length > 0);
+    const linked = new Set([id, ...rels.flatMap(([a, b]) => [a, b])]);
+    stage.querySelectorAll('.box').forEach(el => el.classList.toggle('hot', linked.has(el.dataset.id)));
+    stage.querySelectorAll('path.ln, .lab').forEach(el => {
+      const on = el.dataset.a === id || el.dataset.b === id;
+      el.classList.toggle('hot', on);
+      if (el.tagName === 'path') el.setAttribute('marker-end', on ? 'url(#ah-hot)' : 'url(#ah)');
+    });
+  }
+
+  function renderSteps() {
+    const p = path(state.view);
+    $('#steps').innerHTML = LEVELS.map((name, i) => p[i]
+      ? `<button class="step${i === p.length - 1 ? ' on' : ''}" data-go="${p[i]}"><b>${i + 1}</b>${name}</button>`
+      : `<button class="step" disabled title="Click a box to open this level"><b>${i + 1}</b>${name}</button>`).join('');
+    $('#crumbs').innerHTML = p.map((id, i) => i === p.length - 1
+      ? `<span class="cur">${esc(N[id].name)}</span>`
+      : `<button data-go="${id}">${esc(N[id].name)}</button><span>›</span>`).join('');
+    $('#up').disabled = state.view === 'context';
+    const lvl = depth(state.view) + 1;
+    $('#vtitle').textContent = `Level ${lvl}: ${LEVELS[lvl - 1]}${state.view === 'context' ? '' : ' · ' + N[state.view].name}`;
+    $('#vhint').textContent = lvl < 4 ? 'Click a box to open the level below. Hover one to trace its relationships.' : 'Click a spec to read what is fixed and what is still open.';
+    const total = openItems('context').length;
+    $('#backlog').textContent = `Open spec items (${total})`;
+  }
+
+  function list(title, items, fn = md) {
+    return items && items.length ? `<h3>${title}</h3><ul>${items.map(i => `<li>${fn(i)}</li>`).join('')}</ul>` : '';
+  }
+
+  function renderPanel() {
+    const n = N[state.sel];
+    const rels = (currentView().rels || []).filter(([a, b]) => a === n.id || b === n.id)
+      .map(([a, b, label, tech]) => a === n.id
+        ? `Uses <b>${esc(N[b].name)}</b>${label ? ': ' + md(label) : ''}${tech ? ` [${esc(tech)}]` : ''}`
+        : `Used by <b>${esc(N[a].name)}</b>${label ? ': ' + md(label) : ''}${tech ? ` [${esc(tech)}]` : ''}`);
+    const desc = [].concat(n.desc || n.summary || []);
+    $('#panel').innerHTML = `
+      <div class="mark">${KIND[n.kind]}${n.status ? ` <span class="pill st-${n.status}">${STATUS[n.status]}</span>` : ''}</div>
+      <h2>${esc(n.name)}</h2>
+      ${n.tech ? `<p class="tech">${md(n.tech)}</p>` : ''}
+      ${desc.map(d => `<p>${md(d)}</p>`).join('')}
+      ${hasView(n.id) && state.view !== n.id ? `<p><button class="jump" data-go="${n.id}">Open level below ›</button></p>` : ''}
+      ${list('Files', n.files, f => `<code>${esc(f)}</code>`)}
+      ${list('In the contract', n.fixed)}
+      ${list('To define', n.open, ([ref, t]) => `${refTag(ref)}${md(t)}`)}
+      ${list('Tests the contract asks for', n.tests)}
+      ${rels.length ? `<h3>Relationships in this view</h3><ul>${rels.map(r => `<li>${r}</li>`).join('')}</ul>` : ''}
+      ${n.children.length ? `<h3>${esc(noun(n.id))}</h3><div class="kids">${n.children.map(k => `<button data-nav="${k}">${esc(N[k].name)}</button>`).join('')}</div>` : ''}
+      ${n.src ? `<p class="src">Source: ${md(n.src)}</p>` : ''}`;
+  }
+
+  function renderTree() {
+    const onPath = new Set(path(state.view));
+    const item = id => {
+      const n = N[id];
+      const showKids = n.children.length && (depth(id) < 3 || onPath.has(id));
+      const dot = n.kind === 'spec' ? `d-${n.status}` : `d-${n.kind}`;
+      const cls = [id === state.view ? 'view' : '', id === state.sel ? 'sel' : ''].join(' ');
+      return `<li><button class="${cls}" data-nav="${id}"><span class="dot ${dot}"></span><span>${esc(n.name)}</span></button>
+        ${showKids ? `<ul>${n.children.map(item).join('')}</ul>` : ''}</li>`;
+    };
+    const tree = $('#tree');
+    tree.innerHTML = `<ul>${item('context')}</ul>`;
+    const cur = tree.querySelector('button.sel') || tree.querySelector('button.view');
+    if (cur) tree.scrollTop = Math.max(0, cur.offsetTop - tree.clientHeight / 3);
+  }
+
+  function render(animate) {
+    renderSteps();
+    renderStage(animate);
+    renderPanel();
+    renderTree();
+  }
+
+  function go(id, sel, fromHistory) {
+    const changed = state.view !== id;
+    state.view = id;
+    state.sel = sel || id;
+    const hash = `#${state.sel}`;
+    if (!fromHistory && location.hash !== hash) history.pushState(null, '', hash);
+    render(changed);
+    const section = $('#stage').closest('section');
+    if (changed && section.getBoundingClientRect().top < 0) section.scrollIntoView({ block: 'start' });
+  }
+
+  function navigate(id, fromHistory) {
+    if (!N[id]) id = 'context';
+    if (hasView(id)) go(id, id, fromHistory);
+    else go(N[id].parent, id, fromHistory);
+  }
+
+  function select(id) {
+    state.sel = id;
+    history.replaceState(null, '', `#${id}`);
+    document.querySelectorAll('#stage .box').forEach(el => el.classList.toggle('sel', el.dataset.id === id));
+    renderPanel();
+    renderTree();
+  }
+
+  function renderBacklog() {
+    const order = r => {
+      const m = r.match(/^(Gap |D|R)(\d+)/);
+      return m ? { 'Gap ': 0, D: 1, R: 2 }[m[1]] * 1000 + Number(m[2]) : r === 'Copy' ? 8000 : 9000;
+    };
+    const groups = {};
+    openItems('context').forEach(i => { (groups[i.ref] = groups[i.ref] || []).push(i); });
+    $('#dlg-body').innerHTML = `<p>Every "To define" item on this page, grouped by where it is tracked. A ref can appear under several specs: those are the places a decision lands when it is closed.</p>` +
+      Object.keys(groups).sort((a, b) => order(a) - order(b)).map(ref => `
+        <h3>${refTag(ref)} ${esc(REF_TITLES[ref] || '')}</h3><p class="src">${esc(REF_HOME[refKind(ref)])}</p>
+        <ul>${groups[ref].map(i => `<li>${md(i.t)} <button class="jump" data-nav="${i.id}">${esc(N[N[i.id].parent].name)} › ${esc(N[i.id].name)}</button></li>`).join('')}</ul>`).join('');
+  }
+
+  document.addEventListener('click', e => {
+    const g = e.target.closest('[data-go]');
+    if (g) { go(g.dataset.go); return; }
+    const nv = e.target.closest('[data-nav]');
+    if (nv) { if (nv.closest('dialog')) $('#dlg').close(); navigate(nv.dataset.nav); return; }
+    const b = e.target.closest('#stage .box');
+    if (!b) return;
+    const id = b.dataset.id;
+    if (hasView(id) && id !== state.view) go(id);
+    else select(id);
+  });
+  const stage = $('#stage');
+  stage.addEventListener('pointerover', e => { const b = e.target.closest('.box'); if (b) heat(b.dataset.id); });
+  stage.addEventListener('pointerleave', () => heat(null));
+  stage.addEventListener('focusin', e => { const b = e.target.closest('.box'); if (b) heat(b.dataset.id); });
+  stage.addEventListener('focusout', () => heat(null));
+  $('#up').addEventListener('click', () => { if (state.view !== 'context') go(N[state.view].parent); });
+  $('#backlog').addEventListener('click', () => { renderBacklog(); $('#dlg').showModal(); });
+  $('#dlg-close').addEventListener('click', () => $('#dlg').close());
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('#dlg').open && state.view !== 'context') go(N[state.view].parent);
+  });
+  window.addEventListener('popstate', () => navigate(decodeURIComponent(location.hash.slice(1)) || 'context', true));
+  new ResizeObserver(() => { fit(); layout(); }).observe($('.viewport'));
+  navigate(decodeURIComponent(location.hash.slice(1)) || 'context', true);
+})();
+</script>
+</body>
+</html>
