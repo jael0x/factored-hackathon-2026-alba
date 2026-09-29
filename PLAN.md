@@ -55,19 +55,19 @@ Source: the problem statement PDF. "Status" says whether `ARCHITECTURE.md` answe
 |---|---|---|
 | One coherent workflow | `credit_prequalification`, credit card and personal loan | Covered |
 | Normal, ambiguous or unsupported, and human-required paths | Juan (normal), "quiero un crédito" (clarify), Juliana (ask for income, then R05), mortgage and others (`out_of_scope`), Alicia (human) | Covered |
-| Spanish and Portuguese interactions; report language limits | `es` and `pt` templates; the model may clarify in Portuguese | Partial: PT test data and PT quality of `gpt-6-luna` not measured (D6) |
+| Spanish and Portuguese interactions; report language limits | `es` and `pt` templates; model sets `language` per turn; PT copy team-written / MT disclosed (D6) | Partial: PT quality of `gpt-6-luna` still measured in R11 |
 | 1. Problem supported by data (contact reasons, demand, data quality, constraints) | §4 of this file | Partial: Jan 2025 numbers come from one month and need a full-table recount (R5) |
 | 2. Context, clarification, grounding, tools, only verified actions reported | events per process, `conversation.turn_classified`, `facts` cite source columns | Covered in design |
-| 3. What it answers, what needs confirmation, when it abstains or transfers | rules table, transitions, `out_of_scope` | Partial: which actions need confirmation is not defined (D8) |
+| 3. What it answers, what needs confirmation, when it abstains or transfers | rules table, transitions, `out_of_scope`, soft consent before `policy.run` (D8) | Covered |
 | 3. Permissions and policy enforced outside model prose | JWT `customer_id`, pure policy, templates | Covered |
 | 3. Handoff with request, verified facts, actions taken, evidence, open questions | packet read from `analysis.completed`: request, score, income, deciding rule. The agent does not chat | Partial: a separate "open questions" field is not in the contract |
-| 4. Repeatable prep with contracts, quality checks, lineage, update/freshness policy | `load` container, `load_batches` sha256, load report counts | Partial: contracts, lineage, freshness, and an update-correctness fixture are open (D5) |
-| 4. At least one learned component against a baseline; valid labels, no leakage, justified splits | not in the contract | Open (D3) |
+| 4. Repeatable prep with contracts, quality checks, lineage, update/freshness policy | `load` checks, `load_batches` sha256, update fixture (D5). No policy freshness rule | Covered for the static snapshot |
+| 4. At least one learned component against a baseline; valid labels, no leakage, justified splits | `ConversationTurn` vs B0 keyword baseline (D3) | Covered in design; harness is D7 |
 | 5. Held-out eval incl. bad or missing data, expired sessions, unauthorized access, prompt injection, tool failures, multilingual ambiguity; report success, unsafe outcomes, handoffs, latency, cost, sample sizes | `eval/` "comes later" | Open (D7); design carried in §7 |
-| 6. Tracing, bounded retries, safe fallback, reproducible setup | events and trace screen, 3 attempts, fallback to `human_active`, `docker compose up` with a documented `.env` (reviewers use the deployed link; the team provides keys on request) | Covered |
-| 6. Capacity limits, monitoring, access control, data retention, remaining deployment work | per-query `customer_id` filter | Partial: capacity, monitoring, retention not written. Organizers value stated sizing limits (§1) |
+| 6. Tracing, bounded retries, safe fallback, reproducible setup | events and trace screen, 3 attempts, fallback to `human_active`, `docker compose up` with a documented `.env` | Covered |
+| 6. Capacity limits, monitoring, access control, data retention, remaining deployment work | per-query `customer_id` filter | Partial: capacity, monitoring, retention not written. Organizers value stated sizing limits (§1). Deploy path documented only (D2) |
 | 6. Explanations from sources, rules, execution records; no chain-of-thought | `rule_trace`, `facts` with source column, `events` | Covered |
-| Credit: separate conversation, predictive risk estimate, eligibility policy | model and policy separated | Partial: the risk-estimate layer is not named (D4) |
+| Credit: separate conversation, predictive risk estimate, eligibility policy | model; dataset `credit_score` as risk estimate; pure policy (D4) | Covered |
 | Credit: approved rules or a labeled synthetic policy; the model does not invent rules or approve | `alba-credit-v1`, synthetic, templates only | Covered |
 | Credit: explanations, uncertainty, review paths for missing or borderline data | R04, R06, R05 review band | Partial: how uncertainty is shown is not specified |
 | Auth: trusted test session; an ID number alone is not identity; access enforced in the service layer | one-time code, JWT, per-query filter | Covered |
@@ -75,7 +75,7 @@ Source: the problem statement PDF. "Status" says whether `ARCHITECTURE.md` answe
 | No private records or credentials in the public repo or external model requests | PDFs and data ignored; the OpenAI request carries booleans and the message text, no profile values | Partial: customer-typed text goes to OpenAI as is (D11). History rewritten and purged Sep 28 (§0) |
 | Baseline vs proposed on the same held-out workload; case mix, label quality, model and prompt versions, run variability; LLM-judge rubric validated | §7 | Open (D7) |
 | Results by language and customer segment; offline results labeled as such | §7 | Open (D7) |
-| Deployed link | the same compose stack, Postgres included, on a deploy host | Open: host not chosen (D2). Organizers: not strictly required if the path to production is explained (§1) |
+| Deployed link | local `docker compose up` + browser; optional host steps in ops docs only (D2) | Closed: no cloud deploy for submission. Organizers: path to production may be explained (§1) |
 
 Not required by the brief: training a new model, multiple agents, a tool-count target, streaming, forecasting, a dashboard.
 
@@ -160,21 +160,21 @@ Each entry says what the Sep 27 plan assumed, what the contract says now, and wh
 
 **D1. Model choice evidence and cost.** Partly closed on Sep 28: the model is GPT-6 Luna (`gpt-6-luna`) on the OpenAI API. Cost per case comes from the token usage stored in `llm_turns` times the list price ($0.10 input, $0.01 cached input, $0.50 output per 1M tokens on Sep 28, 2026; [model page](https://developers.openai.com/api/docs/models/gpt-6-luna)). Still open: whether a second model is compared on the eval subset to show model selection (ML criterion). The comparison is first on the cut list.
 
-**D2. Deployment target.** The brief requires a link to the deployed tool. Decided on Sep 28: the deploy host runs the same `docker compose` stack as local, with Postgres inside it (no managed database), and `OPENAI_API_KEY` in the host's secrets. Reviewers use the deployed link and read the repo; they are not expected to run it, and the team provides keys if one needs to. With the model on the OpenAI API, the host no longer needs RAM for a local model. Organizers said on Sep 26 that cloud deployment is not strictly required when the path to production is explained; the team's Sep 28 decision to deploy stands, and the kickoff deck still lists the link. Still open: the host, and whether the public deploy runs with `DEMO_INBOX=1`.
+**D2. Deployment target.** Closed on Sep 28 (evening): no cloud deploy for the submission. Anyone tries the project with `docker compose up` and the browser. `DEMO_INBOX=1` locally so the login code is visible. Optional host steps are documentation only (`docs/ops.md`). Organizers said cloud deploy is not strictly required when the path to production is explained.
 
-**D3. The evaluated learned component.** The brief requires at least one learned component evaluated against a baseline, with valid labels and leakage prevention. The Sep 27 plan had a separate intent and out-of-scope router (keyword rules vs TF-IDF + LR vs multilingual-e5 + LR vs zero-shot LLM) trained on team-created labels. The contract has no router: the LLM classifies intent through `ConversationTurn`. Organizers confirmed on Sep 25 that a prompted LLM counts as the learned component if it is defined, evaluated rigorously, and justified, and that the baseline is the team's choice. So the `ConversationTurn` classifier on a team-labeled held-out set is a valid option with no contract change. Still open: which component is evaluated (that classifier, or an added router, which is a contract change), its baseline, and the label set.
+**D3. The evaluated learned component.** Closed on Sep 28: the `ConversationTurn` classifier (`gpt-6-luna`) on a team-labeled held-out set; baseline B0 (keyword rules). No separate runtime router.
 
-**D4. Risk-estimate layer.** The brief asks to keep conversation, predictive risk estimate, and eligibility policy separate. The Sep 27 plan had a risk service (v0: score to band, synthetic PD table) plus a model card for the rejected delinquency model. The contract forbids a delinquency model and R05 reads `credit_score` directly. Still open: whether the dataset's `credit_score` is presented as the external risk estimate (with the model card as evidence), or a separate risk service exists (a contract change).
+**D4. Risk-estimate layer.** Closed on Sep 28: the dataset's `credit_score` is the external risk estimate. No risk microservice. The rejected delinquency model is documented in the model card only.
 
-**D5. Data engineering scope.** The contract loads four static dimension files with a sha256 manifest and a count report. The brief asks for contracts, quality checks, lineage, a freshness policy, and, with static data, a labeled fixture proving update correctness. The Sep 27 plan had pandera or Great Expectations checks, `source_files[]` and `batch_id` lineage, a freshness rule (R10, now absent from the policy), and a late-arrival plus schema-evolution fixture. Still open: which of those enter the contract.
+**D5. Data engineering scope.** Closed on Sep 28: load quality checks (counts, null rates, FK), `load_batches` lineage, and an update-correctness fixture. No pandera/GE suite and no policy freshness rule (R10).
 
-**D6. Portuguese coverage.** The contract has a `pt` template and lets the model clarify in Portuguese. Still open: where PT test utterances come from, how they are disclosed, and how well `gpt-6-luna` handles PT (measure, R11).
+**D6. Portuguese coverage.** Closed on Sep 28: the model sets `language` on each turn; PT templates are team-written; PT eval utterances are team-written or machine-translated and disclosed. R11 still measures PT quality of `gpt-6-luna` (research, not a new product decision). The UI shows a typing indicator while waiting for the API; it does not add a fixed sleep for "analysis time".
 
 **D7. Evaluation harness and baselines.** The contract defers `eval/`. The brief makes it mandatory. The Sep 27 design is in §7. Still open: whether B0/B1/P stay as designed (B1 would also run on `gpt-6-luna`), how many cases and repeated runs fit the API budget and rate limits, and the spend cap for eval runs.
 
-**D8. Confirmation step.** The brief asks which actions require confirmation. The Sep 27 plan had a soft-check consent before running a pre-qualification. The contract has none. Still open: whether `policy.run` requires explicit consent.
+**D8. Confirmation step.** Closed on Sep 28: soft consent before the first `policy.run`. After `prequalify_card` / `prequalify_loan`, template `confirm_prequalify`; only `confirm_prequalify` with a product set runs the policy. `decline_prequalify` leaves `ai_active`. Income follow-up on the same process does not ask again.
 
-**D9. Prompt-injection defense.** The Sep 27 plan had input guards (injection heuristics and classifier) and an output guard (every number in a reply must appear in tool results). The contract relies on structure: the model sees only booleans, has no tools, `customer_id` comes from the JWT, and forbidden phrases in `reply_text` escalate. Still open: whether that is enough and how it is evaluated.
+**D9. Prompt-injection defense.** Closed on Sep 28: structural defense only (booleans, JWT, no tools, `reply_forbidden`). Evaluated in the held-out suite. No injection classifier.
 
 **D10. Contract known gaps.** Closed on Sep 28. The thirteen gaps are written into `ARCHITECTURE.md`. None remain open. Template sentences are still not written; that is named in the contract, not left as a gap.
 
@@ -232,10 +232,10 @@ The Sep 27 day-by-day assumed the old stack. The dates that were fixed then are 
 
 | Days | A (system) | B (data and eval) |
 |---|---|---|
-| Mon Sep 28 - Tue Sep 29 | Definition: D10 is closed. Close D2, D8, D9 into `ARCHITECTURE.md`. Repo skeleton, compose with Postgres | Research R1-R12 (R8, R9, R11 first). Close D3, D4, D5, D6. Start the data-quality report |
-| Wed Sep 30 | Migrations, events, rules, worker, policy engine with unit tests (oracle test green) | Pipeline bronze, silver, gold; contracts per D5; eval labels and splits per D3 |
-| Thu Oct 1 | Model adapter, templates ES and PT, auth and login codes | Eval harness, scenario generator, B0 and B1 |
-| Fri Oct 2 | Frontend screens from the mock; deploy per D2. **Feature freeze at night** | First full eval run, error analysis, ranked fix list |
+| Mon Sep 28 - Tue Sep 29 | Definition: D2, D8, D9, D3–D6 closed into `ARCHITECTURE.md`. Repo skeleton, compose with Postgres | Research R1-R12 (R8, R9, R11 first). Start the data-quality report |
+| Wed Sep 30 | Migrations, events, rules (incl. consent), worker, policy engine with unit tests (oracle test green) | Pipeline bronze, silver, gold; load checks per D5; eval labels and splits per D3 |
+| Thu Oct 1 | Model adapter, templates ES and PT (incl. `confirm_prequalify`), auth and login codes | Eval harness, scenario generator, B0 and B1 |
+| Fri Oct 2 | Frontend screens from the mock (typing indicator while waiting); ops path docs per D2. **Feature freeze at night** | First full eval run, error analysis, ranked fix list |
 | Sat Oct 3 | **Pair:** fix top failures, repeated runs, model comparison per D1 | **Pair:** language and segment breakdowns, latency and cost tables, judge validation |
 | Sun Oct 4 | **Pair:** README, docs, limitations, video | **Pair:** slides; numbers locked from a tagged commit |
 | Mon Oct 5 | Buffer. Submit by midday | Buffer |
@@ -244,16 +244,16 @@ Cut list if behind, in order: model comparison, LLM judge, B0, PT templates for 
 
 ## 9. Submission package
 
-1. Public repo `factored-hackathon-2026-<team name>`, for review: README with the deployed link first, then the setup the team uses (keys provided on request), architecture diagram, `docs/data_quality.md`, `docs/model_card_risk.md` (the model we did not ship), a model card for the D3 component, `docs/policy.md`, `docs/ops.md`, `docs/limitations.md`, `eval/reports/`.
-2. Deployed link (D2), with test-login instructions (synthetic customers only). This is how reviewers try the system.
+1. Public repo `factored-hackathon-2026-<team name>`, for review: README with local `docker compose up` first, architecture diagram, `docs/data_quality.md`, `docs/model_card_risk.md` (the model we did not ship), a model card for the D3 component, `docs/policy.md`, `docs/ops.md` (optional deploy path), `docs/limitations.md`, `eval/reports/`.
+2. How to try it: `docker compose up` + browser, with test-login instructions (synthetic customers only, `DEMO_INBOX=1`). No cloud deploy link for submission (D2).
 3. Slides (4-6):
    1. Problem and evidence (demand, the 32% missing-data constraint, data traps)
-   2. Architecture: conversation, risk estimate, and policy separated; customer isolation
+   2. Architecture: conversation, risk estimate (`credit_score`), and policy separated; soft consent; customer isolation
    3. ML: the model we did not ship, and the D3 component against its baseline
    4. Evaluation: B0 vs B1 vs P, unsafe outcomes with intervals
    5. Language and segment breakdowns
-   6. Route to production and honest limitations
-4. Video (at most 3 minutes, per organizers): normal pre-qualification in Spanish; ambiguous request and clarification; review case and the packet in the agent console; a Portuguese conversation; an injection or cross-customer attempt blocked; 60 s of metrics and architecture. Trim the list to fit 3 minutes.
+   6. Route to production (compose locally; optional host) and honest limitations
+4. Video (at most 3 minutes, per organizers): normal pre-qualification in Spanish (incl. consent); ambiguous request and clarification; review case and the packet in the agent console; a Portuguese conversation; an injection or cross-customer attempt blocked; 60 s of metrics and architecture. Trim the list to fit 3 minutes.
 
 ## 10. Decision log
 
@@ -266,7 +266,7 @@ Cut list if behind, in order: model comparison, LLM judge, B0, PT templates for 
 | Sep 27 | Parked: balance inquiries | It is what the transcripts contain, so many teams will build it |
 | Sep 28 | The contract replaces the Sep 27 stack: Ollama `llama3.2:3b` instead of the Claude API; Postgres 16 in Docker and an own JWT instead of Supabase Auth and RLS. The Ollama part is superseded below | `docker compose up` gives the same chat with no key or account |
 | Sep 28 | Model: GPT-6 Luna (`gpt-6-luna`) on the OpenAI API replaces Ollama `llama3.2:3b`. Stack stays FastAPI and Postgres | Team decision. Consequences: runs need `OPENAI_API_KEY` and cost money per call; the deploy host no longer needs RAM for a local model; customer text now reaches an external service (D11) |
-| Sep 28 | Postgres runs inside the Docker Compose stack, locally and on the deploy host | Team decision |
+| Sep 28 | Postgres runs inside the Docker Compose stack (local try path; optional host later) | Team decision |
 | Sep 28 | Reviewers use the deployed link and read the repo; they are not expected to run the stack. The team provides keys on request | Team decision. Drops the earlier goal of running with no key |
 | Sep 28 | Policy trimmed to R01-R06 and R09. R07 (income threshold), R08 (indicative limit), and R10 (freshness) removed; R05 bands are <580, 580-619, ≥620 | R08: a limit number would be a promise. R07 is left open on purpose in the contract. No reason was recorded for dropping R10 (see D5) |
 | Sep 28 | Docs standardized in English; `ARQUITECTURA.md` became `ARCHITECTURE.md`; `HANDOFF.md` folded into this file and `README.md` | One home per fact |
@@ -275,3 +275,7 @@ Cut list if behind, in order: model comparison, LLM judge, B0, PT templates for 
 | Sep 28 | A typed income fills a null and evaluation continues. The file wins when income is present. Juliana, score 714, pre-qualifies after she states an amount | She is not sent to review only because the number was typed |
 | Sep 28 | The agent does not chat. Close is `PREQUALIFIED` or `NOT_PREQUALIFIED`, plus a template | `referred_closed` is not an end reason |
 | Sep 28 | `load` copies four S3 keys with `aws s3 cp` into Postgres read tables and gold. The API does not call S3 | Chat reads one gold row |
+| Sep 28 (evening) | No cloud deploy for submission. Try via `docker compose up` + browser; `DEMO_INBOX=1` locally; optional host steps in ops docs only (D2) | Team decision. Aligns with organizer note that deploy is not strict when the production path is explained |
+| Sep 28 (evening) | Soft consent before first `policy.run`: template `confirm_prequalify`; intents `confirm_prequalify` / `decline_prequalify` (D8) | Brief requires naming what needs confirmation; only action in-scope is simulated pre-qualification |
+| Sep 28 (evening) | Prompt-injection defense is structural only; measured in eval (D9) | Keeps permissions outside the model; classifier would be cut-list work |
+| Sep 28 (evening) | Learned component: `ConversationTurn` vs B0 keywords (D3). Risk estimate: dataset `credit_score` (D4). Load checks + update fixture (D5). PT: model `language` + team/MT copy disclosed (D6) | Closes definition items for Mon-Tue |

@@ -20,7 +20,7 @@ This file is in English. Dataset literals, customer-facing copy, and the phrases
 
 ## What gets built
 
-A web service. The customer asks about a credit card or a personal loan. If the request is ambiguous, the assistant asks which of the two and does not decide. If the data is enough, the policy issues a certificate (`constancia` in the UI): pre-qualifies, does not pre-qualify, or goes to a person. The certificate is a template filled with the policy result.
+A web service. The customer asks about a credit card or a personal loan. If the request is ambiguous, the assistant asks which of the two and does not decide. When the product is known, the assistant asks for explicit consent before any `policy.run`. If the customer declines, the process stays `ai_active` and the policy is not called. If they confirm and the data is enough, the policy issues a certificate (`constancia` in the UI): pre-qualifies, does not pre-qualify, or goes to a person. The certificate is a template filled with the policy result.
 
 Four outcomes, from real rows of the file (snapshot of June 17, 2026):
 
@@ -67,8 +67,8 @@ Stored in `api/fixtures/oracle_customers.json`. Values read from the file on Sep
 | HTTP | FastAPI |
 | Validation | Pydantic v2 |
 | Frontend | TypeScript, React, Vite. One app |
-| Database | PostgreSQL 16 as a service of the same `docker compose` stack, locally and on the deploy host. No managed database. The schema lives in `db/migrations/` |
-| How it runs | `docker compose up` applies the schema, downloads the missing CSVs, and builds the profile. Nobody runs SQL by hand. Reviewers use the deployed link and read the repo; they are not expected to run the stack |
+| Database | PostgreSQL 16 as a service of the same `docker compose` stack. No managed database. The schema lives in `db/migrations/` |
+| How it runs | `docker compose up` applies the schema, downloads the missing CSVs, and builds the profile. Nobody runs SQL by hand. Reviewers (and anyone else) run that stack locally and open the app in the browser. There is no cloud deploy for the submission. `docs/ops.md` will list optional steps if a host is used later |
 | Auth | Own JWT, HS256, 15 minutes, issued by this API |
 | Pipeline | Python, in the `load` container. Reads local CSVs. DuckDB only if the aggregate needs it; the result lands in Postgres |
 | LLM | OpenAI API, model `gpt-6-luna` (GPT-6 Luna). The adapter `api/llm/conversation.py` makes one call with Structured Outputs (the `ConversationTurn` JSON schema) and returns `ConversationTurn`. The policy does not use this adapter |
@@ -154,7 +154,7 @@ States. There are no others.
 
 | State | Who talks | What can happen |
 |---|---|---|
-| `ai_active` | the assistant, if a rule enqueues `conversation.generate` | clarify, ask for income, decide, hand off to a person |
+| `ai_active` | the assistant, if a rule enqueues `conversation.generate` | clarify, ask for consent to run pre-qualification, ask for income, decide, hand off to a person |
 | `human_active` | nobody in the thread | the customer may write and the message is stored; the model is not called. The agent does not reply. The only action is to close with prequalified or not |
 | `ended` | nobody | the certificate exists. A new message opens another process |
 
@@ -252,9 +252,11 @@ A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function o
 | `open_process` | `conversation.message_received` | the `process_id` column is null | `process.start` |
 | `generate_while_ai` | `conversation.message_received` | the `process_state` column is `ai_active` | `conversation.generate` |
 | `record_only_when_human` | `conversation.message_received` | the `process_state` column is `human_active` | none. The message is already in the event |
-| `run_policy` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `prequalify_card` or `prequalify_loan` | `policy.run` with that `product` |
+| `ask_confirm_prequalify` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `prequalify_card` or `prequalify_loan` | `template.send` for `confirm_prequalify`. Stores the product on the process. Stays `ai_active`. The policy is not called |
+| `run_policy` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `confirm_prequalify` and `product` is set | `policy.run` with that `product` |
+| `decline_prequalify` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `decline_prequalify` | `conversation.show_reply`. Stays `ai_active`. The policy is not called |
 | `run_policy_income` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `provide_income` and `product` is set | `policy.run` with that `product` and the declared amount |
-| `ask_which_product` | `conversation.turn_classified` | `reply_ok` and `intent` is `provide_income` and `product` is null | `template.send` for `which_product`. Stays `ai_active`. The policy is not called |
+| `ask_which_product` | `conversation.turn_classified` | `reply_ok` and `intent` is `provide_income` or `confirm_prequalify` and `product` is null | `template.send` for `which_product`. Stays `ai_active`. The policy is not called |
 | `hand_off_human` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `human_request` | `process.transition` to `human_active`, `reason_code = customer_requested_human` |
 | `hand_off_scope` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `out_of_scope` | `process.transition` to `human_active`, `reason_code = out_of_scope` |
 | `hand_off_language` | `conversation.turn_classified` | `reply_ok` and `language` is `other` | `process.transition` to `human_active`, `reason_code = language_unsupported` |
@@ -284,7 +286,7 @@ The worker takes `pending` rows with `FOR UPDATE SKIP LOCKED`, increments `attem
 | `process.end` | `state = ended`. Writes `process.state_changed` and `process.ended`, both with the same `end_reason` | call the model, and does not run the policy again |
 | `conversation.generate` | one LLM call, persists the JSON, writes `conversation.turn_classified`. If the message `process_id` is null, the turn uses the process this cycle just opened for that customer. Stores `language` and, when set, `product` on the process | write `analysis.completed`, enqueue `policy.run` or `process.transition`, copy the customer message, update the message row |
 | `conversation.show_reply` | inserts `messages` with `author = assistant` and the turn's `reply_text` | call the model |
-| `template.send` | writes `conversation.template_sent`. `template_id` is `needs_income`, `refer_notice`, or `which_product`. Locale comes from the triggering event's `language` | call the model, end the process. The sentences are not written in this contract yet |
+| `template.send` | writes `conversation.template_sent`. `template_id` is `needs_income`, `refer_notice`, `which_product`, or `confirm_prequalify`. Locale comes from the triggering event's `language` | call the model, end the process. The sentences are not written in this contract yet |
 | `policy.run` | reads the profile by the event's `customer_id`, runs the engine, writes `analysis.completed`, and copies `language` from the triggering turn | write the certificate |
 | `decision.render` | reads `language` from the triggering event, picks the ES or PT template, writes `prequalification.decided` | call the model. The agent-path sentences are not written in this contract yet |
 
@@ -329,18 +331,23 @@ When `income_local` is present, a number typed in the message is ignored. The fi
 
 ### What the customer can be asked
 
-Two things, and no others.
+Three things, and no others.
 
 | Asked | When |
 |---|---|
 | Which product, credit card or personal loan | the turn names no product |
-| Monthly income | `income_local` is null |
+| Whether to start this run's pre-qualification | the turn is `prequalify_card` or `prequalify_loan` (product known). Soft consent before any `policy.run` for that product request |
+| Monthly income | `income_local` is null after a consented `policy.run` returned `NEEDS_INFO` |
 
 The income amount is read in the country's currency. The gold row is not filled in.
 
 The customer is not asked for `credit_score`, `days_past_due`, `customer_status`, or whether they already hold the product. Those stay on the file. A null score is `REFER` with no question.
 
+Consent is once per product request on the process. A `confirm_prequalify` is what first enqueues `policy.run`. A later `provide_income` on the same process does not ask again. `decline_prequalify` leaves the process `ai_active`; a later `prequalify_card` or `prequalify_loan` asks for consent again.
+
 Once those asks are done for this case, the engine runs. `PREQUALIFIED` and `NOT_PREQUALIFIED` end it. `REFER` goes to the agent. There is no further question.
+
+No other bank action exists in this demo. There is no money movement and no account change. The only action that requires confirmation is starting the (simulated) pre-qualification.
 
 R07 and R08 do not exist in the code. An income threshold or a `k * income` limit is not implemented. The certificate carries no limit amount and no rate for the new product.
 
@@ -354,7 +361,7 @@ Outcome phrases the template may emit, and the model is forbidden to emit on its
 
 The model is GPT-6 Luna on the OpenAI API, model id `gpt-6-luna`. It only classifies the sentence and drafts the clarification. Juan pre-qualifies the same with this model or with the test JSON, because `api/policy/engine.py` decides that.
 
-`OPENAI_API_KEY` lives in `.env` locally and in the deploy host's secrets. It never enters git, the image, a log, or a prompt. `LLM_MODEL` defaults to `gpt-6-luna`. Only `api/llm/conversation.py` imports the OpenAI SDK. Whether it calls Chat Completions or Responses is an adapter detail: both support Structured Outputs for this model.
+`OPENAI_API_KEY` lives in `.env`. It never enters git, the image, a log, or a prompt. `LLM_MODEL` defaults to `gpt-6-luna`. Only `api/llm/conversation.py` imports the OpenAI SDK. Whether it calls Chat Completions or Responses is an adapter detail: both support Structured Outputs for this model.
 
 If the key is missing, Postgres, login, and the policy still start. `conversation.generate` fails with an error that says the key is missing. A failed API call (timeout, rate limit, server error) is a failed attempt of the command, under the worker's limit of 3 attempts; after the third, `human_active` with `reason_code = tool_failed`. The model is not silently replaced with another one.
 
@@ -364,8 +371,9 @@ One call, no streaming, Structured Outputs with the `ConversationTurn` JSON sche
 
 ```text
 ConversationTurn
-  intent: product_info | prequalify_card | prequalify_loan | provide_income
-          | human_request | out_of_scope | clarify | chit_chat
+  intent: product_info | prequalify_card | prequalify_loan | confirm_prequalify
+          | decline_prequalify | provide_income | human_request | out_of_scope
+          | clarify | chit_chat
   product: credit_card | personal_loan | null
   declared_income_amount: number | null
   declared_income_currency: MXN | COP | ARS | null
@@ -383,11 +391,29 @@ What goes into the prompt. This is everything that leaves the service for OpenAI
 - The catalog: two products, names in Spanish and Portuguese, no rates.
 - The instruction not to state eligibility or a limit. If `reply_text` contains those phrases, the turn is written with `reply_ok` false and `reason_code = reply_forbidden`. The text is not shown. `hand_off_reply` escalates.
 
-`conversation.generate` stores the JSON and writes the turn. It does not choose the next command. The rules on `conversation.turn_classified` do. A clarification ("tarjeta o préstamo") may be `reply_text`. `language = pt` continues, and the certificate uses the `pt` template.
+`conversation.generate` stores the JSON and writes the turn. It does not choose the next command. The rules on `conversation.turn_classified` do. A clarification ("tarjeta o préstamo") may be `reply_text`. `language` is set by the model on every turn (`es`, `pt`, or `other`); that is how the locale for templates is chosen. `language = pt` continues, and the certificate uses the `pt` template. Portuguese template sentences are team-written; the dataset has none. Portuguese eval utterances are team-written or machine-translated and disclosed as a limitation (`PLAN.md` D6).
+
+`prequalify_card` and `prequalify_loan` do not run the policy. They store the product and trigger `confirm_prequalify` (template). Only `confirm_prequalify` with a product set enqueues `policy.run`. `decline_prequalify` shows the model's `reply_text` and leaves the case open.
 
 `out_of_scope` covers a new mortgage, investments, a limit increase, disputing a transaction, a third party's balance, and "el crédito" when it still names no product after one clarification. The first time the customer says only "un crédito", the intent is `clarify`, not `out_of_scope`.
 
 The model gets no tool that accepts a `customer_id`. There is no tool-calling into the policy. The policy is not a model tool: it is a command that runs afterwards, with the session's id.
+
+### Prompt-injection defense
+
+Defense is structural, not a second classifier. The model sees only booleans, process state, the catalog, and the message text. It has no tools. `customer_id` comes from the JWT. Forbidden eligibility phrases in `reply_text` set `reply_forbidden` and escalate. Held-out eval includes injection and cross-customer attempts (`PLAN.md` §7). No input-heuristic guard and no separate injection model are part of this contract.
+
+### Risk estimate
+
+Conversation, risk estimate, and eligibility stay separate. The risk estimate is the dataset's `credit_score` (treated as an external bureau-style score already on the gold row). `alba-credit-v1` reads that field in R04/R05; it does not compute a score. No delinquency or PD model is shipped. The model card for the rejected delinquency probe lives in `docs/model_card_risk.md` when written.
+
+### Learned component (evaluation)
+
+The learned component evaluated against a baseline is the `ConversationTurn` classifier (`gpt-6-luna` via Structured Outputs): intents including product, consent (`confirm_prequalify` / `decline_prequalify`), clarify, and out-of-scope. The baseline is B0, a keyword-rules bot, on the same team-labeled held-out set. There is no separate intent router in the runtime. Labels and splits are team-generated; customers used while tuning prompts are disjoint from the held-out set (`PLAN.md` §7).
+
+### UI wait state
+
+While the client waits for the API after a customer send, the chat shows a typing indicator ("escribiendo…"). That covers real model and worker latency. The UI does not add a fixed sleep to "give the model time"; language and intent are classified inside the same `conversation.generate` call that produces the turn.
 
 ## Auth and screens
 
@@ -455,11 +481,11 @@ The customer API does not list this table. `policy.run` reads one row, the one f
 
 The filter `customer_id = jwt.sub` is in every API query. A test calls `products` with Juan's JWT and asks for Alicia's id: the response carries no rows of Alicia's.
 
-Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` excludes. S3 keys and the OpenAI key live only in `.env` (or the deploy host's secrets): never in the repo, the image, or the prompt.
+Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` excludes. S3 keys and the OpenAI key live only in `.env`: never in the repo, the image, or the prompt.
 
 ## Docker
 
-`docker compose up` leaves the demo usable. The same stack runs locally and on the deploy host, with Postgres inside it. The host is not chosen yet (`PLAN.md` D2). Services:
+`docker compose up` leaves the demo usable in the browser. Postgres runs inside the same stack. There is no cloud deployment for the submission (`PLAN.md` D2). Optional host steps, if someone later wants them, belong in `docs/ops.md` and are not required to try the project. Services:
 
 | Service | Role | Keeps running |
 |---|---|---|
@@ -468,7 +494,7 @@ Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` exclude
 | `api` | starts when `load` finished successfully | yes |
 | `web` | the frontend, proxies to the API | yes |
 
-Who runs it: the team, locally and on the deploy host. Reviewers use the deployed link and read the repo; they are not expected to run the stack themselves. If a reviewer does need to run it, the team provides the keys.
+Who runs it: anyone with the repo, a `.env`, and Docker. Default local demo uses `DEMO_INBOX=1` so the one-time code is returned in the API response (there is no SMS). Reviewers run `docker compose up` and open the web URL from the compose file. Secrets stay in `.env`; they are not committed.
 
 With a `.env` holding `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION=us-east-2`, `S3_BUCKET`, `OPENAI_API_KEY`, and `JWT_SECRET`, `docker compose up` needs no other command. `.env.example` lists the same names with empty values. `load` uses the AWS CLI and runs `aws s3 cp` for these four keys, prefix `data/`:
 
@@ -517,6 +543,8 @@ The load report writes counts: rows read, null scores, null incomes, active prod
 2. Silver, inside Postgres: the four read tables, only the columns listed above. Types, empty `days_past_due` as null, currency copied, product names untranslated.
 3. Gold: `customer_credit_profile`, one row for each of the 150,000 customers, with the maximum days past due and `has_active_card`, `has_active_personal_loan`.
 
+Load quality checks (fail the `load` container if any fail): row counts for the four files match the expected snapshot sizes; null rates for `credit_score` and `estimated_monthly_income` are reported; every `products.customer_id` exists in `customers`. Lineage for this demo is `load_batches` (`path`, `bytes`, `sha256`, `batch_id` on gold). There is no freshness rule in the policy (data are a static snapshot). An update-correctness fixture changes one file on disk, observes a new `sha256`, and proves `load` reloads silver and gold; that fixture is labeled as such in `docs/data_quality.md` when written.
+
 No model is trained on the transcripts. They are templates. They do not feed the policy or the prompt. `load` does not download them.
 
 ## Juan's flow, step by step
@@ -526,20 +554,23 @@ No model is trained on the transcripts. They are templates. They do not feed the
 3. He writes "quiero una tarjeta de crédito". Event `conversation.message_received`. Columns: `customer_id` from the JWT, `process_id` null, `process_state` `ai_active`. Payload: the text and the `client_message_id`.
 4. `open_process` inserts the process in `ai_active`.
 5. `generate_while_ai` calls the model. It writes `conversation.turn_classified` with `prequalify_card` and the `process_id` from step 4. The message row stays `process_id` null. The process stores `product = credit_card`. `reply_text` does not say he pre-qualifies.
-6. `run_policy` enqueues `policy.run`. It reads the profile: score 812, income 306,753.45 MXN (17,988 USD), 0 days past due, no active card. R05 wins. Event `analysis.completed`, with `language` copied from the turn.
-7. `render_decision` writes the certificate in Spanish. Event `prequalification.decided`.
-8. `end_after_decision` leaves the process `ended` / `prequalified`.
-9. The customer screen shows the certificate. César does not see it.
+6. `ask_confirm_prequalify` sends `confirm_prequalify` (template). The policy is not called. The process stays `ai_active`.
+7. He writes "sí". The turn is `confirm_prequalify` with `product = credit_card`. `run_policy` enqueues `policy.run`. It reads the profile: score 812, income 306,753.45 MXN (17,988 USD), 0 days past due, no active card. R05 wins. Event `analysis.completed`, with `language` copied from the turn.
+8. `render_decision` writes the certificate in Spanish. Event `prequalification.decided`.
+9. `end_after_decision` leaves the process `ended` / `prequalified`.
+10. The customer screen shows the certificate. César does not see it.
 
-If the text had been "quiero un crédito", step 5 returns `clarify` and `product` null. There is no step 6. The process stays `ai_active`. The question is which of the two products: credit card or personal loan.
+If the text had been "quiero un crédito", step 5 returns `clarify` and `product` null. There is no consent ask and no policy. The process stays `ai_active`. The question is which of the two products: credit card or personal loan. When he later names a product (`prequalify_card` or `prequalify_loan`), step 6 asks for consent.
+
+If at step 7 he writes "no", the intent is `decline_prequalify`. The policy is not called. The process stays `ai_active`.
 
 ## The other three flows
 
-Juliana, `CLI-MD60UR8PNJDI`, score 714, income null, account `2,528.58 USD`. She asks for a card. R06 returns `NEEDS_INFO`. `template.send` writes `conversation.template_sent` (`needs_income`). She stays `ai_active`. The message asks for her monthly income. The sentences are not written in this contract yet. If she answers with an amount, that amount is this run's income, marked `self_declared`, and the gold row stays null. The process already holds `credit_card`, so `run_policy_income` runs the policy with that product. Score 714 continues to R05 and the result is `PREQUALIFIED`. She does not go to César.
+Juliana, `CLI-MD60UR8PNJDI`, score 714, income null, account `2,528.58 USD`. She asks for a card. After she confirms pre-qualification, R06 returns `NEEDS_INFO`. `template.send` writes `conversation.template_sent` (`needs_income`). She stays `ai_active`. The message asks for her monthly income. The sentences are not written in this contract yet. If she answers with an amount, that amount is this run's income, marked `self_declared`, and the gold row stays null. The process already holds `credit_card`, so `run_policy_income` runs the policy with that product (no second consent). Score 714 continues to R05 and the result is `PREQUALIFIED`. She does not go to César.
 
-Alicia, `CLI-440CO5FZIY6A`, score 615, income 4,707,334.28 COP (1,167 USD), no card. R05 `REFER`. `template.send` writes `conversation.template_sent` (`refer_notice`): a person will review. The notice does not include the score and does not say whether she pre-qualifies. The sentences are not written in this contract yet. Then `conversation.thread_taken` with `reason_code = policy_refer`. César sees the packet: request, score, income, rule R05, policy `alba-credit-v1`. He does not answer in the thread. His only action is to close with `PREQUALIFIED` or `NOT_PREQUALIFIED`. That writes `conversation.agent_closed`, then the automatic message and `process.end`. Which of the two he picks for Alicia is not fixed here. A message from Alicia while the case is still `human_active` is stored and does not call the model.
+Alicia, `CLI-440CO5FZIY6A`, score 615, income 4,707,334.28 COP (1,167 USD), no card. After she confirms, R05 `REFER`. `template.send` writes `conversation.template_sent` (`refer_notice`): a person will review. The notice does not include the score and does not say whether she pre-qualifies. The sentences are not written in this contract yet. Then `conversation.thread_taken` with `reason_code = policy_refer`. César sees the packet: request, score, income, rule R05, policy `alba-credit-v1`. He does not answer in the thread. His only action is to close with `PREQUALIFIED` or `NOT_PREQUALIFIED`. That writes `conversation.agent_closed`, then the automatic message and `process.end`. Which of the two he picks for Alicia is not fixed here. A message from Alicia while the case is still `human_active` is stored and does not call the model.
 
-Mariana, `CLI-ZGOY1V6ZC46J`, active card ending in 5476, `days_past_due` 180, balance 111,079.25 ARS, score 515. R02 wins before R05. Certificate: does not pre-qualify. Process `ended`. She does not enter the queue.
+Mariana, `CLI-ZGOY1V6ZC46J`, active card ending in 5476, `days_past_due` 180, balance 111,079.25 ARS, score 515. After she confirms, R02 wins before R05. Certificate: does not pre-qualify. Process `ended`. She does not enter the queue.
 
 ## Not decided
 
@@ -552,8 +583,13 @@ These points are left open on purpose. Implementing them on your own breaks the 
 - Supabase, Redis, Kafka, Inngest, Twilio, a second process, rules in the database, model tool-calling into the policy.
 - Tying login to the four oracle profiles, or seeding only those four rows.
 - Filling empty scores or incomes, or converting to MXN balances the file stores in USD.
+- A cloud deploy for the submission (local `docker compose up` is how the project is tried; optional host steps are documentation only).
+- A separate injection classifier or input-heuristic guard beyond the structural defense above.
+- A separate risk microservice; the dataset `credit_score` is the risk estimate.
+- A separate intent router beside `ConversationTurn`.
+- Full pandera/Great Expectations suites or a policy freshness rule (R10).
 
-Decisions the hackathon brief forces but this contract does not make yet (deployment host, the evaluated learned component, the risk-estimate layer, data contracts and freshness, evaluation harness) are tracked in `PLAN.md` §5. Each one that gets decided is written into this file.
+Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI). Each one that gets decided is written into this file.
 
 ## Known gaps
 
