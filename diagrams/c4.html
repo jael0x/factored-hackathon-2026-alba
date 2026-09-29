@@ -147,6 +147,7 @@
     .ref.dec { background: var(--amber-soft); color: var(--amber); }
     .ref.res { background: var(--slate-soft); color: var(--slate); }
     .ref.new { border: 1px solid var(--ink); }
+    .ref.todo { background: var(--green-soft); color: var(--green); }
     .kids { display: flex; flex-wrap: wrap; gap: 6px; }
     .kids button, .jump { border: 1px solid var(--line); background: var(--paper); border-radius: 8px; padding: 3px 8px; font-size: 12.5px; cursor: pointer; }
     .src { font-size: 12px; color: var(--muted); margin-top: 16px; }
@@ -199,7 +200,7 @@
   <footer class="intro">
     <div class="mark">Alba · credit pre-qualification</div>
     <h1>C4 model</h1>
-    <p class="lede">A clickable view of <code>ARCHITECTURE.md</code> as of Sep 28, 2026. Click any system, container, or component to open the level below it; the side tree shows every sub level. Level 4 lists the specs each component needs: what the contract already fixes and what the definition phase still has to decide. If this page and <code>ARCHITECTURE.md</code> disagree, the contract wins.</p>
+    <p class="lede">A clickable view of <code>ARCHITECTURE.md</code> as of Sep 28, 2026, after the thirteen known gaps were closed. Click any system, container, or component to open the level below it; the side tree shows every sub level. Level 4 lists the specs each component needs: what the contract already fixes and what the definition phase still has to decide. If this page and <code>ARCHITECTURE.md</code> disagree, the contract wins.</p>
   </footer>
   <dialog id="dlg">
     <div class="dlg-head"><strong>Open spec items</strong><button class="tool" id="dlg-close">Close</button></div>
@@ -213,19 +214,6 @@ const node = (id, o) => { N[id] = { id, ...o }; };
 const view = (id, o) => { V[id] = o; };
 /*DATA-START*/
 const REF_TITLES = {
-  'Gap 1': 'The first message never reaches the model',
-  'Gap 2': 'The first message idempotency key needs a process that does not exist yet',
-  'Gap 3': 'open_process reads payload.process_id, which is not a payload field',
-  'Gap 4': 'The model turn is not an event',
-  'Gap 5': 'NEEDS_INFO has no renderer',
-  'Gap 6': 'The customer-facing message on REFER is not specified',
-  'Gap 7': 'The template locale is not on the event',
-  'Gap 8': 'provide_income does not carry the product',
-  'Gap 9': 'R06 with income on file',
-  'Gap 10': 'reason_code is not a closed list',
-  'Gap 11': '"Attempt to see another customer" has no detector',
-  'Gap 12': 'The agent close has no path',
-  'Gap 13': 'Ending writes which events?',
   D1: 'Model choice evidence and cost',
   D2: 'Deployment target',
   D3: 'The evaluated learned component',
@@ -241,8 +229,11 @@ const REF_TITLES = {
   R8: 'Oracle rows',
   R9: 'product_type values',
   R11: 'gpt-6-luna on the API',
+  Copy: 'Template sentences not written yet',
   New: 'Raised while drawing this view',
 };
+
+const spec = (parent, id, o) => node(id, { parent, kind: 'spec', ...o });
 
 node('context', {
   kind: 'root', name: 'Alba in context',
@@ -258,43 +249,43 @@ node('customer', {
   summary: 'Any of the 150,000 rows of `customers.csv`. Asks about a credit card or a personal loan.',
   desc: [
     'Any row of `customers.csv` can open a session. The four oracle profiles are the test oracle, not an allowlist.',
-    'Asks about a credit card or a personal loan and gets a certificate (`constancia`): pre-qualifies, does not pre-qualify, or goes to a person. Sees only their own products.',
+    'Asks about a credit card or a personal loan and gets a certificate (`constancia`): pre-qualifies, does not pre-qualify, or goes to a person. Sees only their own products. Can be asked two things only: which product, and monthly income when the file has none.',
   ],
   fixed: [
     'Juan `CLI-9EDEKZ8OUNUR`: `PREQUALIFIED`, R05, score 812.',
-    'Juliana `CLI-MD60UR8PNJDI`: `NEEDS_INFO`, R06, empty income.',
+    'Juliana `CLI-MD60UR8PNJDI`: `NEEDS_INFO`, R06, empty income. If she states an amount, R05 pre-qualifies her (score 714). She does not go to the queue.',
     'Alicia `CLI-440CO5FZIY6A`: `REFER`, R05, score 615.',
     'Mariana `CLI-ZGOY1V6ZC46J`: `NOT_PREQUALIFIED`, R02, 180 days past due.',
     'A national id or a `customer_id` does not open a session. A one-time code does.',
     'Spanish or Portuguese. Another language goes to a person (`language_unsupported`).',
   ],
-  src: 'ARCHITECTURE.md, "What gets built", "Oracle fixtures", "Auth and screens"',
+  src: 'ARCHITECTURE.md, "What gets built", "Oracle fixtures", "What the customer can be asked"',
 });
 
 node('agent', {
   parent: 'context', kind: 'person', name: 'Credit agent', tech: 'bank staff',
-  summary: 'Any of the 1,200 rows of `service_agents.csv`. Takes the threads the system hands off.',
+  summary: 'Any of the 1,200 rows of `service_agents.csv`. Closes handed-off cases as pre-qualified or not.',
   desc: [
-    'Sees only processes in `human_active`. Reads the handoff packet and the trace, and replies to the customer.',
+    'Sees only processes in `human_active`. Reads the handoff packet and the trace. Does not chat: the only action is to close the case with `PREQUALIFIED` or `NOT_PREQUALIFIED`, and a template tells the customer.',
     'The mock uses César González Sánchez (`AGT-OJ9N4FGYV9`, employee `E75612`, specialty Créditos, Senior, morning shift). He is not the only agent.',
   ],
   fixed: [
-    'Juan and Mariana never reach the queue. Alicia does.',
-    'While a thread is `human_active`, only the agent talks. The model is not called.',
+    'Juan, Juliana, and Mariana never reach the queue. Alicia does.',
+    'No reply box and no text field. The close is `POST /agent/case/:id/close`.',
   ],
-  src: 'ARCHITECTURE.md, "Oracle fixtures", "Auth and screens"',
+  src: 'ARCHITECTURE.md, "Oracle fixtures", "Agent close", "Auth and screens"',
 });
 
 node('alba', {
   parent: 'context', kind: 'system', name: 'Alba', tech: 'credit pre-qualification assistant',
-  summary: 'A versioned policy decides. The model only converses and asks for what is missing.',
+  summary: 'A versioned policy decides. The model only classifies the sentence and drafts a clarification.',
   desc: [
-    'A web service for the synthetic LATAM bank of the hackathon. If the request is ambiguous, the assistant asks which product and does not decide. If the data is enough, the policy `alba-credit-v1` issues a certificate from a template. Borderline cases, missing data, and out-of-scope requests go to a person, and the model stops talking.',
+    'A web service for the synthetic LATAM bank of the hackathon. If the request names no product, the assistant asks which one. If income is missing, it asks for it and the case stays with the assistant. If the data is enough, the policy `alba-credit-v1` decides and a template writes the certificate. A borderline score, a missing score, or an out-of-scope request goes to a person, who closes it as pre-qualified or not.',
     'It is not a production bank and moves no money. Reviewers use the deployed link and read the repo; they are not expected to run the stack.',
   ],
   fixed: [
     'One process, `credit_prequalification`, with the states `ai_active`, `human_active`, `ended`.',
-    'Four outcomes: `PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, `NEEDS_INFO`.',
+    'Four outcomes: `PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, `NEEDS_INFO`. End reasons: `prequalified`, `not_prequalified`.',
     'No credit limit, no rate for the new product, no delinquency prediction.',
     'The same `docker compose` stack runs locally and on the deploy host, Postgres included.',
   ],
@@ -303,14 +294,14 @@ node('alba', {
     ['D8', 'Whether `policy.run` needs explicit customer consent first.'],
     ['D4', 'Whether `credit_score` is presented as the external risk estimate, or a separate risk service exists.'],
   ],
-  src: 'ARCHITECTURE.md, "Contract for implementers", "Closed stack", "Docker"',
+  src: 'ARCHITECTURE.md, "Contract for implementers", "Process", "Closed stack", "Docker"',
 });
 
 node('openai', {
   parent: 'context', kind: 'external', name: 'OpenAI API', tech: 'GPT-6 Luna, gpt-6-luna',
   summary: 'Classifies the message and drafts a clarification. Sees the text and four booleans, no profile values.',
   desc: [
-    'A reasoning model on the OpenAI API, called once per `conversation.generate` with Structured Outputs returning `ConversationTurn`. It does not decide eligibility, compute a limit, or write the certificate.',
+    'A reasoning model on the OpenAI API, called once per `conversation.generate` with Structured Outputs returning `ConversationTurn`. It does not decide eligibility, compute a limit, write the certificate, or choose the next step.',
     'List price on Sep 28, 2026: $0.10 input, $0.01 cached input, $0.50 output per 1M tokens (`PLAN.md` D1).',
   ],
   fixed: [
@@ -323,14 +314,14 @@ node('openai', {
 
 node('s3', {
   parent: 'context', kind: 'external', name: 'Organizer S3 bucket', tech: 'read-only, us-east-2',
-  summary: 'Source of the four CSVs the loader needs. Name and keys live only in `.env`.',
-  desc: ['Organizer dataset v1.0.0, synthetic, snapshot of June 17, 2026. The bucket name and keys come from the organizers.'],
+  summary: 'Source of the four CSVs. Only `load` reads it, with `aws s3 cp`.',
+  desc: ['Organizer dataset v1.0.0, synthetic, snapshot of June 17, 2026. The bucket name and keys come from the organizers and live only in `.env`.'],
   fixed: [
-    '`load` copies only four objects from the prefix `data/`: `customers.csv`, `products.csv`, `daily_exchange_rates.csv`, `service_agents.csv`.',
+    '`load` runs `aws s3 cp` for four keys under `data/`: `customers.csv`, `products.csv`, `daily_exchange_rates.csv`, `service_agents.csv`. It does not list the bucket.',
     'No transactions, transcripts, or digital events: they feed neither login nor the policy.',
-    'Files are UTF-8 with a BOM. Read with `utf-8-sig`.',
+    'The API does not call S3.',
   ],
-  src: 'ARCHITECTURE.md, "Docker"; README.md, "Data"',
+  src: 'ARCHITECTURE.md, "Database", "Docker"',
 });
 
 node('web', {
@@ -347,7 +338,7 @@ node('web', {
     'Every fetch handles loading, error, and success.',
     'An expired JWT returns 401 and the customer sees that the session ended. It is not silently renewed.',
   ],
-  src: 'ARCHITECTURE.md, "File tree", "Auth and screens"; AGENTS.md, "Data fetching and UI"',
+  src: 'ARCHITECTURE.md, "File tree", "Auth and screens"; AGENTS.md, "Data fetching and UI"; DESIGN.md',
 });
 
 node('api', {
@@ -355,7 +346,7 @@ node('api', {
   summary: 'HTTP endpoints and the command worker, in one process. Owns the policy and the model call.',
   desc: [
     'The HTTP API plus a worker loop that takes `commands` rows with `status = pending`, in the same process. It stores events, matches process rules, runs commands, runs the pure policy, and makes the one model call.',
-    'Starts only after `load` exits with code 0.',
+    'Starts only after `load` exits with code 0. Reads Postgres only; it never calls S3.',
   ],
   files: ['api/', 'docker/api.Dockerfile'],
   fixed: [
@@ -363,15 +354,15 @@ node('api', {
     'The `customer_id` of every query comes from the session JWT.',
     'If `OPENAI_API_KEY` is missing, Postgres, login, and the policy still start. `conversation.generate` fails saying the key is missing.',
   ],
-  src: 'ARCHITECTURE.md, "Closed stack", "Process-native loop", "Docker"',
+  src: 'ARCHITECTURE.md, "Closed stack", "Process-native loop", "Database", "Docker"',
 });
 
 node('postgres', {
   parent: 'alba', kind: 'store', name: 'postgres', tech: 'PostgreSQL 16, named volume',
   noun: 'table groups',
-  summary: 'Events, processes, commands, the gold profile, and the read tables.',
+  summary: 'Read tables, the gold profile, and the cycle tables: events, processes, commands.',
   desc: [
-    'A service of the same compose stack, locally and on the deploy host. No managed database. The schema lives in `db/migrations/`.',
+    'A service of the same compose stack, locally and on the deploy host. No managed database. `db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`.',
     'The volume keeps gold. Deleting the volume reloads.',
   ],
   files: ['db/migrations/001_init.sql'],
@@ -383,10 +374,10 @@ node('postgres', {
 });
 
 node('load', {
-  parent: 'alba', kind: 'container', name: 'load', tech: 'Python pipeline, runs once',
-  summary: 'Applies the schema, downloads missing CSVs, builds silver and gold, exits 0.',
+  parent: 'alba', kind: 'container', name: 'load', tech: 'Python pipeline, AWS CLI, runs once',
+  summary: 'Applies the schema, copies missing CSVs with `aws s3 cp`, builds silver and gold, exits 0.',
   desc: [
-    'Waits for Postgres, applies `db/migrations/`, downloads the four CSVs if missing, fills the read tables and gold, and exits with code 0. `api` starts after that.',
+    'Waits for Postgres, applies `db/migrations/`, copies the four CSVs if missing, fills the read tables and gold, and exits with code 0. `api` starts after that. It is the only process that reads S3.',
     'A second `docker compose up` does not reload if `load_batches` already holds the same sha256 of the four files.',
   ],
   files: ['pipeline/', 'docker/load.Dockerfile'],
@@ -400,8 +391,8 @@ node('load', {
 node('raw', {
   parent: 'alba', kind: 'store', name: 'data/raw/', tech: 'local CSV folder, not committed',
   noun: 'files',
-  summary: 'The four source CSVs. Excluded by `.gitignore`. Downloaded only when missing.',
-  desc: ['The folder the loader reads. Raw CSVs are never committed. If the four files are already here, `load` does not download them again.'],
+  summary: 'The four source CSVs. Excluded by `.gitignore`. Copied only when missing.',
+  desc: ['The folder the loader reads. Raw CSVs are never committed. If the four files are already here, `load` does not copy them again.'],
   open: [['New', 'How `data/raw/` reaches the `load` container (bind mount or volume) is not written.']],
   src: 'ARCHITECTURE.md, "Database", "Docker"',
 });
@@ -422,9 +413,9 @@ view('context', {
   place: [['customer', 0, 0], ['agent', 2, 0], ['alba', 1, 1], ['openai', 0, 2], ['s3', 2, 2]],
   rels: [
     ['customer', 'alba', 'Logs in with a one-time code, asks about a card or a loan, reads the certificate', 'HTTPS'],
-    ['agent', 'alba', 'Takes handed-off threads, reads the packet and the trace, replies', 'HTTPS'],
+    ['agent', 'alba', 'Reads the packet, closes as pre-qualified or not', 'HTTPS'],
     ['alba', 'openai', 'Classifies the message, drafts a clarification', 'HTTPS, Structured Outputs'],
-    ['alba', 's3', 'Downloads four CSVs when missing', 'HTTPS, read-only'],
+    ['alba', 's3', 'Copies four CSVs when missing', 'aws s3 cp, read-only'],
   ],
 });
 
@@ -442,19 +433,18 @@ view('alba', {
     ['web', 'api', 'Calls', 'JSON over HTTP'],
     ['api', 'openai', 'One call per conversation.generate', 'HTTPS'],
     ['api', 'postgres', 'Events, commands, processes, gold', 'SQL'],
-    ['load', 's3', 'Downloads missing CSVs', 'SigV4'],
+    ['load', 's3', 'Copies missing CSVs', 'aws s3 cp'],
     ['load', 'raw', 'Writes, then reads', 'files'],
     ['load', 'postgres', 'Schema, read tables, gold', 'SQL'],
   ],
 });
 node('routers', {
   parent: 'api', kind: 'component', name: 'HTTP routers', tech: 'api/main.py',
-  summary: 'Login, search, messages, and the reads behind each page. A handler never changes state itself.',
-  desc: ['FastAPI app and routers. A customer or agent POST appends an event; what happens next is a rule and a command, not an `if` in the handler. Every query filters by the id on the JWT.'],
+  summary: 'Login, search, the customer message, the agent close, and the reads behind each page.',
+  desc: ['FastAPI app and routers. A customer message or an agent close appends an event; what happens next is a rule and a command, not an `if` in the handler. Every query filters by the id on the JWT.'],
   files: ['api/main.py'],
-  src: 'ARCHITECTURE.md, "Auth and screens"; AGENTS.md, "Owners in this system"',
+  src: 'ARCHITECTURE.md, "Auth and screens", "Agent close"; AGENTS.md, "Owners in this system"',
 });
-
 node('auth', {
   parent: 'api', kind: 'component', name: 'Auth', tech: 'api/auth.py',
   summary: 'One-time code, own JWT (HS256, 15 min), and the `get_session` dependency.',
@@ -462,31 +452,27 @@ node('auth', {
   files: ['api/auth.py'],
   src: 'ARCHITECTURE.md, "Auth and screens"',
 });
-
 node('events', {
   parent: 'api', kind: 'component', name: 'Event store', tech: 'api/events.py',
-  summary: 'Appends immutable events with idempotency keys. Every fact a rule needs is stamped here.',
+  summary: 'Appends immutable events with idempotency keys, and stamps the process columns on a message.',
   desc: ['Appends to `events`. No `UPDATE` of a payload. Repeating a POST with the same key creates no new event and no new decision.'],
   files: ['api/events.py'],
   src: 'ARCHITECTURE.md, "Events"',
 });
-
 node('rules', {
   parent: 'api', kind: 'component', name: 'Process rules', tech: 'api/rules.py',
-  summary: 'An in-memory catalog of seven rules. A pure match over the event just written; the output is commands.',
-  desc: ['A list in code. No `rules` table in v1 and no per-organization override. Each rule appears once; a copy would fire twice.'],
+  summary: 'An in-memory catalog of 17 rules. A pure match over the event just written; the output is commands.',
+  desc: ['A list in code. No `rules` table in v1 and no per-organization override. Each rule appears once; a copy would fire twice. The rules, not the worker, choose what follows a classified turn.'],
   files: ['api/rules.py'],
   src: 'ARCHITECTURE.md, "Process rules"',
 });
-
 node('worker', {
   parent: 'api', kind: 'component', name: 'Command worker', tech: 'api/worker.py',
-  summary: 'Takes pending commands with `FOR UPDATE SKIP LOCKED` and runs the handler. At most 3 attempts.',
-  desc: ['A loop inside the API process that runs the six command handlers. A finished command may write another event, and the rules react to that event. The worker interprets nothing beyond its handler.'],
+  summary: 'Takes pending commands with `FOR UPDATE SKIP LOCKED` and runs one of 8 handlers. At most 3 attempts.',
+  desc: ['A loop inside the API process. A finished command may write another event, and the rules react to that event. A handler never enqueues the next command itself.'],
   files: ['api/worker.py'],
   src: 'ARCHITECTURE.md, "Commands"',
 });
-
 node('processes', {
   parent: 'api', kind: 'component', name: 'Process lifecycle', tech: 'api/processes.py',
   summary: 'Start, transition, end of `credit_prequalification`. The row in `processes` is the projection.',
@@ -494,7 +480,6 @@ node('processes', {
   files: ['api/processes.py'],
   src: 'ARCHITECTURE.md, "Process"',
 });
-
 node('policy', {
   parent: 'api', kind: 'component', name: 'Policy engine', tech: 'api/policy/engine.py',
   summary: '`decide(profile, product) -> Decision`. Pure: same input, same output. Lives in git.',
@@ -502,15 +487,13 @@ node('policy', {
   files: ['api/policy/engine.py', 'api/policy/alba-credit-v1.yaml'],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"',
 });
-
 node('templates', {
-  parent: 'api', kind: 'component', name: 'Certificate templates', tech: 'api/policy/templates.py',
-  summary: 'Builds the certificate text from a `Decision`, in `es` or `pt`. The model never sees this step.',
-  desc: ['The only place outcome wording comes from. The Portuguese text is written by the team; the dataset has none.'],
+  parent: 'api', kind: 'component', name: 'Templates', tech: 'api/policy/templates.py',
+  summary: 'The certificate and three notices, in `es` or `pt`. The model never writes this text.',
+  desc: ['The only place outcome wording and notices come from. The Portuguese text is written by the team; the dataset has none.'],
   files: ['api/policy/templates.py'],
-  src: 'ARCHITECTURE.md, "Policy alba-credit-v1"',
+  src: 'ARCHITECTURE.md, "Policy alba-credit-v1", "Commands"',
 });
-
 node('llm', {
   parent: 'api', kind: 'component', name: 'LLM adapter', tech: 'api/llm/',
   summary: 'The only module that imports the OpenAI SDK. One call, Structured Outputs, returns `ConversationTurn`.',
@@ -518,7 +501,6 @@ node('llm', {
   files: ['api/llm/conversation.py', 'api/llm/schema.py'],
   src: 'ARCHITECTURE.md, "How the model is called"',
 });
-
 node('tools', {
   parent: 'api', kind: 'component', name: 'Data tools', tech: 'api/tools/',
   summary: 'Reads the gold profile, the session customer products, and the two-product catalog.',
@@ -526,7 +508,6 @@ node('tools', {
   files: ['api/tools/profile.py', 'api/tools/products.py', 'api/tools/catalog.py'],
   src: 'ARCHITECTURE.md, "File tree", "Database"',
 });
-
 node('config', {
   parent: 'api', kind: 'component', name: 'Settings and DB', tech: 'api/settings.py, api/db.py',
   summary: 'Environment settings and the Postgres connection every other component uses.',
@@ -546,7 +527,7 @@ view('api', {
   rels: [
     ['web', 'routers', 'Calls', 'JSON over HTTP'],
     ['routers', 'auth', 'get_session'],
-    ['routers', 'events', 'Appends message events'],
+    ['routers', 'events', 'Message and close events'],
     ['routers', 'tools', 'Reads products'],
     ['events', 'rules', 'match_rules(event)'],
     ['rules', 'worker', 'commands rows', 'pending'],
@@ -555,18 +536,18 @@ view('api', {
     ['worker', 'llm', 'conversation.generate'],
     ['worker', 'policy', 'policy.run'],
     ['worker', 'tools', 'Reads the profile'],
-    ['worker', 'templates', 'decision.render'],
+    ['worker', 'templates', 'template.send, decision.render'],
     ['llm', 'openai', 'One call', 'Structured Outputs'],
     ['config', 'postgres', 'Connection', 'SQL'],
   ],
 });
-const spec = (parent, id, o) => node(id, { parent, kind: 'spec', ...o });
 
 spec('routers', 'r-search', {
   name: 'GET /customers/search', tech: 'login search', status: 'partial',
   summary: 'Search over the 150,000 customers by name, document, or id. Limit 20.',
   fixed: [
     '`GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20.',
+    'Backed by indexes on `customers.document_number` and `(last_name, first_name)`.',
     'Any customer in gold can log in. Login does not hardcode the four oracle profiles.',
   ],
   open: [
@@ -574,7 +555,7 @@ spec('routers', 'r-search', {
     ['New', 'No file in the tree owns the search query.'],
   ],
   tests: ['Login is not restricted to the four oracle customers.'],
-  src: 'ARCHITECTURE.md, "Auth and screens"',
+  src: 'ARCHITECTURE.md, "Auth and screens", "Indexes"',
 });
 spec('routers', 'r-login', {
   name: 'POST /session/code, POST /session', tech: 'customer login', status: 'defined',
@@ -598,37 +579,25 @@ spec('routers', 'r-customer-msg', {
   name: 'Customer message POST', tech: 'path not named', status: 'partial',
   summary: 'Writes `conversation.message_received`. Idempotent on `client_message_id`.',
   fixed: [
-    'Writes `conversation.message_received` with `text`, `process_state`, and the `customer_id` from the JWT.',
-    'The frontend sends `client_message_id`, one uuid per send. Repeating the POST creates no new event and no new decision.',
+    'Payload: `text`, `client_message_id`. The `customer_id` comes from the JWT. The customer does not send `process_id` or `process_state`.',
+    'Key `msg:{client_message_id}`. It does not wait for a process. Repeating the POST creates no new event and no new decision.',
     'In `human_active` the message is stored and the model is not called.',
   ],
-  open: [
-    ['New', 'The route path and the request and response shapes.'],
-    ['Gap 1', 'The first message of a new process has no state, so no rule sends it to the model.'],
-    ['Gap 2', '`msg:{process_id}:{client_message_id}` has no `process_id` for the first message.'],
-  ],
+  open: [['New', 'The route path and the response shape.']],
   tests: ['A second POST with the same `client_message_id` creates no event.'],
   src: 'ARCHITECTURE.md, "Events"',
 });
-spec('routers', 'r-agent-msg', {
-  name: 'Agent message POST', tech: 'path not named', status: 'partial',
-  summary: 'Writes `conversation.agent_message_sent` with the `agent_id` from the JWT.',
-  fixed: ['Writes `conversation.agent_message_sent` with `text` and `agent_id`.'],
-  open: [
-    ['New', 'The route path, and whether an agent may write to a process that is not `human_active`.'],
-    ['New', 'The idempotency-key table has no key for an agent message.'],
-  ],
-  src: 'ARCHITECTURE.md, "Events"',
-});
 spec('routers', 'r-agent-close', {
-  name: 'Agent close', tech: 'no endpoint yet', status: 'open',
-  summary: 'The agent ends a referred case. No endpoint, rule, or event is defined.',
-  fixed: ['`human_active` to `ended` with `end_reason = referred_closed` is an allowed transition.'],
-  open: [
-    ['Gap 12', 'No endpoint, rule, or event for the agent action, and the agent outcome is not recorded.'],
-    ['Gap 13', 'Whether `process.end` also writes `process.state_changed`.'],
+  name: 'POST /agent/case/:id/close', tech: 'agent close', status: 'partial',
+  summary: 'The agent only action: `PREQUALIFIED` or `NOT_PREQUALIFIED`. No text.',
+  fixed: [
+    'Body: `outcome`, `PREQUALIFIED` or `NOT_PREQUALIFIED`. Any other body is rejected. There is no text field.',
+    'Writes `conversation.agent_closed` with `outcome`, `agent_id`, and `language` copied from the process.',
+    'Key `agent_close:{process_id}`. The same case cannot be closed twice.',
+    'The agent does not send messages and does not chat.',
   ],
-  src: 'ARCHITECTURE.md, "Process", "Known gaps"',
+  open: [['New', 'A case handed off before a product was named (a first-message human request, out of scope, unsupported language) has `product` null, so a close would render a certificate for no product.']],
+  src: 'ARCHITECTURE.md, "Agent close"',
 });
 spec('routers', 'r-reads', {
   name: 'Read endpoints', tech: 'paths not named', status: 'open',
@@ -640,21 +609,21 @@ spec('routers', 'r-reads', {
   ],
   open: [
     ['New', 'Paths and response shapes for home products, case thread and certificate, agent queue, agent case, and trace.'],
-    ['New', 'The handoff packet schema, including the "open questions" field the brief asks for (`PLAN.md` §2).'],
+    ['New', 'The brief asks for "open questions" in the handoff; `PLAN.md` §2 notes that field is not in the contract.'],
   ],
   tests: ['A `products` call with Juan\'s JWT asking for Alicia\'s id returns no rows of Alicia\'s.'],
-  src: 'ARCHITECTURE.md, "Auth and screens", "Database"',
+  src: 'ARCHITECTURE.md, "Auth and screens", "Database"; PLAN.md §2',
 });
 
 spec('auth', 'a-code', {
   name: 'One-time code', tech: 'login_codes', status: 'partial',
   summary: '6 digits, valid 10 minutes. The code opens the session, not the id.',
   fixed: [
-    '6 digits, valid 10 minutes, stored in `login_codes`.',
+    '`login_codes` holds the 6-digit code, the customer or agent it belongs to, and the 10-minute expiry.',
     'A document number or a `customer_id` does not prove identity.',
   ],
-  open: [['New', 'The `login_codes` columns, whether the code is stored hashed, and whether wrong attempts are limited.']],
-  src: 'ARCHITECTURE.md, "Auth and screens"; AGENTS.md, "Model"',
+  open: [['New', 'Whether the code is stored hashed, and whether wrong attempts are limited.']],
+  src: 'ARCHITECTURE.md, "Auth and screens", "Cycle"; AGENTS.md, "Model"',
 });
 spec('auth', 'a-jwt', {
   name: 'JWT', tech: 'HS256, JWT_SECRET', status: 'defined',
@@ -669,181 +638,202 @@ spec('auth', 'a-jwt', {
 spec('auth', 'a-session', {
   name: 'get_session', tech: 'FastAPI dependency', status: 'partial',
   summary: 'Gives each handler the id and role from the token.',
-  fixed: ['The `customer_id` of every query comes from the JWT. Never from chat text or a model argument.'],
+  fixed: [
+    'The `customer_id` of every query comes from the JWT. Never from chat text or a model argument.',
+    'Another customer\'s rows are the JWT filter: a query for another id returns no rows.',
+  ],
   open: [['New', 'Which routes require `role = agent`. The screen table implies it; no rule states it.']],
   tests: ['Juan\'s session does not return Alicia\'s products.'],
-  src: 'ARCHITECTURE.md, "Contract for implementers"',
+  src: 'ARCHITECTURE.md, "Contract for implementers", "Known gaps" 11',
 });
 
 spec('events', 'e-table', {
   name: 'events table', tech: 'db/migrations/001_init.sql', status: 'defined',
-  summary: 'Append-only facts with actor, cause, and a unique idempotency key.',
+  summary: 'Append-only facts with actor, cause, process columns, and a unique key.',
   fixed: [
-    'Columns: `id uuid`, `event_name`, `payload jsonb`, `customer_id`, `process_id uuid`, `actor` (`customer`, `agent`, `system`, `rule`), `caused_by_event_id`, `caused_by_command_id`, `idempotency_key` unique, `created_at`.',
-    'Append-only. No `UPDATE` of `payload`. A new fact points at the previous one with `caused_by_event_id`.',
+    'Columns: `id uuid`, `event_name`, `payload jsonb`, `customer_id`, `process_id uuid`, `process_state`, `actor` (`customer`, `agent`, `system`, `rule`), `caused_by_event_id`, `caused_by_command_id`, `idempotency_key` unique, `created_at`.',
+    '`process_id` and `process_state` are columns, not payload fields.',
+    'Append-only. No `UPDATE` of `payload`. Index on `(process_id, created_at)`.',
+  ],
+  src: 'ARCHITECTURE.md, "Events", "Indexes"',
+});
+spec('events', 'e-stamp', {
+  name: 'Message stamping', tech: 'process_id, process_state', status: 'defined',
+  summary: 'The API stamps the process columns when it inserts a customer message.',
+  fixed: [
+    'An open process exists: `process_id` is that process and `process_state` its state.',
+    'None open: `process_id` stays null and `process_state` is `ai_active`, the state a new process is born in.',
+    'The event does not open the process; `open_process` does. The message row is never updated or copied.',
   ],
   src: 'ARCHITECTURE.md, "Events"',
 });
 spec('events', 'e-names', {
-  name: 'Event names', tech: 'closed set of 8', status: 'partial',
+  name: 'Event names', tech: 'closed set of 10', status: 'defined',
   summary: 'Conversation, analysis, decision, and process events. No others in v1.',
   fixed: [
-    '`conversation.message_received`, `conversation.agent_message_sent`, `conversation.thread_taken`, `analysis.completed`, `prequalification.decided`, `process.started`, `process.state_changed`, `process.ended`.',
+    '`conversation.message_received`, `conversation.turn_classified`, `conversation.template_sent`, `conversation.agent_closed`, `conversation.thread_taken`.',
+    '`analysis.completed`, `prequalification.decided`, `process.started`, `process.state_changed`, `process.ended`.',
     'Defined once as constants. Call sites never repeat the literal.',
-  ],
-  open: [
-    ['Gap 4', 'The classified model turn is not an event. The list is closed, so closing this changes the contract.'],
-    ['Gap 5', 'No event records the income question sent on `NEEDS_INFO`.'],
   ],
   src: 'ARCHITECTURE.md, "Events"; AGENTS.md, "No magic strings"',
 });
 spec('events', 'e-payloads', {
-  name: 'Payload minimums', tech: 'per event', status: 'partial',
-  summary: 'Each event carries every fact a downstream rule needs, stamped at emit time.',
+  name: 'Payload minimums', tech: 'per event', status: 'defined',
+  summary: 'Each event carries every fact a downstream rule needs, `language` included.',
   fixed: [
-    'Minimum payload per event is listed in the events table of the contract.',
+    'Turn: `intent`, `product`, `language`, `declared_income_amount`, `declared_income_currency`, `reply_text`, `reply_ok`, `reason_code`.',
+    '`analysis.completed` adds `language` to the policy fields. `prequalification.decided` carries `decided_by` (`policy` or `agent`).',
     '`rule_trace` is a list of `{rule_id, input, result}`. `facts` cite name, value, source column, and `as_of`.',
-  ],
-  open: [
-    ['Gap 3', '`open_process` reads `payload.process_id`, which is a column, not a listed payload field.'],
-    ['Gap 7', '`analysis.completed` does not carry the language the certificate needs.'],
-    ['Gap 10', '`conversation.thread_taken` carries a `reason_code` from a list that is not closed.'],
   ],
   src: 'ARCHITECTURE.md, "Events"',
 });
 spec('events', 'e-idem', {
-  name: 'Idempotency keys', tech: 'derived, never random', status: 'partial',
-  summary: 'Keys for message, open process, run policy, transition.',
+  name: 'Idempotency keys', tech: '8 actions', status: 'partial',
+  summary: 'Every action has a key derived from facts, never from a clock.',
   fixed: [
-    'Message `msg:{process_id}:{client_message_id}`. Open process `process:{customer_id}:credit_prequalification:open`. Run policy `policy:{process_id}:alba-credit-v1:{product}`. Transition `transition:{process_id}:{to_state}:{caused_by_event_id}`.',
-    'No `Date.now()` and no random value in a key.',
+    'Message `msg:{client_message_id}`. Turn `turn:{triggered_by_event_id}`. Template `template:{template_id}:{triggered_by_event_id}`. Open process `process:{customer_id}:credit_prequalification:{triggered_by_event_id}`.',
+    'Run policy `policy:{process_id}:alba-credit-v1:{product}`. Transition `transition:{process_id}:{to_state}:{caused_by_event_id}`. Agent close `agent_close:{process_id}`. End `end:{process_id}`.',
   ],
-  open: [
-    ['Gap 2', 'The first message has no `process_id` yet.'],
-    ['New', 'The key table covers four actions. `conversation.generate`, `decision.render`, `process.end`, and the agent message have none.'],
-  ],
+  open: [['New', 'The run-policy key has no triggering event in it. Juliana\'s second run, after she states her income, repeats the key of her first `NEEDS_INFO` run for the same process and product, so it would be dropped.']],
   tests: ['A second message with the same key creates no event and no decision.'],
   src: 'ARCHITECTURE.md, "Events"; AGENTS.md, "Database"',
 });
 spec('events', 'e-dispatch', {
-  name: 'Event to rules hand-off', tech: 'owner not named', status: 'open',
+  name: 'Event to rules hand-off', tech: 'owner not named', status: 'partial',
   summary: 'Who calls `match_rules` after an insert, and in which transaction.',
-  fixed: ['HTTP message, then insert the event, then `match_rules(event)`, then `commands` rows.'],
+  fixed: [
+    'Insert the event, then `match_rules(event)`, then `commands` rows.',
+    'Commands from one event are inserted in rule-table order and run in that order before another event is taken.',
+  ],
   open: [['New', 'Which module calls `match_rules` and inserts the commands, and whether an event and its commands commit in one transaction.']],
-  src: 'ARCHITECTURE.md, "Process-native loop"',
+  src: 'ARCHITECTURE.md, "Process-native loop", "Process rules"',
 });
-
 spec('rules', 'ru-shape', {
   name: 'Rule shape', tech: 'api/rules.py', status: 'partial',
   summary: '`{id, trigger_event_name, when, actions}`, in memory, sorted by priority.',
   fixed: [
     'A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function over the event. `actions` is an ordered list of commands.',
-    'An in-memory list sorted by ascending `priority`. No `rules` table in v1.',
+    'An in-memory list sorted by ascending `priority`. Commands from one event run in the order of the rule table.',
   ],
-  open: [['New', 'The list is sorted by `priority`, but the rule shape has no `priority` field and no values are given.']],
+  open: [['New', 'The list is sorted by `priority`, but the rule shape has no `priority` field. The table order is the only order given.']],
   src: 'ARCHITECTURE.md, "Process rules"',
 });
-spec('rules', 'ru-catalog', {
-  name: 'Rule catalog', tech: '7 rules', status: 'partial',
-  summary: 'From message, analysis, and decision events to commands.',
+spec('rules', 'ru-message', {
+  name: 'On a customer message', tech: '3 rules', status: 'defined',
+  summary: 'Open the case, call the model, or only record.',
   fixed: [
-    '`open_process`: a message with no process, then `process.start`.',
-    '`generate_while_ai`: a message stamped `ai_active`, then `conversation.generate`.',
-    '`record_only_when_human`: a message stamped `human_active`, then nothing.',
-    '`take_thread`: `analysis.completed` with `REFER`, then `process.transition` to `human_active`.',
-    '`render_decision`: `PREQUALIFIED` or `NOT_PREQUALIFIED`, then `decision.render`.',
-    '`end_after_decision`: `prequalification.decided`, then `process.end`.',
-    '`ask_income`: `NEEDS_INFO`, then nothing. The question comes from the R06 template.',
+    '`open_process`: the `process_id` column is null, then `process.start`.',
+    '`generate_while_ai`: the `process_state` column is `ai_active`, then `conversation.generate`.',
+    '`record_only_when_human`: the `process_state` column is `human_active`, then nothing.',
+    'The first message of a new case matches both `open_process` and `generate_while_ai`. `process.start` runs first, then `conversation.generate`.',
   ],
-  open: [
-    ['Gap 1', 'No rule sends the first message to the model, and no rule reacts to `process.started`.'],
-    ['Gap 4', 'No rule owns `policy.run`. The worker enqueues it from the model JSON.'],
-    ['Gap 5', '`ask_income` enqueues nothing, so nothing renders the R06 question.'],
-    ['Gap 6', 'No rule or command produces the customer message on `REFER`.'],
+  tests: ['`human_active` does not call the model.'],
+  src: 'ARCHITECTURE.md, "Process rules"',
+});
+spec('rules', 'ru-turn', {
+  name: 'On a classified turn', tech: '8 rules', status: 'partial',
+  summary: 'Run the policy, ask which product, hand off, or show the reply.',
+  fixed: [
+    '`run_policy`: `prequalify_card` or `prequalify_loan`, then `policy.run` with that product. `run_policy_income`: `provide_income` with a product, then `policy.run` with the declared amount.',
+    '`ask_which_product`: `provide_income` with no product, then `template.send` for `which_product`.',
+    '`hand_off_human`, `hand_off_scope`, `hand_off_language`, `hand_off_reply`: to `human_active` with `customer_requested_human`, `out_of_scope`, `language_unsupported`, or the turn\'s own code.',
+    '`show_reply`: `clarify`, `product_info`, or `chit_chat`, then `conversation.show_reply`. The policy is not called.',
+    'Every rule except `hand_off_language` and `hand_off_reply` requires `reply_ok` and `language` `es` or `pt`.',
   ],
-  tests: ['`human_active` does not call the model.', 'Every rule has a test that it does not fire.'],
+  open: [['New', '`ask_which_product` does not check `language`, so a `provide_income` turn with `language = other` matches it and `hand_off_language` at once.']],
+  tests: ['Every rule has a test that it does not fire.'],
   src: 'ARCHITECTURE.md, "Process rules"; AGENTS.md, "Tests"',
+});
+spec('rules', 'ru-analysis', {
+  name: 'On a policy result', tech: '4 rules', status: 'defined',
+  summary: 'Ask for income, notify and hand off, or render the certificate.',
+  fixed: [
+    '`render_needs_info`: `NEEDS_INFO`, then `template.send` for `needs_income`. Stays `ai_active`.',
+    '`render_refer_notice`: `REFER`, then `template.send` for `refer_notice`.',
+    '`take_thread`: `REFER`, then `process.transition` to `human_active` with `policy_refer`.',
+    '`render_decision`: `PREQUALIFIED` or `NOT_PREQUALIFIED`, then `decision.render` with `decided_by = policy`.',
+  ],
+  src: 'ARCHITECTURE.md, "Process rules"',
+});
+spec('rules', 'ru-end', {
+  name: 'On a decision or a close', tech: '2 rules', status: 'defined',
+  summary: 'End after the policy certificate, or render and end after the agent close.',
+  fixed: [
+    '`end_after_decision`: `prequalification.decided` with `decided_by == "policy"`, then `process.end`.',
+    '`close_on_agent_decision`: `conversation.agent_closed`, then `decision.render` with `decided_by = agent`, then `process.end`. The policy is not run again.',
+  ],
+  src: 'ARCHITECTURE.md, "Process rules", "Agent close"',
 });
 spec('rules', 'ru-purity', {
   name: 'Pure match', tech: 'no customer reads', status: 'defined',
   summary: 'The match reads only the event already written.',
   fixed: [
     'No `SELECT` on `customers`, `products`, or `customer_credit_profile` inside `match_rules`.',
-    '`generate_while_ai` does not run if the state stamped on the event is `human_active`. The prompt is not the brake.',
+    '`generate_while_ai` does not run if the `process_state` column is `human_active`. The prompt is not the brake.',
     'One owner per trigger. Two paths that can enqueue the same command are a bug.',
   ],
   src: 'ARCHITECTURE.md, "Process-native loop"; AGENTS.md, "Events, rules, commands"',
 });
+
 spec('worker', 'w-loop', {
   name: 'Worker loop', tech: 'FOR UPDATE SKIP LOCKED', status: 'partial',
   summary: 'Takes pending commands, counts attempts, stops at 3.',
   fixed: [
-    'Takes `pending` rows with `FOR UPDATE SKIP LOCKED`, increments `attempt_count`, runs the command, marks it `done` or `failed`.',
-    'At most 3 attempts. On the third failure it writes a handoff event and transitions to `human_active` with `reason_code = tool_failed`. It does not retry in a loop.',
+    'Takes `pending` rows with `FOR UPDATE SKIP LOCKED`, increments `attempt_count`, runs the command, marks it `done` or `failed`. Index on pending `commands (status)`.',
+    'At most 3 attempts. On the third failure it transitions to `human_active` with `reason_code = tool_failed`. It does not retry in a loop.',
   ],
   open: [['New', 'How often the loop polls, and whether a failed attempt is retried at once or after a delay.']],
-  src: 'ARCHITECTURE.md, "Commands"',
+  src: 'ARCHITECTURE.md, "Commands", "Indexes"',
 });
 spec('worker', 'w-table', {
-  name: 'commands table', tech: 'db/migrations/001_init.sql', status: 'partial',
+  name: 'commands table', tech: 'db/migrations/001_init.sql', status: 'defined',
   summary: 'Queued work with its causing event, emitting rule, and status.',
   fixed: ['Columns: `id`, `command_name`, `payload jsonb`, `triggered_by_event_id`, `emitted_by_rule_id`, `idempotency_key` unique, `status` (`pending`, `done`, `failed`), `attempt_count`, `last_error`, `created_at`.'],
-  open: [['Gap 4', 'Commands the worker enqueues from the model JSON have no `triggered_by_event_id` or `emitted_by_rule_id`.']],
   src: 'ARCHITECTURE.md, "Commands"',
 });
-spec('worker', 'w-handlers', {
-  name: 'Command handlers', tech: '6 commands', status: 'defined',
-  summary: 'What each command does and must not do.',
+spec('worker', 'w-generate', {
+  name: 'conversation.generate', tech: 'model command', status: 'defined',
+  summary: 'One model call, then `conversation.turn_classified`. It does not pick the next step.',
   fixed: [
-    '`process.start`: inserts `processes` and `process.started`.',
-    '`process.transition`: changes `state`, writes `process.state_changed`, and `conversation.thread_taken` when the target is `human_active`.',
-    '`process.end`: `state = ended`, `process.ended`.',
-    '`conversation.generate`: one LLM call, persists the JSON. Does not write `analysis.completed`.',
-    '`policy.run`: reads the profile by the event `customer_id`, runs the engine, writes `analysis.completed`, in that order.',
-    '`decision.render`: picks the `es` or `pt` template, writes `prequalification.decided`.',
-    'None of them calls the model except `conversation.generate`.',
-  ],
-  src: 'ARCHITECTURE.md, "Commands"',
-});
-spec('worker', 'w-turn', {
-  name: 'Model turn routing', tech: 'ConversationTurn to command', status: 'partial',
-  summary: 'What the worker does with each `intent` and `language`.',
-  fixed: [
-    '`clarify`, or `product` null: no command; `clarification_question` is shown; stays `ai_active`.',
-    '`prequalify_card` or `prequalify_loan`: `policy.run` with that product.',
-    '`provide_income`: `policy.run` with `declared_income_amount` in the payload.',
-    '`human_request`: `human_active` with `customer_requested_human`. `out_of_scope`: with `out_of_scope`. `language = other`: with `language_unsupported`.',
-    '`language = pt`: continues. A certificate uses the `pt` template.',
-  ],
-  open: [
-    ['Gap 4', 'This routing happens in the worker, not in a rule, and leaves no event.'],
-    ['Gap 8', '`provide_income` carries no product for `policy.run`.'],
-    ['Gap 11', 'No intent detects an attempt to see another customer.'],
-    ['New', 'Which wins when `intent` and `language` disagree, for example `prequalify_card` with `language = other`.'],
+    'Persists the JSON and writes `conversation.turn_classified`. It does not enqueue `policy.run` or `process.transition`.',
+    'If the message `process_id` is null, the turn takes the process this cycle just opened for that customer.',
+    'Stores `language` on the process, and `product` when set. If the model sends no product and the process has one, the turn uses the stored one.',
   ],
   tests: ['Unit tests inject `ConversationTurn` JSON. They do not call OpenAI.'],
-  src: 'ARCHITECTURE.md, "How the model is called"',
+  src: 'ARCHITECTURE.md, "Events", "Commands"',
+});
+spec('worker', 'w-handlers', {
+  name: 'Other handlers', tech: '7 commands', status: 'defined',
+  summary: 'What each command does and must not do.',
+  fixed: [
+    '`process.start`: inserts `processes` and `process.started`. `process.transition`: changes `state`, writes `process.state_changed`, plus `conversation.thread_taken` into `human_active`.',
+    '`process.end`: `state = ended`, writes `process.state_changed` and `process.ended` with the same `end_reason`.',
+    '`conversation.show_reply`: inserts `messages` with `author = assistant` and the turn\'s `reply_text`.',
+    '`template.send`: writes `conversation.template_sent`, locale from the triggering event.',
+    '`policy.run`: reads the profile by the event `customer_id`, runs the engine, writes `analysis.completed` with `language` from the turn.',
+    '`decision.render`: reads `language` from the triggering event, writes `prequalification.decided`.',
+  ],
+  src: 'ARCHITECTURE.md, "Commands"',
 });
 spec('worker', 'w-guard', {
-  name: 'Reply guard', tech: 'reply_text checks', status: 'partial',
-  summary: 'Invalid JSON and forbidden phrases escalate instead of reaching the customer.',
+  name: 'Reply guard', tech: 'reply_ok', status: 'partial',
+  summary: 'Invalid JSON and forbidden phrases never reach the customer.',
   fixed: [
-    'Outcome phrases the model may not emit: `precalifica`, `no precalifica`, `pré-qualificado`, `não pré-qualifica`. If `reply_text` contains them, the worker discards it, stores the turn as invalid, and escalates.',
-    'Invalid JSON: one retry. A second failure goes to `human_active` with `model_output_invalid`.',
+    '`reply_ok` is false when `reply_text` contains `precalifica`, `no precalifica`, `pré-qualificado`, or `não pré-qualifica` (`reply_forbidden`), or when the JSON fails twice (`model_output_invalid`).',
+    'That text is not shown. `hand_off_reply` moves the case to `human_active`.',
   ],
   open: [
-    ['Gap 10', 'The escalation for a forbidden phrase has no named `reason_code`.'],
     ['New', 'How a stated credit limit is detected in `reply_text`. Only the outcome phrases are listed.'],
     ['D9', 'Whether this structure is enough against prompt injection, and how that is evaluated.'],
   ],
-  src: 'ARCHITECTURE.md, "How the model is called", "Policy alba-credit-v1"',
+  src: 'ARCHITECTURE.md, "Events", "How the model is called"',
 });
 
 spec('processes', 'p-catalog', {
   name: 'Process catalog', tech: 'credit_prequalification', status: 'defined',
   summary: 'One process, born `ai_active`, at most one open per customer.',
   fixed: [
-    'One row: `process_key = credit_prequalification`, initial state `ai_active`, opened by the first `conversation.message_received` from a customer with no open process.',
+    'One row: `process_key = credit_prequalification`, initial state `ai_active`, opened by `open_process` on the first message of a customer with no open process.',
     '`started` is not persisted. The row is born `ai_active` and `process.started` records it.',
     'A customer has at most one process with `state <> ended`, guaranteed by a partial unique index.',
   ],
@@ -853,43 +843,43 @@ spec('processes', 'p-states', {
   name: 'States and transitions', tech: 'ai_active, human_active, ended', status: 'partial',
   summary: 'Six allowed transitions. Any other is an error and is not written.',
   fixed: [
-    '`ai_active` to `ai_active`: clarification or `NEEDS_INFO`.',
-    '`ai_active` to `ended`: `prequalified` or `not_prequalified`.',
-    '`ai_active` to `human_active`: policy `REFER`, request for a human, tool failure, unsupported language, attempt to see another customer.',
-    '`human_active` to `ended`: `referred_closed`, when the agent closes.',
+    '`ai_active` to `ai_active`: clarification or `NEEDS_INFO`. `ai_active` to `ended`: `prequalified` or `not_prequalified`.',
+    '`ai_active` to `human_active`: policy `REFER`, request for a human, tool failure, unsupported language.',
+    '`human_active`: nobody talks in the thread. The customer may write; the message is stored. The agent closes with `prequalified` or `not_prequalified`.',
     '`ended` is not reopened. Another message opens a new process.',
   ],
-  open: [
-    ['Gap 12', 'The agent close has no endpoint, rule, or event.'],
-    ['Gap 11', '"Attempt to see another customer" is a trigger with no detector.'],
-  ],
-  src: 'ARCHITECTURE.md, "Process"',
+  open: [['New', 'The `ai_active` to `human_active` triggers omit `out_of_scope`, `reply_forbidden`, and `model_output_invalid`, which `hand_off_scope` and `hand_off_reply` also cause.']],
+  src: 'ARCHITECTURE.md, "Process", "Process rules"',
 });
 spec('processes', 'p-row', {
   name: 'processes row', tech: 'projection of events', status: 'partial',
-  summary: 'The current state of one case, rebuilt from events.',
-  fixed: ['Fields named in the contract: `customer_id`, `process_key`, `state`, `end_reason`.'],
-  open: [['New', 'The full `processes` column list is not written in the Database section.']],
-  src: 'ARCHITECTURE.md, "Process", "Database"',
+  summary: 'The current state of one case, plus its product and language.',
+  fixed: [
+    'Fields named in the contract: `customer_id`, `process_key`, `state`, `end_reason`, `product` (`credit_card`, `personal_loan`, or null), `language` (`es`, `pt`, or null).',
+    '`product` and `language` stay null until a turn sets them.',
+  ],
+  open: [['New', 'The full `processes` column list (id, timestamps) is not written.']],
+  src: 'ARCHITECTURE.md, "Process", "Cycle"',
 });
 spec('processes', 'p-reasons', {
-  name: 'Reason codes', tech: 'thread_taken.reason_code', status: 'open',
-  summary: 'Why a thread went to a person. The list is not closed.',
-  fixed: ['Named in the text: `customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`.'],
-  open: [['Gap 10', 'Policy `REFER`, a forbidden phrase in `reply_text`, and an attempt to see another customer have no code.']],
-  src: 'ARCHITECTURE.md, "Known gaps"',
+  name: 'Reason codes', tech: 'closed set of 7', status: 'defined',
+  summary: 'Why a thread went to a person.',
+  fixed: [
+    '`customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`. No others.',
+    '`policy_refer` is the one code for every policy `REFER`. The rule that fired stays on `deciding_rule`.',
+  ],
+  src: 'ARCHITECTURE.md, "Process"',
 });
 spec('processes', 'p-end', {
-  name: 'Ending', tech: 'process.end', status: 'open',
-  summary: 'Which events a case writes when it ends.',
-  fixed: ['`process.ended` carries `end_reason` and `policy_version`.'],
-  open: [
-    ['Gap 13', 'Whether `process.end` also writes `process.state_changed`.'],
-    ['New', '`process.end` sets `state = ended`, yet the contract says only `process.transition` changes `processes.state`.'],
+  name: 'Ending', tech: 'process.end', status: 'partial',
+  summary: 'Both end events, with the same reason, from the policy or the agent.',
+  fixed: [
+    '`process.end` writes `process.state_changed` and `process.ended`, both with the same `end_reason`.',
+    'From the agent, the reason is `prequalified` or `not_prequalified`, the same choice. There is no `referred_closed`.',
   ],
-  src: 'ARCHITECTURE.md, "Process-native loop", "Commands"',
+  open: [['New', '`process.end` sets `state = ended`, yet "Process-native loop" says only `process.transition` changes `processes.state`.']],
+  src: 'ARCHITECTURE.md, "Process-native loop", "Commands", "Agent close"',
 });
-
 spec('policy', 'po-decide', {
   name: 'decide(profile, product)', tech: 'api/policy/engine.py', status: 'partial',
   summary: 'Pure function. `product` is `credit_card` or `personal_loan`.',
@@ -897,7 +887,7 @@ spec('policy', 'po-decide', {
     'Same input, same output. Lives in git. `product` is `credit_card` or `personal_loan`.',
     'A bug on Juan is a bug for every customer with those facts. No `customer_id` branch inside the policy.',
   ],
-  open: [['New', 'The signature takes no declared income, yet R06 branches on "the message carries declared income".']],
+  open: [['New', 'The signature takes no declared income, yet R06 uses a stated amount as this run\'s income.']],
   tests: ['Break the function on purpose once and confirm the exact test goes red.'],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; AGENTS.md, "Tests"',
 });
@@ -906,8 +896,9 @@ spec('policy', 'po-profile', {
   summary: 'Status, score, income in local and USD, max days past due, holds product.',
   fixed: [
     '`customer_status`; `credit_score`, null if empty; `income_local`, null if empty; `income_currency` by country (MXN, COP, ARS); `income_usd` at the June 17, 2026 rate.',
-    '`max_days_past_due` over active `Tarjeta Crédito`, `Préstamo Personal`, and `Préstamo Hipotecario`; empty counts as 0. `holds_product`: an active product of the requested type. `as_of` 2026-06-17.',
-    'Rates for June 17, 2026: 1 MXN = 0.058641 USD, 1 COP = 0.000248 USD, 1 ARS = 0.002873 USD.',
+    '`max_days_past_due` over active `Tarjeta Crédito`, `Préstamo Personal`, and `Préstamo Hipotecario`; empty counts as 0. `as_of` 2026-06-17.',
+    '`holds_product` is the gold boolean of the requested product: `has_active_card` or `has_active_personal_loan`.',
+    'Rates from `daily_exchange_rates` for June 17, 2026: 1 MXN = 0.058641 USD, 1 COP = 0.000248 USD, 1 ARS = 0.002873 USD.',
   ],
   open: [
     ['R7', 'Convert incomes to USD per country and check the medians land in a similar range.'],
@@ -916,22 +907,30 @@ spec('policy', 'po-profile', {
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; PLAN.md §6',
 });
 spec('policy', 'po-rules', {
-  name: 'Rules in order', tech: 'alba-credit-v1.yaml', status: 'partial',
+  name: 'Rules in order', tech: 'alba-credit-v1.yaml', status: 'defined',
   summary: 'R01, R02, R03, R09, R04, R06, R05. The first terminal result wins.',
   fixed: [
     'R01: `Suspended` or `Inactive` refer; `Closed` does not pre-qualify.',
-    'R02: `max_days_past_due >= 30` does not pre-qualify. R03: 1 to 29 refers.',
-    'R09: already holds the requested product, refer.',
+    'R02: `max_days_past_due >= 30` does not pre-qualify. R03: 1 to 29 refers. R09: already holds the product, refer.',
     'R04: no score, refer. The customer is not asked for it.',
-    'R06: no income and none declared, `NEEDS_INFO`. Declared income refers, marked `self_declared`.',
+    'R06: no income and none stated, `NEEDS_INFO`. No income and an amount stated: not terminal; the amount is this run\'s income, marked `self_declared`, the gold row stays null. Income on file: a typed number is ignored and R06 does not fire.',
     'R05: score below 580 does not pre-qualify, 580 to 619 refers, 620 or more pre-qualifies.',
   ],
-  open: [['Gap 9', 'Whether the declared-income branch of R06 applies when `income_local` is on file.']],
   tests: [
     'Income None, score None, delinquency 30 and 29, status `Closed`, product already held.',
     'Mariana is decided by R02 even though her score would also fail.',
   ],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; AGENTS.md, "Tests"',
+});
+spec('policy', 'po-asks', {
+  name: 'What the customer is asked', tech: 'two questions', status: 'defined',
+  summary: 'Which product, and monthly income when the file has none. Nothing else.',
+  fixed: [
+    'Which product, when the turn names none. Monthly income, when `income_local` is null, read in the country\'s currency.',
+    'Never asked: score, days past due, status, or whether they hold the product. A null score is `REFER` with no question.',
+    'After those asks the engine runs. `REFER` goes to the agent; there is no further question.',
+  ],
+  src: 'ARCHITECTURE.md, "What the customer can be asked"',
 });
 spec('policy', 'po-decision', {
   name: 'Decision', tech: 'engine output', status: 'defined',
@@ -956,71 +955,69 @@ spec('policy', 'po-oracle', {
   name: 'Oracle fixtures', tech: 'api/fixtures/oracle_customers.json', status: 'partial',
   summary: 'Four real rows that cover every outcome, plus César.',
   fixed: [
-    'Juan `PREQUALIFIED` R05; Juliana `NEEDS_INFO` R06; Alicia `REFER` R05; Mariana `NOT_PREQUALIFIED` R02.',
+    'Juan `PREQUALIFIED` R05; Juliana `NEEDS_INFO` R06, then `PREQUALIFIED` once she states an amount; Alicia `REFER` R05; Mariana `NOT_PREQUALIFIED` R02.',
     'If an outcome changes, the integration test fails.',
   ],
   open: [['R8', 'Re-read the four customers and César from `data/raw/` and confirm every value in the contract.']],
-  src: 'ARCHITECTURE.md, "Oracle fixtures"',
+  src: 'ARCHITECTURE.md, "Oracle fixtures", "The other three flows"',
 });
+
 spec('templates', 't-locales', {
   name: 'Locales', tech: 'es, pt', status: 'partial',
-  summary: 'Two locales. The Portuguese is written by the team.',
+  summary: 'Two locales, picked from the `language` on the triggering event.',
   fixed: [
     'Two locales: `es` and `pt`. The dataset has no Portuguese.',
-    'The template receives the `Decision` and builds the paragraph. The model does not see this step.',
+    '`decision.render` and `template.send` read `language` from the triggering event. Nothing reads `llm_turns` for the locale.',
   ],
-  open: [
-    ['Gap 7', 'The locale is not on `analysis.completed`, so `decision.render` would have to read outside the event.'],
-    ['D6', 'Where Portuguese test utterances come from and how they are disclosed.'],
-  ],
-  src: 'ARCHITECTURE.md, "Policy alba-credit-v1"',
+  open: [['D6', 'Where Portuguese test utterances come from and how they are disclosed.']],
+  src: 'ARCHITECTURE.md, "Commands", "Known gaps" 7',
 });
 spec('templates', 't-cert', {
   name: 'Certificate', tech: 'prequalification.decided', status: 'partial',
-  summary: 'The `constancia` for `PREQUALIFIED` and `NOT_PREQUALIFIED`.',
+  summary: 'The `constancia`, from the policy or from the agent close.',
   fixed: [
-    'Written to `prequalification.decided` with `locale`, `template_id`, `outcome`, `body`.',
-    'Income in local currency, with the USD equivalent and the exchange-rate date beside it.',
-    'No limit amount and no rate for the new product.',
+    'Written to `prequalification.decided` with `locale`, `template_id`, `outcome`, `body`, `decided_by` (`policy` or `agent`).',
+    'Income in local currency, with the USD equivalent and the exchange-rate date beside it. No limit amount, no rate.',
+    'On the agent path the row in `messages` has `author = template`. The model does not draft it.',
     'Only templates emit `precalifica`, `no precalifica`, `pré-qualificado`, `não pré-qualifica`.',
   ],
-  open: [['New', 'The certificate text in both locales, its `template_id` values, and the line that says the policy is synthetic.']],
-  src: 'ARCHITECTURE.md, "Events", "Auth and screens"',
+  open: [['Copy', 'The certificate sentences in both locales, the agent-path message, and the line that says the policy is synthetic.']],
+  src: 'ARCHITECTURE.md, "Events", "Agent close", "Auth and screens"',
 });
-spec('templates', 't-needs', {
-  name: 'Income question', tech: 'R06, NEEDS_INFO', status: 'open',
-  summary: 'Asks for income and says a declared amount goes to a person.',
-  fixed: ['On `NEEDS_INFO` the customer sees a template that asks for income and says a declared amount goes to a person. The process stays `ai_active`.'],
-  open: [['Gap 5', 'No command renders it and no event records it.']],
-  src: 'ARCHITECTURE.md, "The other three flows"',
-});
-spec('templates', 't-refer', {
-  name: 'Handoff messages', tech: 'REFER and other handoffs', status: 'open',
-  summary: 'What the customer reads when a person takes over.',
-  fixed: ['The model cannot write the `REFER` message: it does not see the score.'],
-  open: [
-    ['Gap 6', 'No template or command is named for the customer message on `REFER`.'],
-    ['New', 'What the customer reads on the other handoffs: `customer_requested_human`, `out_of_scope`, `language_unsupported`, `tool_failed`, `model_output_invalid`.'],
+spec('templates', 't-notices', {
+  name: 'Notices', tech: 'conversation.template_sent', status: 'partial',
+  summary: '`needs_income`, `which_product`, `refer_notice`. Non-terminal.',
+  fixed: [
+    '`needs_income` on `NEEDS_INFO`: asks for monthly income. The case stays `ai_active`.',
+    '`which_product` when a stated income names no product. The policy waits.',
+    '`refer_notice` on `REFER`: a person will review. No score, and no word on whether the customer pre-qualifies.',
   ],
-  src: 'ARCHITECTURE.md, "Known gaps"',
+  open: [['Copy', 'The sentences for all three, in `es` and `pt`.']],
+  src: 'ARCHITECTURE.md, "Process rules", "Commands", "The other three flows"',
+});
+spec('templates', 't-handoff', {
+  name: 'Other handoff notices', tech: 'no template named', status: 'open',
+  summary: 'What the customer reads when a case leaves the assistant for another reason.',
+  fixed: ['Only a policy `REFER` sends a notice (`refer_notice`).'],
+  open: [['New', 'Nothing tells the customer about a handoff for `customer_requested_human`, `out_of_scope`, `language_unsupported`, `tool_failed`, `model_output_invalid`, or `reply_forbidden`.']],
+  src: 'ARCHITECTURE.md, "Process rules"',
 });
 
 spec('llm', 'l-schema', {
-  name: 'ConversationTurn', tech: 'api/llm/schema.py', status: 'partial',
+  name: 'ConversationTurn', tech: 'api/llm/schema.py', status: 'defined',
   summary: 'The one JSON shape the model returns.',
   fixed: [
     '`intent`: `product_info`, `prequalify_card`, `prequalify_loan`, `provide_income`, `human_request`, `out_of_scope`, `clarify`, `chit_chat`.',
     '`product`: `credit_card`, `personal_loan`, or null. `declared_income_amount`, and `declared_income_currency` (MXN, COP, ARS), or null.',
     '`language`: `es`, `pt`, `other`. Plus `needs_clarification`, `clarification_question`, `reply_text`.',
   ],
-  open: [['New', 'What happens after `product_info` and `chit_chat`: the routing table does not list them.']],
   src: 'ARCHITECTURE.md, "How the model is called"',
 });
 spec('llm', 'l-call', {
   name: 'The call', tech: 'api/llm/conversation.py', status: 'partial',
   summary: 'One call, no streaming, Structured Outputs, then Pydantic validation.',
   fixed: [
-    'One call, no streaming, Structured Outputs with the `ConversationTurn` JSON schema. The response must also validate in Pydantic.',
+    'One call, no streaming, Structured Outputs with the `ConversationTurn` JSON schema. It must also validate in Pydantic; one retry, then `model_output_invalid`.',
     'Only this module imports the OpenAI SDK. `LLM_MODEL` defaults to `gpt-6-luna`.',
     'Missing key: `conversation.generate` fails saying so. Timeout, rate limit, or server error: a failed attempt under the limit of 3.',
     '`temperature` 0 if the model accepts it.',
@@ -1055,25 +1052,28 @@ spec('llm', 'l-turns', {
     'Stored either way, including when parsing fails.',
   ],
   open: [['D1', 'Cost per case from stored usage times the list price, and whether a second model is compared.']],
-  src: 'ARCHITECTURE.md, "How the model is called", "Database"',
+  src: 'ARCHITECTURE.md, "How the model is called", "Cycle"',
 });
 
 spec('tools', 'to-profile', {
   name: 'profile.py', tech: 'reads gold', status: 'partial',
   summary: 'One `customer_credit_profile` row for one `customer_id`.',
-  fixed: ['Reads one row of `customer_credit_profile`, the one for the event or session `customer_id`.'],
-  open: [['New', 'Which module derives the four prompt booleans from the profile.']],
-  src: 'ARCHITECTURE.md, "File tree", "Database"',
+  fixed: [
+    'Reads one row of `customer_credit_profile`, the one for the event or session `customer_id`.',
+    'Gold carries `has_active_card` and `has_active_personal_loan`, two of the four prompt booleans.',
+  ],
+  open: [['New', 'Which module builds the prompt input (the four booleans) from the profile.']],
+  src: 'ARCHITECTURE.md, "File tree", "Gold"',
 });
 spec('tools', 'to-products', {
   name: 'products.py', tech: 'home screen', status: 'partial',
   summary: 'The session customer\'s products, in the row\'s currency.',
   fixed: [
-    'Only the session customer\'s products.',
+    'Only the session customer\'s products, through the index on `products (customer_id)`.',
     'Amounts in the row\'s `products.currency`. Balances of customers in Mexico stay in USD; they are not converted to MXN.',
   ],
   open: [['New', 'The response shape and which product fields the home screen shows.']],
-  src: 'ARCHITECTURE.md, "Auth and screens"',
+  src: 'ARCHITECTURE.md, "Auth and screens", "Indexes"',
 });
 spec('tools', 'to-catalog', {
   name: 'catalog.py', tech: 'two products', status: 'partial',
@@ -1125,8 +1125,8 @@ node('pg-queue', {
 });
 node('pg-agentcase', {
   parent: 'web', kind: 'component', name: 'Agent case', tech: 'AgentCase.tsx',
-  summary: '`/agent/case/:id`. The thread and the handoff packet.',
-  src: 'ARCHITECTURE.md, "Auth and screens"',
+  summary: '`/agent/case/:id`. The handoff packet and two close actions. No reply box.',
+  src: 'ARCHITECTURE.md, "Auth and screens", "Agent close"',
 });
 node('pg-trace', {
   parent: 'web', kind: 'component', name: 'Trace', tech: 'Trace.tsx',
@@ -1148,7 +1148,7 @@ view('web', {
     ['pg-case', 'api', 'messages, certificate'],
     ['pg-login', 'api', 'search, code, JWT'],
     ['pg-queue', 'api', 'queue'],
-    ['pg-agentcase', 'api', 'thread, packet, reply'],
+    ['pg-agentcase', 'api', 'packet, close'],
     ['pg-trace', 'api', 'events'],
   ],
 });
@@ -1184,20 +1184,20 @@ spec('pg-home', 'hm-products', {
 
 spec('pg-case', 'cs-thread', {
   name: 'Thread', tech: 'messages', status: 'partial',
-  summary: 'Customer, assistant, agent, and template messages in one thread.',
+  summary: 'Customer, assistant, and template messages. No agent messages.',
   fixed: [
-    '`messages` rows with `author` `customer`, `assistant`, `agent`, or `template`.',
+    '`messages` rows with `author` `customer`, `assistant`, or `template`.',
     'Each send carries a new `client_message_id`.',
-    'After the handoff, the customer can still write; only the agent replies.',
+    'After the handoff the customer can still write; nobody replies until the agent closes and the template message arrives.',
   ],
   open: [['New', 'How messages the worker writes later reach the page: polling or push.']],
-  src: 'ARCHITECTURE.md, "Events", "Database"',
+  src: 'ARCHITECTURE.md, "Process", "Events", "Cycle"',
 });
 spec('pg-case', 'cs-cert', {
   name: 'Certificate', tech: 'prequalification.decided', status: 'defined',
   summary: 'Shown when the decision event exists. Rendered by the API, not the client.',
   fixed: [
-    'Shown if `prequalification.decided` exists. The page renders its `body`; it does not build certificate prose.',
+    'Shown if `prequalification.decided` exists, from the policy or the agent close. The page renders its `body`; it does not build certificate prose.',
     'A customer whose process ended `prequalified` or `not_prequalified` sees the certificate and never the queue.',
   ],
   src: 'ARCHITECTURE.md, "Auth and screens"; AGENTS.md, "Data fetching and UI"',
@@ -1211,10 +1211,10 @@ spec('pg-case', 'cs-session', {
 
 spec('pg-queue', 'aq-list', {
   name: 'Queue', tech: 'human_active', status: 'partial',
-  summary: 'Only referred, open processes.',
+  summary: 'Only handed-off, open processes.',
   fixed: [
     'Processes in `human_active`. `ended` processes are not shown.',
-    'Alicia appears. Juan and Mariana do not.',
+    'Alicia appears. Juan, Juliana, and Mariana do not.',
   ],
   open: [['New', 'The sort order and its tie-break, and what each queue card shows.']],
   src: 'ARCHITECTURE.md, "Auth and screens"; AGENTS.md, "Database"',
@@ -1222,50 +1222,53 @@ spec('pg-queue', 'aq-list', {
 
 spec('pg-agentcase', 'ac-packet', {
   name: 'Handoff packet', tech: 'analysis.completed', status: 'partial',
-  summary: 'Request, score, income, rule, policy version, facts with source.',
+  summary: 'Request, score, income, deciding rule, policy version.',
   fixed: [
-    'Read from `analysis.completed`: request, score, income, deciding rule, `policy_version`, and the facts with their source column.',
+    'Read from `analysis.completed`: request, score, income, deciding rule, `policy_version`.',
     'The packet may show the rule id and the facts. An internal reason code is not customer copy.',
   ],
-  open: [['New', 'Handoffs that are not a policy `REFER` (`human_request`, `out_of_scope`, `tool_failed`) have no `analysis.completed` to build the packet from.']],
+  open: [['New', 'A handoff that is not a policy `REFER` (human request, out of scope, unsupported language, tool or reply failure) has no `analysis.completed`, so there is no packet, and a close there has no policy result behind it.']],
   src: 'ARCHITECTURE.md, "Auth and screens", "The other three flows"',
 });
-spec('pg-agentcase', 'ac-reply', {
-  name: 'Reply and close', tech: 'agent actions', status: 'partial',
-  summary: 'The agent answers the customer and ends the case.',
-  fixed: ['A reply writes `conversation.agent_message_sent`.'],
-  open: [['Gap 12', 'Closing the case has no endpoint, rule, or event, and the agent outcome is not recorded.']],
-  src: 'ARCHITECTURE.md, "Events", "Known gaps"',
+spec('pg-agentcase', 'ac-close', {
+  name: 'Close actions', tech: 'POST /agent/case/:id/close', status: 'defined',
+  summary: 'Two buttons: pre-qualify or do not. No reply box.',
+  fixed: [
+    'The only actions are `PREQUALIFIED` and `NOT_PREQUALIFIED`. No text field, no comment.',
+    'The close writes `conversation.agent_closed`; a template tells the customer and the process ends.',
+    'Which outcome César picks for Alicia is not fixed by the contract.',
+  ],
+  src: 'ARCHITECTURE.md, "Agent close", "The other three flows"',
 });
 
 spec('pg-trace', 'tr-events', {
   name: 'Event list', tech: 'events', status: 'partial',
   summary: 'The process events in order: the audit trail reviewers see.',
   fixed: [
-    'Lists the process `events` in order.',
+    'Lists the process `events` in order, backed by the index on `events (process_id, created_at)`.',
     'Explanations come from sources, rules, and execution records. No chain-of-thought.',
   ],
   open: [['New', 'The ordering key. `created_at` can tie, and AGENTS.md asks for an explicit tie-break.']],
-  src: 'ARCHITECTURE.md, "Auth and screens"; PLAN.md §2',
+  src: 'ARCHITECTURE.md, "Auth and screens", "Indexes"; PLAN.md §2',
 });
 node('ld-entry', {
   parent: 'load', kind: 'component', name: 'Startup sequence', tech: 'entrypoint, file not named',
-  summary: 'Waits for Postgres, applies the schema, skips an unchanged batch, runs the pipeline, exits.',
+  summary: 'Waits for Postgres, applies the schema, runs the pipeline, exits.',
   src: 'ARCHITECTURE.md, "Docker"',
 });
 node('ld-migrations', {
   parent: 'load', kind: 'component', name: 'Schema migrations', tech: 'db/migrations/',
-  summary: 'Creates the tables and the partial unique index. One-way.',
+  summary: 'Read tables, gold, cycle tables, `load_batches`, and their indexes.',
   src: 'ARCHITECTURE.md, "Database"',
 });
 node('ld-bronze', {
   parent: 'load', kind: 'component', name: 'Bronze', tech: 'pipeline/bronze.py',
-  summary: 'The four CSVs in `data/raw/` plus a manifest in `load_batches`.',
+  summary: '`aws s3 cp` into `data/raw/`, plus a manifest in `load_batches`.',
   src: 'ARCHITECTURE.md, "Pipeline"',
 });
 node('ld-silver', {
   parent: 'load', kind: 'component', name: 'Silver', tech: 'pipeline/silver.py',
-  summary: 'Typed read tables inside Postgres. Nulls kept, currency copied, names untranslated.',
+  summary: 'The four read tables, only the listed columns. Nulls kept, names untranslated.',
   src: 'ARCHITECTURE.md, "Pipeline"',
 });
 node('ld-gold', {
@@ -1282,11 +1285,10 @@ view('load', {
     ['postgres', 1, 2, 4],
   ],
   rels: [
-    ['ld-entry', 's3', 'Downloads missing CSVs', 'SigV4'],
-    ['ld-entry', 'raw', 'Writes downloads'],
     ['ld-entry', 'ld-migrations', 'Applies first'],
     ['ld-entry', 'ld-bronze', 'Then runs the pipeline'],
-    ['ld-bronze', 'raw', 'Reads, hashes'],
+    ['ld-bronze', 's3', 'aws s3 cp', '', 0.75],
+    ['ld-bronze', 'raw', 'Writes, hashes'],
     ['ld-bronze', 'ld-silver', 'then'],
     ['ld-silver', 'ld-gold', 'then'],
     ['ld-migrations', 'postgres', 'Schema', 'SQL'],
@@ -1298,20 +1300,20 @@ view('load', {
 
 spec('ld-entry', 'en-order', {
   name: 'Startup order', tech: 'compose depends_on', status: 'partial',
-  summary: 'Postgres, schema, download, tables, exit 0, then `api`.',
+  summary: 'Postgres, schema, copy, tables, exit 0, then `api`.',
   fixed: [
-    'Waits for Postgres, applies `db/migrations/`, downloads the four CSVs if missing, fills the read tables and gold, exits with code 0.',
+    'Waits for Postgres, applies `db/migrations/`, copies the four CSVs if missing, fills the read tables and gold, exits with code 0.',
     '`api` starts only when `load` finished successfully.',
   ],
-  open: [['New', 'The entrypoint file, and which module downloads from S3. The tree names only bronze, silver, and gold.']],
+  open: [['New', 'The entrypoint file. The tree names only bronze, silver, and gold.']],
   src: 'ARCHITECTURE.md, "Docker"',
 });
 spec('ld-entry', 'en-skip', {
-  name: 'Reload rule', tech: 'sha256', status: 'defined',
+  name: 'Reload rule', tech: 'sha256 on disk', status: 'defined',
   summary: 'Same four files, no reload. A new volume reloads.',
   fixed: [
-    'A second `up` does not reload if `load_batches` already holds the same sha256 of the four files.',
-    'Files already in `data/raw/` are not downloaded again.',
+    'Files already in `data/raw/` are not copied again.',
+    'The `sha256` is of the file on disk. If `load_batches` already holds that hash, the file is not copied into Postgres again.',
     'Deleting the volume reloads.',
   ],
   src: 'ARCHITECTURE.md, "Docker"',
@@ -1338,13 +1340,13 @@ spec('ld-entry', 'en-report', {
 });
 
 spec('ld-migrations', 'mg-tables', {
-  name: 'Tables', tech: 'db/migrations/001_init.sql', status: 'partial',
-  summary: 'Eight named tables and one partial unique index.',
+  name: 'Tables and indexes', tech: '001_init.sql', status: 'defined',
+  summary: 'Four read tables, gold, six cycle tables, `load_batches`.',
   fixed: [
-    '`events`, `processes`, `commands`, `login_codes`, `llm_turns`, `messages`, `customer_credit_profile`, `load_batches`.',
+    'Read: `customers`, `products`, `daily_exchange_rates`, `service_agents`. Gold: `customer_credit_profile`. Cycle: `events`, `processes`, `commands`, `login_codes`, `llm_turns`, `messages`. Plus `load_batches`.',
+    'Indexes: `customers` on `document_number` and `(last_name, first_name)`; `products (customer_id)`; pending `commands (status)`; `events (process_id, created_at)`.',
     'A partial unique index on `processes (customer_id, process_key) where state <> ended`.',
   ],
-  open: [['New', 'The read tables `load` fills (customers, products, agents, exchange rates) are not in the migration list.']],
   src: 'ARCHITECTURE.md, "Database"',
 });
 spec('ld-migrations', 'mg-rules', {
@@ -1359,26 +1361,23 @@ spec('ld-migrations', 'mg-rules', {
 });
 
 spec('ld-bronze', 'br-files', {
-  name: 'Source files', tech: 'four CSVs', status: 'defined',
+  name: 'Source files', tech: 'aws s3 cp', status: 'defined',
   summary: 'Only the four files login and the policy need.',
   fixed: [
-    '`customers.csv`, `products.csv`, `daily_exchange_rates.csv`, `service_agents.csv`, from the prefix `data/`.',
+    '`aws s3 cp` for `customers.csv`, `products.csv`, `daily_exchange_rates.csv`, `service_agents.csv`, under `data/`. No bucket listing.',
     'UTF-8 with a BOM, read with `utf-8-sig`.',
   ],
-  src: 'ARCHITECTURE.md, "Docker"; README.md, "Data"',
+  src: 'ARCHITECTURE.md, "Docker", "Pipeline"; README.md, "Data"',
 });
 spec('ld-bronze', 'br-manifest', {
   name: 'Manifest', tech: 'load_batches', status: 'partial',
-  summary: '`{path, bytes, sha256}` for each file, tied to a `batch_id`.',
-  fixed: [
-    '`{path, bytes, sha256}` per file in `load_batches`.',
-    'Gold rows carry the `batch_id`.',
-  ],
+  summary: '`{path, bytes, sha256}` for each file on disk.',
+  fixed: ['`load_batches`: `path`, `bytes`, `sha256` of each file on disk.'],
   open: [
-    ['New', 'The `load_batches` columns beyond the manifest fields.'],
+    ['New', 'Gold rows carry a `batch_id`, but `load_batches` lists no id column for it to point at.'],
     ['R2', 'How `data_backup_20260831/` differs from `data/`; possibly the late-arrival or schema-evolution case.'],
   ],
-  src: 'ARCHITECTURE.md, "Pipeline"; PLAN.md §6',
+  src: 'ARCHITECTURE.md, "Cycle", "Gold"; PLAN.md §6',
 });
 
 spec('ld-silver', 'sv-rules', {
@@ -1392,87 +1391,86 @@ spec('ld-silver', 'sv-rules', {
   src: 'ARCHITECTURE.md, "Data: what is touched and what is not"',
 });
 spec('ld-silver', 'sv-tables', {
-  name: 'Read tables', tech: 'names not fixed', status: 'open',
-  summary: 'The tables login, search, and the home screen read.',
-  fixed: ['`customers`, `products`, and `service_agents` are named as tables in the text.'],
-  open: [
-    ['New', 'Table names and columns for the four read tables, exchange rates included, and the migration that creates them.'],
-    ['R9', 'The `product_type` values and their mapping to `credit_card` and `personal_loan`.'],
+  name: 'Read tables', tech: 'listed columns only', status: 'partial',
+  summary: 'Other columns in the data dictionary are not copied.',
+  fixed: [
+    '`customers`: `customer_id`, `document_number`, `first_name`, `last_name`, `country`, `segment`, `credit_score`, `estimated_monthly_income`, `customer_status`.',
+    '`products`: `product_id`, `customer_id`, `product_type`, `product_number`, `currency`, `current_balance`, `product_status`, `days_past_due`.',
+    '`daily_exchange_rates`: `date`, `source_currency`, `target_currency`, `exchange_rate`. `service_agents`: `agent_id`, `employee_code`, `first_name`, `last_name`.',
   ],
-  src: 'ARCHITECTURE.md, "Process-native loop", "Auth and screens"',
+  open: [['R9', 'The `product_type` values and their mapping to `credit_card` and `personal_loan`.']],
+  src: 'ARCHITECTURE.md, "Read tables"',
 });
 
 spec('ld-gold', 'gd-profile', {
   name: 'customer_credit_profile', tech: 'one row per customer', status: 'defined',
   summary: 'The only table `policy.run` reads.',
   fixed: [
-    'One row per `customer_id`, 150,000 rows.',
-    'Columns: the policy inputs, plus `country`, `segment`, `first_name`, `last_name`, `as_of`, `batch_id`.',
+    'One row per `customer_id`, 150,000 rows. Primary key `customer_id`.',
+    'Columns: the policy inputs, plus `country`, `segment`, `first_name`, `last_name`, `as_of`, `batch_id`, `has_active_card`, `has_active_personal_loan`.',
     'The customer API does not list this table. `policy.run` reads one row.',
   ],
-  src: 'ARCHITECTURE.md, "Database"',
+  src: 'ARCHITECTURE.md, "Gold", "Indexes"',
 });
 spec('ld-gold', 'gd-derive', {
   name: 'Derived fields', tech: 'aggregates', status: 'partial',
-  summary: 'Max days past due, active-product flags, income in USD.',
+  summary: 'Max days past due, two product flags, income in USD.',
   fixed: [
     '`max_days_past_due` over active credit products, empty counted as 0.',
-    'Active-product booleans.',
+    '`has_active_card` and `has_active_personal_loan` cache `products` for this version. A new product type is computed from `products`, not added as a flag.',
     '`income_usd` is `income_local` times the June 17, 2026 rate.',
   ],
-  open: [
-    ['New', '`holds_product` depends on the requested product, so gold needs one flag per product. Those column names are not written.'],
-    ['R7', 'Check the USD income medians per country.'],
-  ],
-  src: 'ARCHITECTURE.md, "Policy alba-credit-v1", "Pipeline"',
+  open: [['R7', 'Check the USD income medians per country.']],
+  src: 'ARCHITECTURE.md, "Policy alba-credit-v1", "Gold", "Pipeline"',
 });
 
 node('db-auth', {
   parent: 'postgres', kind: 'tables', name: 'Sessions', tech: 'login_codes',
   summary: 'One-time codes, valid 10 minutes.',
-  fixed: ['6-digit codes valid 10 minutes. Columns are open (see Auth, One-time code).'],
-  src: 'ARCHITECTURE.md, "Auth and screens"',
+  fixed: ['The 6-digit code, the customer or agent it belongs to, and the 10-minute expiry.'],
+  src: 'ARCHITECTURE.md, "Cycle"',
 });
 node('db-process', {
   parent: 'postgres', kind: 'tables', name: 'Process store', tech: 'events, processes, commands',
   summary: 'Facts, the projection, and the queue.',
   fixed: [
-    '`events`: append-only facts (see Event store).',
-    '`processes`: the projection, with a partial unique index on `(customer_id, process_key) where state <> ended`.',
+    '`events`: append-only facts, with `process_id` and `process_state` as columns.',
+    '`processes`: the projection, with `product` and `language`, and a partial unique index on `(customer_id, process_key) where state <> ended`.',
     '`commands`: the queue the worker takes rows from.',
   ],
-  src: 'ARCHITECTURE.md, "Database"',
+  src: 'ARCHITECTURE.md, "Events", "Cycle", "Indexes"',
 });
 node('db-conv', {
   parent: 'postgres', kind: 'tables', name: 'Conversation', tech: 'messages, llm_turns',
-  summary: 'What was said, and every model request and response.',
+  summary: 'What the customer sees, and every model request and response.',
   fixed: [
-    '`messages`: `id`, `process_id`, `author` (`customer`, `assistant`, `agent`, `template`), `body`, `event_id`.',
+    '`messages`: `id`, `process_id`, `author` (`customer`, `assistant`, `template`), `body`, `event_id`.',
+    '`conversation.show_reply` writes `assistant` rows. The agent-path `decision.render` writes a `template` row.',
     '`llm_turns`: request, raw response, parsed JSON, model id, token usage, latency.',
   ],
   open: [
-    ['New', 'Which component writes `messages`, and for which events.'],
+    ['New', 'Who writes the customer\'s own `messages` row, and whether `template.send` and the policy-path `decision.render` write one too.'],
     ['New', 'How long messages and stored prompts are kept. Retention is not written (`PLAN.md` §2).'],
   ],
-  src: 'ARCHITECTURE.md, "Database"',
+  src: 'ARCHITECTURE.md, "Commands", "Agent close", "Cycle"',
 });
 node('db-gold', {
   parent: 'postgres', kind: 'tables', name: 'Gold', tech: 'customer_credit_profile',
-  summary: 'The policy inputs, one row per customer.',
+  summary: 'The policy inputs and two product flags, one row per customer.',
   fixed: ['One row per customer. Not listed by the customer API. `policy.run` reads one row.'],
-  src: 'ARCHITECTURE.md, "Database"',
+  src: 'ARCHITECTURE.md, "Gold"',
 });
 node('db-read', {
   parent: 'postgres', kind: 'tables', name: 'Read tables', tech: 'silver',
-  summary: 'Customers, products, agents, exchange rates. Typed, nulls kept.',
+  summary: 'Customers, products, exchange rates, agents. Listed columns only.',
   fixed: ['Filled by `load`. Read by search, the home screen, and agent login. `match_rules` never reads them.'],
-  src: 'ARCHITECTURE.md, "Process-native loop", "Docker"',
+  src: 'ARCHITECTURE.md, "Read tables", "Process-native loop"',
 });
 node('db-lineage', {
   parent: 'postgres', kind: 'tables', name: 'Lineage', tech: 'load_batches',
-  summary: 'The manifest that decides whether a second `up` reloads.',
-  fixed: ['`{path, bytes, sha256}` per file.'],
-  src: 'ARCHITECTURE.md, "Pipeline"',
+  summary: 'The hashes that decide whether a second `up` reloads.',
+  fixed: ['`path`, `bytes`, `sha256` of each file on disk.'],
+  src: 'ARCHITECTURE.md, "Cycle"',
 });
 
 view('postgres', {
@@ -1490,7 +1488,7 @@ view('postgres', {
     ['api', 'db-read', 'search, products'],
     ['load', 'db-gold', 'builds'],
     ['load', 'db-read', 'fills'],
-    ['load', 'db-lineage', 'manifest'],
+    ['load', 'db-lineage', 'hashes'],
   ],
 });
 
@@ -1530,7 +1528,7 @@ node('ev-suite', {
   parent: 'eval', kind: 'component', name: 'Scenario suite', tech: '~300 held-out cases', status: 'open',
   summary: 'Stratified by outcome, country, segment, and language.',
   fixed: [
-    'Sep 27 design: normal ~45%, ambiguous or unsupported ~20%, human-required ~15%, adversarial or failure ~20%.',
+    'Sep 27 design: normal ~45%, ambiguous or unsupported ~20%, human-required ~15% (review-band score, DPD 1-29, missing score, asks for a human), adversarial or failure ~20%.',
     'Each case has an `expected_route` and an `expected_decision`. Test customers are disjoint from prompt tuning.',
   ],
   open: [
@@ -1574,7 +1572,7 @@ node('ev-metrics', {
   const LEVELS = ['System context', 'Containers', 'Components', 'Code and specs'];
   const KIND = { root: 'View', person: 'Person', system: 'Software system', external: 'External system', container: 'Container', store: 'Data store', planned: 'Container, planned', component: 'Component', file: 'File', tables: 'Table group', spec: 'Spec' };
   const STATUS = { defined: 'Defined', partial: 'Partial', open: 'To define' };
-  const REF_HOME = { gap: 'ARCHITECTURE.md, Known gaps', dec: 'PLAN.md §5, open decisions', res: 'PLAN.md §6, research backlog', new: 'Raised while drawing this view; not tracked in the docs yet' };
+  const REF_HOME = { gap: 'ARCHITECTURE.md, Known gaps', dec: 'PLAN.md §5, open decisions', res: 'PLAN.md §6, research backlog', todo: 'Named in ARCHITECTURE.md as not written yet', new: 'Raised while drawing this view; not tracked in the docs yet' };
   const NOUN = ['elements', 'containers', 'components', 'specs'];
   const state = { view: 'context', sel: 'context' };
 
@@ -1587,7 +1585,7 @@ node('ev-metrics', {
   const path = id => { const p = []; for (let n = N[id]; n; n = N[n.parent]) p.unshift(n.id); return p; };
   const depth = id => path(id).length - 1;
   const hasView = id => Boolean(V[id]) || N[id].children.length > 0;
-  const refKind = r => r.startsWith('Gap') ? 'gap' : /^D\d/.test(r) ? 'dec' : /^R\d/.test(r) ? 'res' : 'new';
+  const refKind = r => r.startsWith('Gap') ? 'gap' : r === 'Copy' ? 'todo' : /^D\d/.test(r) ? 'dec' : /^R\d/.test(r) ? 'res' : 'new';
   const refTitle = r => (REF_TITLES[r] ? REF_TITLES[r] + ' · ' : '') + REF_HOME[refKind(r)];
   const refTag = r => `<span class="ref ${refKind(r)}" title="${esc(refTitle(r))}">${esc(r)}</span>`;
   const openItems = id => [...(N[id].open || []).map(([ref, t]) => ({ ref, t, id })), ...N[id].children.flatMap(openItems)];
@@ -1819,7 +1817,7 @@ node('ev-metrics', {
   function renderBacklog() {
     const order = r => {
       const m = r.match(/^(Gap |D|R)(\d+)/);
-      return m ? { 'Gap ': 0, D: 1, R: 2 }[m[1]] * 1000 + Number(m[2]) : 9000;
+      return m ? { 'Gap ': 0, D: 1, R: 2 }[m[1]] * 1000 + Number(m[2]) : r === 'Copy' ? 8000 : 9000;
     };
     const groups = {};
     openItems('context').forEach(i => { (groups[i.ref] = groups[i.ref] || []).push(i); });
