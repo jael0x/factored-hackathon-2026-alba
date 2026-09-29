@@ -24,6 +24,24 @@ Feature: Data load
     When the team starts the stack again
     Then the files are not loaded into the database again
 
+  Scenario: A changed file is loaded again
+    Given the database holds a load of the four source files
+    And products.csv on disk has changed since that load
+    When the team starts the stack again
+    Then the read tables and the customer credit profiles are rebuilt from the changed file
+
+  Scenario: A row count that differs from the snapshot stops the load
+    Given customers.csv holds 149,999 rows instead of the expected 150,000
+    When the team starts the stack
+    Then the load fails its quality check
+    And the application does not start
+
+  Scenario: A product with no matching customer stops the load
+    Given products.csv holds a product whose customer id is not in customers.csv
+    When the team starts the stack
+    Then the load fails its quality check
+    And the application does not start
+
   Scenario: Missing keys and missing files stop the load with a named error
     Given the local data folder is empty
     And the AWS keys are not set
