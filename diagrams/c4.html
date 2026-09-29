@@ -550,12 +550,12 @@ spec('routers', 'r-search', {
   name: 'GET /customers/search', tech: 'login search', status: 'partial',
   summary: 'Search over the 150,000 customers by name, document, or id. Limit 20.',
   fixed: [
-    '`GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20.',
+    '`GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20, ordered by `last_name`, `first_name`, `customer_id`.',
+    '`GET /agents/search?q=` is the same search over `service_agents`, ordered by `last_name`, `first_name`, `agent_id`.',
     'Backed by indexes on `customers.document_number` and `(last_name, first_name)`.',
     'Any customer in gold can log in. Login does not hardcode the four oracle profiles.',
   ],
   open: [
-    ['New', 'The agent search over the 1,200 agents "works the same" but has no named endpoint.'],
     ['New', 'No file in the tree owns the search query.'],
   ],
   tests: ['Login is not restricted to the four oracle customers.'],
@@ -573,23 +573,25 @@ spec('routers', 'r-login', {
   src: 'ARCHITECTURE.md, "Auth and screens"',
 });
 spec('routers', 'r-agent-session', {
-  name: 'POST /agent/session', tech: 'agent login', status: 'partial',
+  name: 'POST /agent/session', tech: 'agent login', status: 'defined',
   summary: 'Agent login against `service_agents`, by search or at random.',
-  fixed: ['Works like the customer login, against the 1,200 rows of `service_agents`. Claims: `sub` = `agent_id`, `role` = `agent`.'],
-  open: [['New', 'Whether the agent also goes through a one-time code, and the request shape.']],
-  src: 'ARCHITECTURE.md, "Auth and screens"',
+  fixed: [
+    'Same three steps as the customer: `GET /agents/search`, `POST /agent/session/code`, `POST /agent/session`.',
+    'Claims: `sub` = `agent_id`, `role` = `agent`. A customer code does not open an agent session.',
+  ],
+  src: 'ARCHITECTURE.md, "Auth and screens", "HTTP contract"',
 });
 spec('routers', 'r-customer-msg', {
-  name: 'Customer message POST', tech: 'path not named', status: 'partial',
+  name: 'POST /messages', tech: 'customer message', status: 'defined',
   summary: 'Writes `conversation.message_received`. Idempotent on `client_message_id`.',
   fixed: [
-    'Payload: `text`, `client_message_id`. The `customer_id` comes from the JWT. The customer does not send `process_id` or `process_state`.',
+    '`POST /messages` body is `text` and `client_message_id`. The `customer_id` comes from the JWT. The customer does not send `process_id` or `process_state`.',
     'Key `msg:{client_message_id}`. It does not wait for a process. Repeating the POST creates no new event and no new decision.',
+    'The response is the `Case`, sent after the worker finishes the commands enqueued from that event. The handler does not choose an outcome.',
     'In `human_active` the message is stored and the model is not called.',
   ],
-  open: [['New', 'The route path and the response shape.']],
   tests: ['A second POST with the same `client_message_id` creates no event.'],
-  src: 'ARCHITECTURE.md, "Events"',
+  src: 'ARCHITECTURE.md, "Events", "HTTP contract"',
 });
 spec('routers', 'r-agent-close', {
   name: 'POST /agent/case/:id/close', tech: 'agent close', status: 'partial',
@@ -604,19 +606,19 @@ spec('routers', 'r-agent-close', {
   src: 'ARCHITECTURE.md, "Agent close"',
 });
 spec('routers', 'r-reads', {
-  name: 'Read endpoints', tech: 'paths not named', status: 'open',
+  name: 'Read endpoints', tech: 'api-spec/openapi.yaml', status: 'partial',
   summary: 'Products, thread, certificate, queue, handoff packet, trace.',
   fixed: [
-    'The filter `customer_id = jwt.sub` is in every API query.',
-    'The customer API does not list `customer_credit_profile`.',
-    'The agent queue shows processes in `human_active` only. The trace shows the process `events` in order.',
+    '`GET /products`, `GET /case/{process_id}`, `GET /agent/queue`, `GET /agent/case/{process_id}`, `GET /agent/case/{process_id}/trace`. Shapes are in `api-spec/openapi.yaml`.',
+    'The filter `customer_id = jwt.sub` is in every customer query. A `customer_id` query that is not the token sub returns an empty product list.',
+    'The customer API does not list `customer_credit_profile`. The certificate has no score, no limit, and no rate.',
+    'The agent queue shows processes in `human_active` only. The trace shows the process `events` in order, plus the opening message via `caused_by_event_id`.',
   ],
   open: [
-    ['New', 'Paths and response shapes for home products, case thread and certificate, agent queue, agent case, and trace.'],
     ['New', 'The brief asks for "open questions" in the handoff; `PLAN.md` §2 notes that field is not in the contract.'],
   ],
   tests: ['A `products` call with Juan\'s JWT asking for Alicia\'s id returns no rows of Alicia\'s.'],
-  src: 'ARCHITECTURE.md, "Auth and screens", "Database"; PLAN.md §2',
+  src: 'ARCHITECTURE.md, "HTTP contract"; PLAN.md §2',
 });
 
 spec('auth', 'a-code', {
@@ -640,15 +642,15 @@ spec('auth', 'a-jwt', {
   src: 'ARCHITECTURE.md, "Closed stack", "Auth and screens"',
 });
 spec('auth', 'a-session', {
-  name: 'get_session', tech: 'FastAPI dependency', status: 'partial',
+  name: 'get_session', tech: 'FastAPI dependency', status: 'defined',
   summary: 'Gives each handler the id and role from the token.',
   fixed: [
     'The `customer_id` of every query comes from the JWT. Never from chat text or a model argument.',
     'Another customer\'s rows are the JWT filter: a query for another id returns no rows.',
+    'Customer routes (`/products`, `/messages`, `/case/{process_id}`) require `role = customer`. Agent routes (`/agent/queue`, `/agent/case/{process_id}` and its trace and close) require `role = agent`. The other role is 403.',
   ],
-  open: [['New', 'Which routes require `role = agent`. The screen table implies it; no rule states it.']],
   tests: ['Juan\'s session does not return Alicia\'s products.'],
-  src: 'ARCHITECTURE.md, "Contract for implementers", "Known gaps" 11',
+  src: 'ARCHITECTURE.md, "Contract for implementers", "HTTP contract"',
 });
 
 spec('events', 'e-table', {

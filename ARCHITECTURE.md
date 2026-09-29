@@ -78,8 +78,12 @@ Stored in `api/fixtures/oracle_customers.json`. Values read from the file on Sep
 ## File tree
 
 ```
+api-spec/
+  openapi.yaml            # wire contract; generate both clients from this file
+  generate.py
 api/
   main.py                 # FastAPI, routers
+  contract_models.py      # generated from api-spec/openapi.yaml
   settings.py             # env: DATABASE_URL, JWT_SECRET, OPENAI_API_KEY, LLM_MODEL, DEMO_INBOX
   db.py                   # connection
   auth.py                 # one-time code, JWT, get_session dependency
@@ -101,6 +105,8 @@ api/
   fixtures/
     oracle_customers.json # the four profiles and César
 web/
+  src/api/client.ts           # openapi-fetch client, typed by schema.d.ts
+  src/api/schema.d.ts         # generated from api-spec/openapi.yaml
   src/pages/Login.tsx
   src/pages/Home.tsx
   src/pages/Case.tsx          # customer: chat, plus the certificate if it exists
@@ -200,7 +206,7 @@ Closed names. No others are invented in v1.
 
 | `event_name` | When it is written | Minimum payload |
 |---|---|---|
-| `conversation.message_received` | customer POST | `text`, `client_message_id` |
+| `conversation.message_received` | `POST /messages` | `text`, `client_message_id` |
 | `conversation.turn_classified` | `conversation.generate` finished | `intent`, `product`, `language`, `declared_income_amount`, `declared_income_currency`, `reply_text`, `reply_ok`, `reason_code` |
 | `conversation.template_sent` | a non-terminal template was sent | `locale`, `template_id`, `body` |
 | `conversation.agent_closed` | the agent closes the case | `outcome`, `agent_id`, `language` |
@@ -417,9 +423,9 @@ While the client waits for the API after a customer send, the chat shows a typin
 
 ## Auth and screens
 
-Any customer in gold can log in. `GET /customers/search?q=` searches by name, document, or `customer_id` over the 150,000 rows, limit 20. `POST /session/code` takes an existing `customer_id`, or `random=true` to pick one at random. It creates a 6-digit code, valid 10 minutes, in `login_codes`. With `DEMO_INBOX=1` the response includes the code. `POST /session` with the code returns the JWT. Claims: `sub` = `customer_id`, `role` = `customer`, `exp` 15 minutes.
+Any customer in gold can log in. `GET /customers/search?q=` searches by name, document, or `customer_id` over the 150,000 rows, limit 20, ordered by `last_name`, `first_name`, `customer_id`. `POST /session/code` takes an existing `customer_id`, or `random=true` to pick one at random. It creates a 6-digit code, valid 10 minutes, in `login_codes`. With `DEMO_INBOX=1` the response includes the code. Otherwise `code` is null. `POST /session` with the code returns the JWT. Claims: `sub` = `customer_id`, `role` = `customer`, `exp` 15 minutes. The JSON repeats `sub` and `role` next to `token`.
 
-`POST /agent/session` works the same against the 1,200 rows of `service_agents`, by search or at random. Claims: `sub` = `agent_id`, `role` = `agent`.
+Agent login is the same three steps against the 1,200 rows of `service_agents`: `GET /agents/search?q=` (order `last_name`, `first_name`, `agent_id`), `POST /agent/session/code`, `POST /agent/session`. Claims: `sub` = `agent_id`, `role` = `agent`. A customer code does not open an agent session.
 
 Expired JWT: 401. The customer sees that the session ended. It is not silently renewed during the case being shown.
 
@@ -435,6 +441,48 @@ Expired JWT: 401. The customer sees that the session ended. It is not silently r
 A customer whose process is `ended` with `prequalified` or `not_prequalified` sees the certificate. They do not see the queue. The agent does not see `ended` processes in the queue. Juan does not appear in César's queue. Neither does Mariana. Alicia does.
 
 Currency on the home screen: the row's `products.currency` column. For customers in Mexico the file stores those balances in USD. They are not converted to MXN for display. On the certificate, income is shown in local currency with the USD equivalent and the exchange-rate date beside it. Alicia in COP. Mariana in ARS.
+
+## HTTP contract
+
+`api-spec/openapi.yaml` is the wire contract. `python api-spec/generate.py` writes `api/contract_models.py` and `web/src/api/schema.d.ts`. Handlers type requests and responses with the generated models. The web client is `web/src/api/client.ts` (`openapi-fetch` over those types). A hand-written DTO for one of these bodies is a bug. FastAPI does not publish a second OpenAPI document.
+
+Regenerate after every edit to `openapi.yaml`. `api/tests/test_contract.py` fails if the generated files do not carry the spec hash, if a path appears or disappears, or if a live route is missing from the spec or returns a model from anywhere else.
+
+| Method and path | Who | Body in | Body out |
+|---|---|---|---|
+| `GET /health` | public | | `{status: ok}` |
+| `GET /ready` | public | | `{status: ready}` or 503 `{status: not_ready, error}` |
+| `GET /customers/search?q=` | public | | up to 20 `{customer_id, document_number, first_name, last_name, country}` |
+| `POST /session/code` | public | `{customer_id}` or `{random: true}` | customer name and `code` (null unless `DEMO_INBOX=1`) |
+| `POST /session` | public | `{code}` | `{token, sub, role}` |
+| `GET /agents/search?q=` | public | | up to 20 `{agent_id, employee_code, first_name, last_name}` |
+| `POST /agent/session/code` | public | `{agent_id}` or `{random: true}` | agent name, employee code, and `code` |
+| `POST /agent/session` | public | `{code}` | `{token, sub, role}` |
+| `GET /products` | customer | optional `customer_id` query | that customer's products, or `[]` if the query id is not the token `sub` |
+| `POST /messages` | customer | `{text, client_message_id}` | the `Case` after the worker finishes that cycle's commands |
+| `GET /case/{process_id}` | customer | | `Case` for the token's customer. Another customer's id is 404 |
+| `GET /agent/queue` | agent | | processes in `human_active` |
+| `GET /agent/case/{process_id}` | agent | | handoff packet. 404 unless the process is `human_active` |
+| `GET /agent/case/{process_id}/trace` | agent | | events, discriminated on `event_name` |
+| `POST /agent/case/{process_id}/close` | agent | `{outcome}` | ended process. 409 if it was already ended |
+
+A customer token on an agent route is 403. An agent token on a customer route is 403. Expired or missing token is 401. A body that is not in the schema is 422 `invalid_body`.
+
+`GET /products` returns `product_id`, `product_type` (the dataset literal), `product_number`, `currency`, `current_balance`, `product_status`, ordered by `product_id`. It does not return `days_past_due`, `credit_limit`, or `interest_rate`.
+
+`POST /messages` appends `conversation.message_received` and does not choose an outcome. The response waits until the worker has finished the commands enqueued from that event. The same `client_message_id` returns the case again and appends nothing.
+
+`Case.messages` is one list. Customer lines are the `conversation.message_received` events for that process, including the opening message reached only by `process.started.caused_by_event_id` when that event's `process_id` is null. Assistant and template lines are `messages` rows. A row with a null `event_id` is omitted and logged, not attached by time. Order is the linked event's `created_at`, then event `id`.
+
+`Case.certificate` is null until `prequalification.decided` exists. It carries `locale`, `outcome`, `body`, `product`, and the income fields copied from `analysis.completed` facts named `income_local`, `income_currency`, and `income_usd`. `as_of` is the `as_of` of the `income_local` fact. A missing fact is null. The certificate has no credit limit and no rate. It does not include the score or the deciding rule.
+
+The agent queue is ordered by `processes.created_at`, then process id. Each item carries the customer name, `product`, `reason_code` from `conversation.thread_taken`, and `language`.
+
+The packet copies `product`, `credit_score`, the income fields, `deciding_rule`, `policy_version`, and `outcome` from `analysis.completed`. Those fields are null when that event does not exist. `reason_code` comes from `conversation.thread_taken`.
+
+The trace includes events with this `process_id`, plus that one opening message by `caused_by_event_id`. Order is `created_at`, then event `id`. `rule_trace.input` is an open object (`dict[str, Any]` in the generated model): the engine records the condition snapshot, and no matcher branches on it.
+
+`POST /agent/case/{process_id}/close` accepts only `PREQUALIFIED` or `NOT_PREQUALIFIED`. A text field is rejected. A process that is not `human_active` is 404, except one already `ended`, which is 409 and does not append a second `conversation.agent_closed`.
 
 ## Database
 

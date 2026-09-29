@@ -47,6 +47,7 @@ A correct diagnosis plus a patch that skips the owner is a failed fix. The small
 | History | Append to `events`, with `caused_by_event_id` | `UPDATE` a past event, or join two facts by clock time |
 | Decision wording | `api/policy/templates.py` | Model prose |
 | Model call | `api/llm/conversation.py` | Import the OpenAI SDK from policy or UI |
+| HTTP request and response | `api-spec/openapi.yaml`, generated into `api/contract_models.py` and `web/src/api/schema.d.ts` | A hand-written DTO in `api/` or `web/` |
 | Facts the policy reads | `customer_credit_profile` | Recompute score, delinquency, or income on the request |
 | Limit, new rate, delinquency prediction | They do not exist | Invent them because a plan or a chat mentioned them |
 
@@ -232,4 +233,5 @@ The other model does not inherit the chat. The prompt includes these five points
 - Use `None`-as-zero, or zero-as-missing.
 - Put `Date.now()` in an idempotency key.
 - Special-case one `customer_id` inside shared policy.
+- Hand-write a request or response type that `api-spec/openapi.yaml` already defines. Add the field there and regenerate.
 - Ship a test whose `else` branch cannot fail.

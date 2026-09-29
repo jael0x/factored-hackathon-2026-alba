@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { api } from "./api/client";
+
 type HealthState = "loading" | "ok" | "error";
 
 export function App() {
@@ -8,16 +10,19 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/health")
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+    api
+      .GET("/health")
+      .then((result) => {
+        if (cancelled) {
+          return;
         }
-        const body = (await response.json()) as { status?: string };
-        if (!cancelled) {
-          setHealth(body.status === "ok" ? "ok" : "error");
-          setDetail(body.status ?? "");
+        if (result.data) {
+          setHealth("ok");
+          setDetail(result.data.status);
+          return;
         }
+        setHealth("error");
+        setDetail(`HTTP ${result.response.status}`);
       })
       .catch((error: unknown) => {
         if (!cancelled) {

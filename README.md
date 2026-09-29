@@ -47,6 +47,7 @@ pytest
 | `mocks/index.html` | Static screen walkthrough (Spanish UI), not the frontend |
 | `diagrams/c4.html` | Clickable C4 model of the contract, four levels. Level 4 lists, per component, what the contract fixes and what is still open. Open the file in a browser; if it disagrees with `ARCHITECTURE.md`, the contract wins |
 | `specs/` | Gherkin behavior specs, numbered in the order of the customer journey (`01-session-login.feature` to `10-data-load.feature`). They restate the contract as examples; `ARCHITECTURE.md` wins |
+| `api-spec/openapi.yaml` | Wire contract for the API. `python api-spec/generate.py` writes the Python models and the TypeScript types. `ARCHITECTURE.md` wins |
 | `docs/` | Organizer PDFs, local only. Never committed: the data dictionary holds the S3 keys |
 | `data/` | Local CSVs, never committed. `data/raw/` for the loader, `data/sample/` for spot checks |
 

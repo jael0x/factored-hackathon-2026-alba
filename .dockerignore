@@ -4,6 +4,7 @@ data
 **/__pycache__
 **/*.pyc
 web/node_modules
+api-spec/node_modules
 web/dist
 mocks
 docs

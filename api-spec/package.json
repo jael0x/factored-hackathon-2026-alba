@@ -1,0 +1,11 @@
+{
+  "name": "alba-api-spec",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "generate:ts": "openapi-typescript openapi.yaml -o ../web/src/api/schema.d.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.10.1"
+  }
+}

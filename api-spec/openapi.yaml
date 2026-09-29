@@ -1,0 +1,1357 @@
+openapi: 3.0.3
+info:
+  title: Alba API
+  version: "1.0.0"
+  description: >
+    Wire contract for the Alba credit pre-qualification demo.
+    ARCHITECTURE.md decides behavior. This file decides the JSON.
+    api/contract_models.py and web/src/api/schema.d.ts are generated from this file.
+    Do not hand-write a second request or response type.
+
+servers:
+  - url: http://localhost:8000
+    description: API process. The web app calls the same paths under the /api proxy, which strips that prefix.
+
+tags:
+  - name: Ops
+  - name: Session
+  - name: Customer
+  - name: Agent
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Ops]
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: The API process is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /ready:
+    get:
+      tags: [Ops]
+      operationId: getReady
+      security: []
+      responses:
+        "200":
+          description: Postgres answered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyOk"
+        "503":
+          description: Postgres did not answer. error is the exception class name.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyDown"
+
+  /customers/search:
+    get:
+      tags: [Session]
+      operationId: searchCustomers
+      security: []
+      summary: Search the loaded customers by name, document number, or customer_id.
+      description: >
+        At most 20 rows. Order is last_name, first_name, customer_id, ascending.
+        Any customer in gold can be found. The four oracle profiles are not an allowlist.
+      parameters:
+        - $ref: "#/components/parameters/SearchQuery"
+      responses:
+        "200":
+          description: Matching customers.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerSearchResults"
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+
+  /session/code:
+    post:
+      tags: [Session]
+      operationId: issueCustomerCode
+      security: []
+      summary: Issue a 6-digit code for an existing customer, or for one customer picked at random.
+      description: >
+        The code is valid for 10 minutes. When DEMO_INBOX is 1, code is the 6 digits.
+        When DEMO_INBOX is not 1, code is null. A customer_id that is not in customers is not found.
+        Sending both customer_id and random, or neither, is invalid_body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueCustomerCodeRequest"
+      responses:
+        "200":
+          description: A code was stored for one customer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerCodeIssued"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+
+  /session:
+    post:
+      tags: [Session]
+      operationId: openCustomerSession
+      security: []
+      summary: Exchange a customer code for a JWT.
+      description: >
+        Claims inside the token are sub = customer_id, role = customer, exp 15 minutes.
+        The body repeats sub and role so the client can route without decoding the token.
+        A code older than 10 minutes, an unknown code, or a customer_id with no code does not open a session.
+        An expired token on a later call is 401. The session is not renewed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenSessionRequest"
+      responses:
+        "200":
+          description: Customer session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+
+  /agents/search:
+    get:
+      tags: [Session]
+      operationId: searchAgents
+      security: []
+      summary: Search the loaded agents by name, employee code, or agent_id.
+      description: >
+        Same limit and the same steps as customer search, over service_agents.
+        At most 20 rows. Order is last_name, first_name, agent_id, ascending.
+      parameters:
+        - $ref: "#/components/parameters/SearchQuery"
+      responses:
+        "200":
+          description: Matching agents.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSearchResults"
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+
+  /agent/session/code:
+    post:
+      tags: [Session]
+      operationId: issueAgentCode
+      security: []
+      summary: Issue a 6-digit code for an existing agent, or for one agent picked at random.
+      description: >
+        Same rules as POST /session/code, against service_agents.
+        When DEMO_INBOX is 1, code is the 6 digits. Otherwise code is null.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueAgentCodeRequest"
+      responses:
+        "200":
+          description: A code was stored for one agent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentCodeIssued"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+
+  /agent/session:
+    post:
+      tags: [Session]
+      operationId: openAgentSession
+      security: []
+      summary: Exchange an agent code for a JWT.
+      description: >
+        Claims inside the token are sub = agent_id, role = agent, exp 15 minutes.
+        A customer code does not open an agent session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenSessionRequest"
+      responses:
+        "200":
+          description: Agent session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+
+  /products:
+    get:
+      tags: [Customer]
+      operationId: listProducts
+      summary: Products of the customer in the JWT, in the currency stored on the row.
+      description: >
+        Requires role customer. An agent token is forbidden.
+        customer_id is optional. If it is absent, or equal to the token sub, the response is that customer's products.
+        If it is any other id, the response is an empty list. Balances are not converted.
+        Order is product_id ascending.
+        days_past_due, credit_limit, and interest_rate are not on this response.
+      parameters:
+        - name: customer_id
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        "200":
+          description: The session customer's products, or an empty list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /messages:
+    post:
+      tags: [Customer]
+      operationId: sendMessage
+      summary: Append the customer's message and return the case after that cycle's commands finish.
+      description: >
+        Requires role customer. The body is text and client_message_id.
+        The customer does not send process_id or process_state. customer_id comes from the token.
+        The handler appends conversation.message_received. It does not choose an outcome.
+        The response is sent after the worker has finished the commands enqueued from that event.
+        The same client_message_id returns this case again and does not append a second event.
+        The first message of a new case still has a null process_id on the event.
+        The returned case uses the process that cycle opened.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageRequest"
+      responses:
+        "200":
+          description: The case this message belongs to, after the worker finishes that cycle.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+
+  /case/{process_id}:
+    get:
+      tags: [Customer]
+      operationId: getCase
+      summary: The customer's thread and certificate for one process.
+      description: >
+        Requires role customer. The process must belong to the token sub.
+        Another customer's process, or an unknown id, is not found.
+      parameters:
+        - $ref: "#/components/parameters/ProcessId"
+      responses:
+        "200":
+          description: Thread and certificate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /agent/queue:
+    get:
+      tags: [Agent]
+      operationId: listAgentQueue
+      summary: Processes in human_active.
+      description: >
+        Requires role agent. Ended and ai_active processes are not listed.
+        Order is processes.created_at ascending, then process id ascending.
+      responses:
+        "200":
+          description: The review queue.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentQueue"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /agent/case/{process_id}:
+    get:
+      tags: [Agent]
+      operationId: getAgentCase
+      summary: Handoff packet for a process in human_active.
+      description: >
+        Requires role agent. A process that is not human_active is not found.
+        Packet fields that come from analysis.completed are null when that event does not exist
+        (a handoff before the policy ran). There is no text field and no reply body.
+      parameters:
+        - $ref: "#/components/parameters/ProcessId"
+      responses:
+        "200":
+          description: The packet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentCase"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /agent/case/{process_id}/trace:
+    get:
+      tags: [Agent]
+      operationId: getAgentCaseTrace
+      summary: The process events, in the order they were recorded.
+      description: >
+        Requires role agent.
+        Included events are those whose process_id is this process, plus the single event
+        referenced by process.started.caused_by_event_id when that opening message has a null process_id.
+        If that caused_by_event_id is null, the opening message is not attached by time.
+        Order is created_at ascending, then event id ascending.
+      parameters:
+        - $ref: "#/components/parameters/ProcessId"
+      responses:
+        "200":
+          description: Events for this process.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaseTrace"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /agent/case/{process_id}/close:
+    post:
+      tags: [Agent]
+      operationId: closeAgentCase
+      summary: Close a human_active case as pre-qualified or not.
+      description: >
+        Requires role agent. outcome is PREQUALIFIED or NOT_PREQUALIFIED.
+        Any other outcome, or a text field, is invalid_body. There is no reply.
+        The handler appends conversation.agent_closed. It does not run the policy.
+        A second close of the same process is already_closed and does not append another event.
+        A process that is not human_active is not found, except a process already ended, which is already_closed.
+      parameters:
+        - $ref: "#/components/parameters/ProcessId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CloseCaseRequest"
+      responses:
+        "200":
+          description: The case is ended with that outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentCloseResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/AlreadyClosed"
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    SearchQuery:
+      name: q
+      in: query
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    ProcessId:
+      name: process_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Unauthorized:
+      description: Missing token, expired token, or a code that does not open a session.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UnauthorizedError"
+    Forbidden:
+      description: The token role cannot call this route.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ForbiddenError"
+    NotFound:
+      description: No row for this id under the token's scope.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/NotFoundError"
+    AlreadyClosed:
+      description: This process was already ended. The outcome does not change.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AlreadyClosedError"
+    InvalidRequest:
+      description: The body or query does not match the schema.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InvalidRequestError"
+
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    ReadyOk:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ready]
+
+    ReadyDown:
+      type: object
+      additionalProperties: false
+      required: [status, error]
+      properties:
+        status:
+          type: string
+          enum: [not_ready]
+        error:
+          type: string
+          minLength: 1
+          description: Exception class name. Not a customer-facing sentence.
+
+    UnauthorizedError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [unauthorized]
+
+    ForbiddenError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [forbidden]
+
+    NotFoundError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [not_found]
+
+    AlreadyClosedError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [already_closed]
+
+    InvalidRequestError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [invalid_body]
+
+    Role:
+      type: string
+      enum: [customer, agent]
+
+    ProcessState:
+      type: string
+      enum: [ai_active, human_active, ended]
+
+    EndReason:
+      type: string
+      enum: [prequalified, not_prequalified]
+
+    ProductKey:
+      type: string
+      enum: [credit_card, personal_loan]
+
+    TemplateLocale:
+      type: string
+      enum: [es, pt]
+
+    TurnLanguage:
+      type: string
+      enum: [es, pt, other]
+
+    Outcome:
+      type: string
+      enum: [PREQUALIFIED, NOT_PREQUALIFIED, REFER, NEEDS_INFO]
+
+    CloseOutcome:
+      type: string
+      enum: [PREQUALIFIED, NOT_PREQUALIFIED]
+
+    IncomeCurrency:
+      type: string
+      enum: [MXN, COP, ARS]
+
+    ReasonCode:
+      type: string
+      enum:
+        - customer_requested_human
+        - out_of_scope
+        - language_unsupported
+        - model_output_invalid
+        - tool_failed
+        - policy_refer
+        - reply_forbidden
+
+    Intent:
+      type: string
+      enum:
+        - product_info
+        - prequalify_card
+        - prequalify_loan
+        - confirm_prequalify
+        - decline_prequalify
+        - provide_income
+        - human_request
+        - out_of_scope
+        - clarify
+        - chit_chat
+
+    TemplateId:
+      type: string
+      enum: [needs_income, refer_notice, which_product, confirm_prequalify]
+
+    DecidedBy:
+      type: string
+      enum: [policy, agent]
+
+    RuleId:
+      type: string
+      enum: [R01, R02, R03, R04, R05, R06, R09]
+
+    Actor:
+      type: string
+      enum: [customer, agent, system, rule]
+
+    MessageAuthor:
+      type: string
+      enum: [customer, assistant, template]
+
+    PolicyVersion:
+      type: string
+      enum: [alba-credit-v1]
+
+    ProcessKey:
+      type: string
+      enum: [credit_prequalification]
+
+    CustomerSearchHit:
+      type: object
+      additionalProperties: false
+      required: [customer_id, document_number, first_name, last_name, country]
+      properties:
+        customer_id:
+          type: string
+        document_number:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        country:
+          type: string
+
+    CustomerSearchResults:
+      type: object
+      additionalProperties: false
+      required: [customers]
+      properties:
+        customers:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/CustomerSearchHit"
+
+    AgentSearchHit:
+      type: object
+      additionalProperties: false
+      required: [agent_id, employee_code, first_name, last_name]
+      properties:
+        agent_id:
+          type: string
+        employee_code:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+
+    AgentSearchResults:
+      type: object
+      additionalProperties: false
+      required: [agents]
+      properties:
+        agents:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/AgentSearchHit"
+
+    CustomerCodeById:
+      type: object
+      additionalProperties: false
+      required: [customer_id]
+      properties:
+        customer_id:
+          type: string
+          minLength: 1
+
+    CustomerCodeRandom:
+      type: object
+      additionalProperties: false
+      required: [random]
+      properties:
+        random:
+          type: boolean
+          enum: [true]
+
+    IssueCustomerCodeRequest:
+      oneOf:
+        - $ref: "#/components/schemas/CustomerCodeById"
+        - $ref: "#/components/schemas/CustomerCodeRandom"
+
+    AgentCodeById:
+      type: object
+      additionalProperties: false
+      required: [agent_id]
+      properties:
+        agent_id:
+          type: string
+          minLength: 1
+
+    AgentCodeRandom:
+      type: object
+      additionalProperties: false
+      required: [random]
+      properties:
+        random:
+          type: boolean
+          enum: [true]
+
+    IssueAgentCodeRequest:
+      oneOf:
+        - $ref: "#/components/schemas/AgentCodeById"
+        - $ref: "#/components/schemas/AgentCodeRandom"
+
+    CustomerCodeIssued:
+      type: object
+      additionalProperties: false
+      required: [customer_id, first_name, last_name, code]
+      properties:
+        customer_id:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        code:
+          type: string
+          nullable: true
+          pattern: "^[0-9]{6}$"
+          description: The 6-digit code when DEMO_INBOX is 1. Null otherwise.
+
+    AgentCodeIssued:
+      type: object
+      additionalProperties: false
+      required: [agent_id, first_name, last_name, employee_code, code]
+      properties:
+        agent_id:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        employee_code:
+          type: string
+        code:
+          type: string
+          nullable: true
+          pattern: "^[0-9]{6}$"
+
+    OpenSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code:
+          type: string
+          pattern: "^[0-9]{6}$"
+
+    Session:
+      type: object
+      additionalProperties: false
+      required: [token, sub, role]
+      properties:
+        token:
+          type: string
+        sub:
+          type: string
+          description: customer_id or agent_id, the same value as the token sub claim.
+        role:
+          $ref: "#/components/schemas/Role"
+
+    Product:
+      type: object
+      additionalProperties: false
+      required: [product_id, product_type, product_number, currency, current_balance, product_status]
+      properties:
+        product_id:
+          type: string
+        product_type:
+          type: string
+          description: Dataset literal as stored, for example Tarjeta Crédito. Not translated.
+        product_number:
+          type: string
+        currency:
+          type: string
+          description: The products.currency value. Not converted.
+        current_balance:
+          type: number
+        product_status:
+          type: string
+
+    ProductList:
+      type: object
+      additionalProperties: false
+      required: [products]
+      properties:
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+
+    SendMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [text, client_message_id]
+      properties:
+        text:
+          type: string
+          minLength: 1
+        client_message_id:
+          type: string
+          format: uuid
+          description: One id per send. The idempotency key is msg:{client_message_id}.
+
+    ThreadMessage:
+      type: object
+      additionalProperties: false
+      required: [id, author, body, event_id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        author:
+          $ref: "#/components/schemas/MessageAuthor"
+        body:
+          type: string
+        event_id:
+          type: string
+          format: uuid
+
+    Certificate:
+      type: object
+      additionalProperties: false
+      description: >
+        Present only when prequalification.decided exists for this process.
+        Income fields are copied from facts on the analysis.completed for this process
+        (names income_local, income_currency, income_usd). as_of is the as_of of the income_local fact.
+        A missing fact is null. This object has no credit limit and no interest rate.
+      required: [locale, outcome, body, product, income_local, income_currency, income_usd, as_of]
+      properties:
+        locale:
+          $ref: "#/components/schemas/TemplateLocale"
+        outcome:
+          $ref: "#/components/schemas/CloseOutcome"
+        body:
+          type: string
+        product:
+          allOf:
+            - $ref: "#/components/schemas/ProductKey"
+          nullable: true
+        income_local:
+          type: number
+          nullable: true
+        income_currency:
+          allOf:
+            - $ref: "#/components/schemas/IncomeCurrency"
+          nullable: true
+        income_usd:
+          type: number
+          nullable: true
+        as_of:
+          type: string
+          format: date
+          nullable: true
+
+    Case:
+      type: object
+      additionalProperties: false
+      description: >
+        messages is the thread. Customer lines come from conversation.message_received events
+        that belong to the process, including the opening message reached by
+        process.started.caused_by_event_id. Assistant and template lines come from messages rows.
+        A messages row with a null event_id is omitted. Order is the linked event's created_at
+        ascending, then event id ascending. certificate is null until prequalification.decided exists.
+      required: [process_id, state, end_reason, product, language, messages, certificate]
+      properties:
+        process_id:
+          type: string
+          format: uuid
+        state:
+          $ref: "#/components/schemas/ProcessState"
+        end_reason:
+          allOf:
+            - $ref: "#/components/schemas/EndReason"
+          nullable: true
+        product:
+          allOf:
+            - $ref: "#/components/schemas/ProductKey"
+          nullable: true
+        language:
+          allOf:
+            - $ref: "#/components/schemas/TemplateLocale"
+          nullable: true
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ThreadMessage"
+        certificate:
+          allOf:
+            - $ref: "#/components/schemas/Certificate"
+          nullable: true
+
+    AgentQueueItem:
+      type: object
+      additionalProperties: false
+      required: [process_id, customer_id, first_name, last_name, product, reason_code, language]
+      properties:
+        process_id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        product:
+          allOf:
+            - $ref: "#/components/schemas/ProductKey"
+          nullable: true
+        reason_code:
+          $ref: "#/components/schemas/ReasonCode"
+        language:
+          allOf:
+            - $ref: "#/components/schemas/TemplateLocale"
+          nullable: true
+
+    AgentQueue:
+      type: object
+      additionalProperties: false
+      required: [cases]
+      properties:
+        cases:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentQueueItem"
+
+    AgentCase:
+      type: object
+      additionalProperties: false
+      description: >
+        The handoff packet. product, credit_score, the income fields, deciding_rule,
+        policy_version, and outcome are copied from analysis.completed. They are null
+        when that event does not exist. reason_code is copied from conversation.thread_taken.
+      required:
+        - process_id
+        - state
+        - customer_id
+        - first_name
+        - last_name
+        - product
+        - credit_score
+        - income_local
+        - income_currency
+        - income_usd
+        - deciding_rule
+        - policy_version
+        - outcome
+        - reason_code
+        - language
+      properties:
+        process_id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [human_active]
+        customer_id:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        product:
+          allOf:
+            - $ref: "#/components/schemas/ProductKey"
+          nullable: true
+        credit_score:
+          type: number
+          nullable: true
+        income_local:
+          type: number
+          nullable: true
+        income_currency:
+          allOf:
+            - $ref: "#/components/schemas/IncomeCurrency"
+          nullable: true
+        income_usd:
+          type: number
+          nullable: true
+        deciding_rule:
+          allOf:
+            - $ref: "#/components/schemas/RuleId"
+          nullable: true
+        policy_version:
+          allOf:
+            - $ref: "#/components/schemas/PolicyVersion"
+          nullable: true
+        outcome:
+          allOf:
+            - $ref: "#/components/schemas/Outcome"
+          nullable: true
+        reason_code:
+          $ref: "#/components/schemas/ReasonCode"
+        language:
+          allOf:
+            - $ref: "#/components/schemas/TemplateLocale"
+          nullable: true
+
+    CloseCaseRequest:
+      type: object
+      additionalProperties: false
+      required: [outcome]
+      properties:
+        outcome:
+          $ref: "#/components/schemas/CloseOutcome"
+
+    AgentCloseResult:
+      type: object
+      additionalProperties: false
+      required: [process_id, state, end_reason, outcome]
+      properties:
+        process_id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [ended]
+        end_reason:
+          $ref: "#/components/schemas/EndReason"
+        outcome:
+          $ref: "#/components/schemas/CloseOutcome"
+
+    Fact:
+      type: object
+      additionalProperties: false
+      required: [name, value, source, as_of]
+      properties:
+        name:
+          type: string
+        value:
+          nullable: true
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+        source:
+          type: string
+        as_of:
+          type: string
+          format: date
+
+    RuleTraceStep:
+      type: object
+      additionalProperties: false
+      required: [rule_id, input, result]
+      properties:
+        rule_id:
+          $ref: "#/components/schemas/RuleId"
+        input:
+          type: object
+          additionalProperties: true
+          description: Condition snapshot recorded with the step. The trace displays it. No rule matches on it.
+        result:
+          type: string
+
+    TraceEventBase:
+      type: object
+      additionalProperties: false
+      required: [id, created_at, actor, process_id, process_state, caused_by_event_id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        actor:
+          $ref: "#/components/schemas/Actor"
+        process_id:
+          type: string
+          format: uuid
+          nullable: true
+        process_state:
+          $ref: "#/components/schemas/ProcessState"
+        caused_by_event_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    TraceMessageReceived:
+      allOf:
+        - $ref: "#/components/schemas/TraceEventBase"
+        - type: object
+          additionalProperties: false
+          required: [event_name, text, client_message_id]
+          properties:
+            event_name:
+              type: string
+              enum: [conversation.message_received]
+            text:
+              type: string
+            client_message_id:
+              type: string
+              format: uuid
+
+    TraceTurnClassified:
+      allOf:
+        - $ref: "#/components/schemas/TraceEventBase"
+        - type: object
+          additionalProperties: false
+          required:
+            - event_name
+            - intent
+            - product
+            - language
+            - declared_income_amount
+            - declared_income_currency
+            - reply_text
+            - reply_ok
+            - reason_code
+          properties:
+            event_name:
+              type: string
+              enum: [conversation.turn_classified]
+            intent:
+              $ref: "#/components/schemas/Intent"
+            product:
+              allOf:
+                - $ref: "#/components/schemas/ProductKey"
+              nullable: true
+            language:
+              $ref: "#/components/schemas/TurnLanguage"
+            declared_income_amount:
+              type: number
+              nullable: true
+            declared_income_currency:
+              allOf:
+                - $ref: "#/components/schemas/IncomeCurrency"
+              nullable: true
+            reply_text:
+              type: string
+            reply_ok:
+              type: boolean
+            reason_code:
+              allOf:
+                - $ref: "#/components/schemas/ReasonCode"
+              nullable: true
+
+    TraceTemplateSent:
+      allOf:
+        - $ref: "#/components/schemas/TraceEventBase"
+        - type: object
+          additionalProperties: false
+          required: [event_name, locale, template_id, body]
+          properties:
+            event_name:
+              type: string
+              enum: [conversation.template_sent]
+            locale:
+              $ref: "#/components/schemas/TemplateLocale"
+            template_id:
+              $ref: "#/components/schemas/TemplateId"
+            body:
+              type: string
+
+    TraceAgentClosed:
+      allOf:
+        - $ref: "#/components/schemas/TraceEventBase"
+        - type: object
+          additionalProperties: false
+          required: [event_name, outcome, agent_id, language]
+          properties:
+            event_name:
+              type: string
+              enum: [conversation.agent_closed]
+            outcome:
+              $ref: "#/components/schemas/CloseOutcome"
+            agent_id:
+              type: string
+            language:
+              allOf:
+                - $ref: "#/components/schemas/TemplateLocale"
+              nullable: true
+
+    TraceThreadTaken:
+      allOf:
+        - $ref: "#/components/schemas/TraceEventBase"
+        - type: object
+          additionalProperties: false
+          required: [event_name, reason_code, from_state, to_state]
+          properties:
+            event_name:
+              type: string
+              enum: [conversation.thread_taken]
+            reason_code:
+              $ref: "#/components/schemas/ReasonCode"
+            from_state:
+              $ref: "#/components/schemas/ProcessState"
+            to_state:
+              $ref: "#/components/schemas/ProcessState"
+
+    TraceAnalysisCompleted:
+      allOf:
+        - $ref: "#/components/schemas/TraceEventBase"
+        - type: object
+          additionalProperties: false
+          required:
+            - event_name
+            - policy_version
+            - product
+            - outcome
+            - deciding_rule
+            - rule_trace
+            - facts
+            - language
+          properties:
+            event_name:
+              type: string
+              enum: [analysis.completed]
+            policy_version:
+              $ref: "#/components/schemas/PolicyVersion"
+            product:
+              $ref: "#/components/schemas/ProductKey"
+            outcome:
+              $ref: "#/components/schemas/Outcome"
+            deciding_rule:
+              $ref: "#/components/schemas/RuleId"
+            rule_trace:
+              type: array
+              items:
+                $ref: "#/components/schemas/RuleTraceStep"
+            facts:
+              type: array
+              items:
+                $ref: "#/components/schemas/Fact"
+            language:
+              $ref: "#/components/schemas/TemplateLocale"
+
+    TracePrequalificationDecided:
+      allOf:
+        - $ref: "#/components/schemas/TraceEventBase"
+        - type: object
+          additionalProperties: false
+          required: [event_name, locale, outcome, body, decided_by]
+          properties:
+            event_name:
+              type: string
+              enum: [prequalification.decided]
+            locale:
+              $ref: "#/components/schemas/TemplateLocale"
+            outcome:
+              $ref: "#/components/schemas/CloseOutcome"
+            body:
+              type: string
+            decided_by:
+              $ref: "#/components/schemas/DecidedBy"
+
+    TraceProcessStarted:
+      allOf:
+        - $ref: "#/components/schemas/TraceEventBase"
+        - type: object
+          additionalProperties: false
+          required: [event_name, process_key, customer_id]
+          properties:
+            event_name:
+              type: string
+              enum: [process.started]
+            process_key:
+              $ref: "#/components/schemas/ProcessKey"
+            customer_id:
+              type: string
+
+    TraceProcessStateChanged:
+      allOf:
+        - $ref: "#/components/schemas/TraceEventBase"
+        - type: object
+          additionalProperties: false
+          required: [event_name, from_state, to_state, end_reason]
+          properties:
+            event_name:
+              type: string
+              enum: [process.state_changed]
+            from_state:
+              $ref: "#/components/schemas/ProcessState"
+            to_state:
+              $ref: "#/components/schemas/ProcessState"
+            end_reason:
+              allOf:
+                - $ref: "#/components/schemas/EndReason"
+              nullable: true
+
+    TraceProcessEnded:
+      allOf:
+        - $ref: "#/components/schemas/TraceEventBase"
+        - type: object
+          additionalProperties: false
+          required: [event_name, end_reason, policy_version]
+          properties:
+            event_name:
+              type: string
+              enum: [process.ended]
+            end_reason:
+              $ref: "#/components/schemas/EndReason"
+            policy_version:
+              allOf:
+                - $ref: "#/components/schemas/PolicyVersion"
+              nullable: true
+
+    TraceEvent:
+      oneOf:
+        - $ref: "#/components/schemas/TraceMessageReceived"
+        - $ref: "#/components/schemas/TraceTurnClassified"
+        - $ref: "#/components/schemas/TraceTemplateSent"
+        - $ref: "#/components/schemas/TraceAgentClosed"
+        - $ref: "#/components/schemas/TraceThreadTaken"
+        - $ref: "#/components/schemas/TraceAnalysisCompleted"
+        - $ref: "#/components/schemas/TracePrequalificationDecided"
+        - $ref: "#/components/schemas/TraceProcessStarted"
+        - $ref: "#/components/schemas/TraceProcessStateChanged"
+        - $ref: "#/components/schemas/TraceProcessEnded"
+      discriminator:
+        propertyName: event_name
+        mapping:
+          conversation.message_received: "#/components/schemas/TraceMessageReceived"
+          conversation.turn_classified: "#/components/schemas/TraceTurnClassified"
+          conversation.template_sent: "#/components/schemas/TraceTemplateSent"
+          conversation.agent_closed: "#/components/schemas/TraceAgentClosed"
+          conversation.thread_taken: "#/components/schemas/TraceThreadTaken"
+          analysis.completed: "#/components/schemas/TraceAnalysisCompleted"
+          prequalification.decided: "#/components/schemas/TracePrequalificationDecided"
+          process.started: "#/components/schemas/TraceProcessStarted"
+          process.state_changed: "#/components/schemas/TraceProcessStateChanged"
+          process.ended: "#/components/schemas/TraceProcessEnded"
+
+    CaseTrace:
+      type: object
+      additionalProperties: false
+      required: [process_id, events]
+      properties:
+        process_id:
+          type: string
+          format: uuid
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceEvent"
