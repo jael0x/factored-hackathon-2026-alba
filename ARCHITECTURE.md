@@ -304,10 +304,10 @@ Input `profile`, already materialized in `customer_credit_profile`:
 | `income_currency` | MXN if `country = México`, COP if Colombia, ARS if Argentina |
 | `income_usd` | `income_local * exchange_rate` for June 17, 2026, `source_currency` local, `target_currency` USD. Null if income is missing |
 | `max_days_past_due` | max `days_past_due` over active products whose `product_type` is `Tarjeta Crédito`, `Préstamo Personal`, or `Préstamo Hipotecario`. Empty counts as 0 |
-| `holds_product` | an active product of the requested type exists |
+| `holds_product` | the gold boolean of the requested product: `has_active_card` or `has_active_personal_loan`. Cached from `products`. The source stays `products` |
 | `as_of` | `2026-06-17` |
 
-Exchange rates for that day, read from `daily_exchange_rates.csv` (USD per one unit of local currency): 1 MXN = 0.058641 USD, 1 COP = 0.000248 USD, 1 ARS = 0.002873 USD.
+Exchange rates for that day, read from `daily_exchange_rates` (USD per one unit of local currency): 1 MXN = 0.058641 USD, 1 COP = 0.000248 USD, 1 ARS = 0.002873 USD.
 
 Evaluation order. `rule_trace` accumulates. The first rule with a terminal result wins and later rules are not evaluated.
 
@@ -412,16 +412,48 @@ Currency on the home screen: the row's `products.currency` column. For customers
 
 ## Database
 
-`db/migrations/001_init.sql` creates:
+PostgreSQL 16. `load` is the only process that reads S3. The API and `policy.run` read Postgres.
 
-- `events`, `processes`, `commands`, `login_codes`, `llm_turns`, `messages`, `customer_credit_profile`, `load_batches`
+`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`.
+
+### Read tables
+
+Copied from the four CSVs. Other columns in the data dictionary are not copied.
+
+| Table | Columns |
+|---|---|
+| `customers` | `customer_id`, `document_number`, `first_name`, `last_name`, `country`, `segment`, `credit_score`, `estimated_monthly_income`, `customer_status` |
+| `products` | `product_id`, `customer_id`, `product_type`, `product_number`, `currency`, `current_balance`, `product_status`, `days_past_due` |
+| `daily_exchange_rates` | `date`, `source_currency`, `target_currency`, `exchange_rate` |
+| `service_agents` | `agent_id`, `employee_code`, `first_name`, `last_name` |
+
+### Gold
+
+`customer_credit_profile` is one row per `customer_id`. Columns: the policy inputs, plus `country`, `segment`, `first_name`, `last_name`, `as_of`, `batch_id`, `has_active_card`, `has_active_personal_loan`.
+
+Those two booleans are a cache of `products` for the two products in this version. `holds_product` at decide time is the boolean of the requested product. The source stays `products`. A new product type is computed from `products`. It does not add another boolean.
+
+The customer API does not list this table. `policy.run` reads one row, the one for the event's `customer_id`.
+
+### Cycle
+
+- `events`, `processes`, `commands`, `login_codes`, `llm_turns`, `messages`. Column lists for `events` and `commands` are in those sections.
 - `processes` also holds `product` and `language`, null until a turn sets them
 - `messages`: `id`, `process_id`, `author` (`customer` | `assistant` | `template`), `body`, `event_id`
 - `llm_turns`: `id`, `process_id`, `command_id`, `request jsonb`, `raw_response text`, `parsed jsonb`, `parse_ok bool`, `model text`, `input_tokens int`, `output_tokens int`, `latency_ms int`, `created_at`
-- a partial unique index on `processes (customer_id, process_key) where state <> 'ended'`
-- the filter `customer_id = jwt.sub` is in every API query. A test calls `products` with Juan's JWT and asks for Alicia's id: the response carries no rows of Alicia's
+- `login_codes`: the 6-digit code, the customer or agent it belongs to, and the 10-minute expiry
+- `load_batches`: `path`, `bytes`, `sha256` of each file on disk
 
-`customer_credit_profile` is the gold projection. One row per `customer_id`. Columns: the policy inputs, plus `country`, `segment`, `first_name`, `last_name`, `as_of`, `batch_id`. The customer API does not list this table. `policy.run` reads one row, the one for the event's `customer_id`.
+### Indexes
+
+- `customers`: primary key `customer_id`, index on `document_number`, index on `(last_name, first_name)`
+- `products (customer_id)`
+- `customer_credit_profile`: primary key `customer_id`
+- `commands (status)` where `status = 'pending'`
+- `events (process_id, created_at)`
+- a partial unique index on `processes (customer_id, process_key) where state <> 'ended'`
+
+The filter `customer_id = jwt.sub` is in every API query. A test calls `products` with Juan's JWT and asks for Alicia's id: the response carries no rows of Alicia's.
 
 Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` excludes. S3 keys and the OpenAI key live only in `.env` (or the deploy host's secrets): never in the repo, the image, or the prompt.
 
@@ -438,14 +470,14 @@ Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` exclude
 
 Who runs it: the team, locally and on the deploy host. Reviewers use the deployed link and read the repo; they are not expected to run the stack themselves. If a reviewer does need to run it, the team provides the keys.
 
-With a `.env` holding `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION=us-east-2`, `S3_BUCKET`, `OPENAI_API_KEY`, and `JWT_SECRET`, `docker compose up` needs no other command. `.env.example` lists the same names with empty values. `load` copies only these objects from the bucket, prefix `data/`:
+With a `.env` holding `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION=us-east-2`, `S3_BUCKET`, `OPENAI_API_KEY`, and `JWT_SECRET`, `docker compose up` needs no other command. `.env.example` lists the same names with empty values. `load` uses the AWS CLI and runs `aws s3 cp` for these four keys, prefix `data/`:
 
 - `customers.csv`
 - `products.csv`
 - `daily_exchange_rates.csv`
 - `service_agents.csv`
 
-It does not download transactions, transcripts, digital events, or anything else. Those do not feed login or the policy. If `data/raw/` already has the four files, it does not download them again.
+It does not list the bucket. It does not download transactions, transcripts, digital events, or anything else. Those do not feed login or the policy. The API does not call S3. If `data/raw/` already has the four files, it does not download them again. The `sha256` is of the file on disk. If `load_batches` already holds that hash, the file is not copied into Postgres again.
 
 Without the AWS variables and without the CSVs, `load` exits with an error that says what is missing. It does not start an empty demo or one with the four profiles made up.
 
@@ -481,9 +513,9 @@ The load report writes counts: rows read, null scores, null incomes, active prod
 
 ## Pipeline
 
-1. Bronze: the CSV in `data/raw/`, plus a manifest `{path, bytes, sha256}` in `load_batches`.
-2. Silver, inside Postgres: types, empty `days_past_due` as null, currency copied, product names untranslated.
-3. Gold: `customer_credit_profile`, one row for each of the 150,000 customers, with the maximum days past due and the active-product booleans.
+1. Bronze: `aws s3 cp` into `data/raw/`, plus a manifest `{path, bytes, sha256}` in `load_batches`.
+2. Silver, inside Postgres: the four read tables, only the columns listed above. Types, empty `days_past_due` as null, currency copied, product names untranslated.
+3. Gold: `customer_credit_profile`, one row for each of the 150,000 customers, with the maximum days past due and `has_active_card`, `has_active_personal_loan`.
 
 No model is trained on the transcripts. They are templates. They do not feed the policy or the prompt. `load` does not download them.
 

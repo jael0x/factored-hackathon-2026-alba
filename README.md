@@ -1,6 +1,6 @@
 # Alba: credit pre-qualification assistant
 
-Alba is a customer-service demo for the synthetic LATAM bank of the Factored AI & Data Hackathon 2026. A customer asks about a credit card or a personal loan. A versioned policy decides. The language model only converses and asks for what is missing. When a case is borderline, lacks data, or is out of scope, the thread goes to a person and the model stops talking.
+Alba is a customer-service demo for the synthetic LATAM bank of the Factored AI & Data Hackathon 2026. A customer asks about a credit card or a personal loan. A versioned policy decides. The language model only classifies the sentence and drafts a clarification. If income is missing, the case stays with the assistant and asks for it. If the case is borderline, the score is missing, or it is out of scope, the thread goes to a person. That person does not chat: they choose pre-qualified or not, and a template tells the customer.
 
 It is not a production bank and it moves no money. "Alba" is the name of this interface. Customers, products, scores, incomes, and agents come from the organizer dataset, snapshot of June 17, 2026.
 
@@ -35,22 +35,23 @@ Any of the 150,000 customers can log in, and any of the 1,200 agents. These four
 | Person | What happens | Why |
 |---|---|---|
 | Juan Alberto Romero González, Querétaro | Pre-qualifies (simulated) | Score 812, income on file, mortgage current, no active card. Rule R05 |
-| Juliana Castro Gómez, Ciudad de México | No decision yet | Monthly income is empty. Rule R06. If she declares it, the case goes to review |
+| Juliana Castro Gómez, Ciudad de México | No decision until she states her income | Monthly income is empty. Rule R06. She stays `ai_active`. If she states an amount, that amount is this run's income and R05 pre-qualifies her (score 714). She does not go to the queue |
 | Alicia Mariana Parra Álvarez, Cali | A specialist takes it | Score 615, review band 580-619. Rule R05. The process becomes `human_active` |
 | Mariana Mónica Acosta Rojas, Rosario | Does not pre-qualify | Card ••••5476 is 180 days past due. Rule R02. Her score of 515 is never reached |
 
-César González Sánchez (employee E75612, specialty Créditos) sees only the review queue. The case file carries the request, the facts with their source column, the deciding rule, and the open question. Full profiles are in `ARCHITECTURE.md` under "Oracle fixtures".
+César González Sánchez (employee E75612, specialty Créditos) sees only the review queue. He does not reply in the thread. His only action is to close the case as pre-qualified or not. The packet carries the request, the score, the income, and the deciding rule. Full profiles are in `ARCHITECTURE.md`.
 
 The policy is `alba-credit-v1`. It is synthetic, because the dataset ships no credit manual, and the certificate says so. It shows no credit limit.
 
 | Rule | When | Result |
 |---|---|---|
-| R01 | Customer not active | Review, or not eligible if closed |
+| R01 | Suspended or inactive | Review |
+| R01 | Closed | Does not pre-qualify |
 | R02 | A credit product 30+ days past due | Does not pre-qualify |
 | R03 | A credit product 1-29 days past due | Review |
 | R09 | Already holds the requested product | Review. A limit increase is not this workflow |
 | R04 | No credit score | Review |
-| R06 | No income | Ask for it. A self-declared income goes to review |
+| R06 | No income on file | Ask for it. A typed amount is this run's income and evaluation continues. If the file already has income, the file wins |
 | R05 | Score below 580 / 580-619 / 620 or more | Does not pre-qualify / review / pre-qualifies |
 
 Mortgages, investments, transaction disputes, and a third party's balance are out of scope. They are clarified or escalated, not handled as a second product.
@@ -114,6 +115,6 @@ s3ls() {   # s3ls <prefix>: XML, max 1000 keys; page with &continuation-token=..
 mkdir -p data/raw && s3get "data/customers.csv" data/raw/customers.csv
 ```
 
-The loader in `ARCHITECTURE.md` reads four files from `data/raw/`: `customers.csv`, `products.csv`, `daily_exchange_rates.csv`, `service_agents.csv`. `data/sample/` currently holds three partitions used for spot checks: `call_center_interactions_20260601.csv`, `call_transcripts_20250315.csv`, `call_transcripts_20260601.csv`.
+The running stack does not use the curl helper above. `load` runs `aws s3 cp` for four keys under `data/` — `customers.csv`, `products.csv`, `daily_exchange_rates.csv`, `service_agents.csv` — into `data/raw/`, then into Postgres. The API does not call S3. `data/sample/` currently holds three partitions used for spot checks: `call_center_interactions_20260601.csv`, `call_transcripts_20250315.csv`, `call_transcripts_20260601.csv`.
 
 Data findings and their samples are in `PLAN.md` §4.

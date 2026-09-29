@@ -259,7 +259,7 @@
         </div>
         <div class="bubble">
           <div class="kicker">Alba · regla R06</div>
-          No tengo tu ingreso mensual. Si lo declaras ahora, el caso pasa a una persona para verificarlo. No lo tomo como un sí.
+          Plantilla needs_income. El texto todavía no está escrito. Si declara un monto, ese monto es el ingreso de esta corrida y la evaluación sigue. No pasa a César.
         </div>
       </div>
       <span class="tag wait">Sin decisión · ai_active</span>
@@ -317,7 +317,7 @@
     <div class="app">
       <div class="mark">Expediente · Alicia Mariana Parra Álvarez</div>
       <h2>Lo que César recibe</h2>
-      <p class="lede">César responde en este hilo. El asistente ya no escribe.</p>
+      <p class="lede">César no escribe en el hilo. Elige precalificar o no. El asistente ya no escribe.</p>
       <div class="split">
         <div class="thread">
           <div class="bubble me">
@@ -326,9 +326,10 @@
           </div>
           <div class="bubble">
             <div class="kicker">Alba</div>
-            Tu score está en la banda de revisión. Un especialista continúa este caso.
+            Una persona va a revisar este caso.
           </div>
-          <div class="field">Responder como César</div>
+          <div class="field">Precalificar</div>
+          <div class="field">No precalificar</div>
         </div>
         <article class="doc">
           <div class="kicker">Paquete</div>
@@ -341,7 +342,7 @@
           <div class="kv"><span>Regla</span><span>R05 · REFER</span></div>
           <div class="kv"><span>Política</span><span>alba-credit-v1</span></div>
           <h3>Pregunta abierta</h3>
-          <p class="note">El score está a 5 puntos de la banda que precalifica. César confirma si sigue o se cierra. El modelo no sube el score ni aprueba el cupo.</p>
+          <p class="note">César no conversa. Elige precalificar o no precalificar. El modelo no sube el score ni aprueba el cupo.</p>
         </article>
       </div>
     </div>
@@ -359,13 +360,18 @@
         <tbody>
           <tr>
             <td><code>conversation.message_received</code></td>
-            <td>Sesión CLI-9EDEKZ8OUNUR. Texto: quiero una tarjeta de crédito. Sin proceso abierto.</td>
-            <td>open_process. No relee el cliente en vivo.</td>
+            <td>Sesión CLI-9EDEKZ8OUNUR. Texto: quiero una tarjeta de crédito. <code>process_id</code> null, estado ai_active.</td>
+            <td>open_process. La fila del mensaje no se reescribe.</td>
           </tr>
           <tr>
             <td><code>process.started</code></td>
             <td>credit_prequalification en ai_active.</td>
-            <td>El modelo clasifica la frase: prequalify_card.</td>
+            <td>conversation.generate clasifica la frase.</td>
+          </tr>
+          <tr>
+            <td><code>conversation.turn_classified</code></td>
+            <td>prequalify_card. Lleva el id del proceso que este ciclo acaba de abrir.</td>
+            <td>run_policy. El modelo no decide.</td>
           </tr>
           <tr>
             <td><code>analysis.completed</code></td>
@@ -379,7 +385,7 @@
           </tr>
           <tr>
             <td><code>process.ended</code></td>
-            <td>ai_active → ended, prequalified. Lo cierra la regla, no una frase.</td>
+            <td>También process.state_changed. ai_active → ended, prequalified. Lo cierra la regla, no una frase.</td>
             <td>Un segundo clic usa la misma llave y no decide otra vez.</td>
           </tr>
         </tbody>
