@@ -18,10 +18,12 @@ Use the deployed link (added once the host is chosen, `PLAN.md` D2) and read thi
 |---|---|
 | `ARCHITECTURE.md` | The build contract: process, events, rules, commands, policy, model call, auth, database, Docker. It wins over every other file |
 | `AGENTS.md` | The coding standard for every author and model |
+| `DESIGN.md` | How the web app, the mock, and the C4 page look and move: tokens, type, components, motion, accessibility. The contract wins over it |
 | `PLAN.md` | Hackathon requirements, data evidence, open decisions, research backlog, evaluation design, schedule |
 | `CLAUDE.md` | Entry instructions for Claude Code sessions |
 | `mocks/index.html` | Static screen walkthrough (Spanish UI), not the frontend |
 | `diagrams/c4.html` | Clickable C4 model of the contract, four levels. Level 4 lists, per component, what the contract fixes and what is still open. Open the file in a browser; if it disagrees with `ARCHITECTURE.md`, the contract wins |
+| `specs/` | Gherkin behavior specs, numbered in the order of the customer journey (`01-session-login.feature` to `09-data-load.feature`). They restate the contract as examples; `ARCHITECTURE.md` wins |
 | `docs/` | Organizer PDFs, local only. Never committed: the data dictionary holds the S3 keys |
 | `data/` | Local CSVs, never committed. `data/raw/` for the loader, `data/sample/` for spot checks |
 
