@@ -6,7 +6,8 @@ Feature: Handoff to an agent
   Scenario: A review-band score is referred to a person
     Given Alicia Mariana Parra Álvarez has a credit score of 615 and income on file
     And she holds no active credit card
-    When Alicia writes "quiero una tarjeta de crédito"
+    And the assistant asked Alicia whether to start the pre-qualification for a credit card
+    When Alicia writes "sí"
     Then her case enters the review queue with reason "policy_refer"
 
   Scenario: The referral notice tells the customer a person will review
