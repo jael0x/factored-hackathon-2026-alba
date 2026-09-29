@@ -2,7 +2,7 @@
 
 Status on Tue Sep 29, 2026: **build phase.** The compose load path is merged (PR #1): Postgres, the one-shot `load` (bronze, silver, gold, quality checks, lineage), API health checks, and a placeholder web app. Login, conversation, policy, and agent screens are not built yet.
 
-`ARCHITECTURE.md` is the contract. This file tracks what the brief asks for, what the data shows, what is still open, and when each piece happens. Where this file and the contract disagree, the contract wins and the disagreement is an open decision in §5. A closed decision is written into `ARCHITECTURE.md` in the same change, and its entry here moves to the decision log (§10).
+`ARCHITECTURE.md` is the contract. This file tracks what the brief asks for, what the data shows, what is still open, and when each piece happens. `IMPLEMENTATION.md` holds the build order: what gets built, in which order, and which scenarios in `specs/` each item turns green. Where this file and the contract disagree, the contract wins and the disagreement is an open decision in §5. A closed decision is written into `ARCHITECTURE.md` in the same change, and its entry here moves to the decision log (§10).
 
 Sources: the organizer PDFs in `docs/` (problem statement, kickoff deck, dataset summary, data dictionary; local only, never committed) and profiling of the S3 bucket on Sep 27-28. Every data number says which sample it comes from.
 
@@ -62,7 +62,7 @@ Source: the problem statement PDF. "Status" says whether `ARCHITECTURE.md` answe
 | 3. What it answers, what needs confirmation, when it abstains or transfers | rules table, transitions, `out_of_scope`, soft consent before `policy.run` (D8) | Covered, except an income typed before consent runs the policy (D14) |
 | 3. Permissions and policy enforced outside model prose | JWT `customer_id`, pure policy, templates | Covered |
 | 3. Handoff with request, verified facts, actions taken, evidence, open questions | packet read from `analysis.completed`: request, score, income, deciding rule. The agent does not chat | Partial: a separate "open questions" field is not in the contract, and handoffs other than `REFER` have no packet (D15) |
-| 4. Repeatable prep with contracts, quality checks, lineage, update/freshness policy | `load` checks, `load_batches` sha256, update fixture (D5). No policy freshness rule | Covered for the static snapshot |
+| 4. Repeatable prep with contracts, quality checks, lineage, update/freshness policy | `load` checks, `load_batches` sha256, update fixture (D5). No policy freshness rule | Covered for the static snapshot. Built Sep 29; two load gaps are items in `IMPLEMENTATION.md` |
 | 4. At least one learned component against a baseline; valid labels, no leakage, justified splits | `ConversationTurn` vs B0 keyword baseline (D3) | Covered in design; harness is D7 |
 | 5. Held-out eval incl. bad or missing data, expired sessions, unauthorized access, prompt injection, tool failures, multilingual ambiguity; report success, unsafe outcomes, handoffs, latency, cost, sample sizes | `eval/` "comes later" | Open (D7); design carried in §7 |
 | 6. Tracing, bounded retries, safe fallback, reproducible setup | events and trace screen, 3 attempts, fallback to `human_active`, `docker compose up` with a documented `.env` | Covered in design. The reproducible setup is built (Sep 29) |
@@ -82,7 +82,7 @@ Not required by the brief: training a new model, multiple agents, a tool-count t
 
 ## 3. Team and working agreements
 
-- Two people, both generalists, full-time until Oct 5. Work is split by component: **A** owns the system (API, worker, policy, frontend, deploy), **B** owns data and evaluation (pipeline, research items, eval harness, analysis).
+- Two people, both generalists, full-time until Oct 5. There are no fixed owners: whoever is free pulls the next unblocked item from one of three tracks in `IMPLEMENTATION.md` (Engine; Model and eval; Web). The A/B split was dropped on Sep 29 (§10).
 - Nobody on the team is fluent in Portuguese. PT copy and PT test data are team-written or machine-generated and disclosed as a limitation.
 - Decisions listed in §5 are asked, not assumed. The answer goes into `ARCHITECTURE.md`.
 - Docs follow the "Writing docs" rules in `AGENTS.md`.
@@ -237,19 +237,20 @@ About 300 held-out cases built from real customer profiles, stratified by policy
 - **LLM judge:** only for tone, clarity, and language correctness, with a written rubric validated on 60 items labeled by both of us (report agreement). Correctness is checked deterministically.
 - Offline results, simulations, and projected savings are labeled as such and kept apart.
 
-## 8. Schedule (proposed Sep 28; confirm)
+## 8. Schedule (updated Sep 29)
 
-The Sep 27 day-by-day assumed the old stack. The dates that were fixed then are kept: feature freeze Fri Oct 2 night, pairing Sat and Sun, submission by midday Mon Oct 5.
+The dates fixed on Sep 27 are kept: feature freeze Fri Oct 2 night, pairing Sat and Sun, submission by midday Mon Oct 5. Each day ends at a milestone of `IMPLEMENTATION.md`; the items behind each milestone are listed there.
 
-| Days | A (system) | B (data and eval) |
+| Day | Target by that night | Status |
 |---|---|---|
-| Mon Sep 28 - Tue Sep 29 | Definition: D2, D8, D9, D3–D6 closed into `ARCHITECTURE.md`. Repo skeleton, compose with Postgres | Research R1-R12 (R8, R9, R11 first). Start the data-quality report |
-| Wed Sep 30 | Migrations, events, rules (incl. consent), worker, policy engine with unit tests (oracle test green) | Pipeline bronze, silver, gold; load checks per D5; eval labels and splits per D3 |
-| Thu Oct 1 | Model adapter, templates ES and PT (incl. `confirm_prequalify`), auth and login codes | Eval harness, scenario generator, B0 and B1 |
-| Fri Oct 2 | Frontend screens from the mock (typing indicator while waiting); ops path docs per D2. **Feature freeze at night** | First full eval run, error analysis, ranked fix list |
-| Sat Oct 3 | **Pair:** fix top failures, repeated runs, model comparison per D1 | **Pair:** language and segment breakdowns, latency and cost tables, judge validation |
-| Sun Oct 4 | **Pair:** README, docs, limitations, video | **Pair:** slides; numbers locked from a tagged commit |
-| Mon Oct 5 | Buffer. Submit by midday | Buffer |
+| Mon Sep 28 | Definition: D2 to D6 and D8 to D10 closed into `ARCHITECTURE.md`. C4 page and `specs/` drafted | Done |
+| Tue Sep 29 | Compose load path: migrations, bronze, silver, gold, load checks per D5 (planned for Wed). Spec review, D12 to D16 logged, `IMPLEMENTATION.md` | Done |
+| Wed Sep 30 | Milestone 1: interfaces agreed. D12 to D16 decided. Policy engine and event loop decide the four oracle cases in pytest with injected turns. R8, R9, R11 done | |
+| Thu Oct 1 | Milestone 2: model adapter live, auth and every route, templates ES and PT, web screens on fixture JSON, held-out set frozen, B0 | |
+| Fri Oct 2 | Milestone 3: web on the real API, the four oracle flows in the browser, first full eval run, ops path docs per D2. **Feature freeze at night** | |
+| Sat Oct 3 | **Pair:** fix top failures, repeated runs, model comparison per D1, language and segment breakdowns, latency and cost tables, judge validation | |
+| Sun Oct 4 | **Pair:** README, docs, limitations, video, slides; numbers locked from a tagged commit | |
+| Mon Oct 5 | Buffer. Submit by midday | |
 
 Cut list if behind, in order: model comparison, LLM judge, B0, PT templates for rarer intents, trace screen. Never cut: policy enforcement outside the model, held-out eval with unsafe-outcome counts, the handoff packet, the data-quality report.
 
@@ -290,4 +291,5 @@ Cut list if behind, in order: model comparison, LLM judge, B0, PT templates for 
 | Sep 28 (evening) | Soft consent before first `policy.run`: template `confirm_prequalify`; intents `confirm_prequalify` / `decline_prequalify` (D8) | Brief requires naming what needs confirmation; only action in-scope is simulated pre-qualification |
 | Sep 28 (evening) | Prompt-injection defense is structural only; measured in eval (D9) | Keeps permissions outside the model; classifier would be cut-list work |
 | Sep 28 (evening) | Learned component: `ConversationTurn` vs B0 keywords (D3). Risk estimate: dataset `credit_score` (D4). Load checks + update fixture (D5). PT: model `language` + team/MT copy disclosed (D6) | Closes definition items for Mon-Tue |
+| Sep 29 | Work is pulled from three tracks in `IMPLEMENTATION.md` (Engine; Model and eval; Web) with no fixed owners. Replaces the A/B split | Team decision. With the load path done, B waited on the system while A held the policy, the loop, the model, auth, and all six screens, and the web app waited on the backend |
 | Sep 29 | The contract holes found by the spec review are logged as D12 to D16, not closed | Team decision. Each is decided before the items it blocks |

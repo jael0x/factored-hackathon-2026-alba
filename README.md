@@ -42,6 +42,7 @@ pytest
 | `AGENTS.md` | The coding standard for every author and model |
 | `DESIGN.md` | How the web app, the mock, and the C4 page look and move: tokens, type, components, motion, accessibility. The contract wins over it |
 | `PLAN.md` | Hackathon requirements, data evidence, open decisions, research backlog, evaluation design, schedule |
+| `IMPLEMENTATION.md` | Build order: interfaces first, then three tracks (Engine, Model and eval, Web) pulled by whoever is free, with the spec scenarios each item turns green |
 | `CLAUDE.md` | Entry instructions for Claude Code sessions |
 | `mocks/index.html` | Static screen walkthrough (Spanish UI), not the frontend |
 | `diagrams/c4.html` | Clickable C4 model of the contract, four levels. Level 4 lists, per component, what the contract fixes and what is still open. Open the file in a browser; if it disagrees with `ARCHITECTURE.md`, the contract wins |
