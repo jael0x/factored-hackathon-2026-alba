@@ -200,7 +200,7 @@
   <footer class="intro">
     <div class="mark">Alba · credit pre-qualification</div>
     <h1>C4 model</h1>
-    <p class="lede">A clickable view of <code>ARCHITECTURE.md</code> as of Sep 28, 2026, after the thirteen known gaps were closed. Click any system, container, or component to open the level below it; the side tree shows every sub level. Level 4 lists the specs each component needs: what the contract already fixes and what the definition phase still has to decide. If this page and <code>ARCHITECTURE.md</code> disagree, the contract wins.</p>
+    <p class="lede">A clickable view of <code>ARCHITECTURE.md</code> as of Sep 28, 2026, after the known gaps and decisions D2 to D6, D8, and D9 were closed. Click any system, container, or component to open the level below it; the side tree shows every sub level. Level 4 lists the specs each component needs: what the contract already fixes and what the definition phase still has to decide. If this page and <code>ARCHITECTURE.md</code> disagree, the contract wins.</p>
   </footer>
   <dialog id="dlg">
     <div class="dlg-head"><strong>Open spec items</strong><button class="tool" id="dlg-close">Close</button></div>
@@ -215,14 +215,7 @@ const view = (id, o) => { V[id] = o; };
 /*DATA-START*/
 const REF_TITLES = {
   D1: 'Model choice evidence and cost',
-  D2: 'Deployment target',
-  D3: 'The evaluated learned component',
-  D4: 'Risk-estimate layer',
-  D5: 'Data engineering scope',
-  D6: 'Portuguese coverage',
   D7: 'Evaluation harness and baselines',
-  D8: 'Confirmation step',
-  D9: 'Prompt-injection defense',
   D11: 'Customer text sent to OpenAI',
   R2: 'data_backup_20260831/ vs data/',
   R7: 'FX sanity check',
@@ -249,7 +242,7 @@ node('customer', {
   summary: 'Any of the 150,000 rows of `customers.csv`. Asks about a credit card or a personal loan.',
   desc: [
     'Any row of `customers.csv` can open a session. The four oracle profiles are the test oracle, not an allowlist.',
-    'Asks about a credit card or a personal loan and gets a certificate (`constancia`): pre-qualifies, does not pre-qualify, or goes to a person. Sees only their own products. Can be asked two things only: which product, and monthly income when the file has none.',
+    'Asks about a credit card or a personal loan and gets a certificate (`constancia`): pre-qualifies, does not pre-qualify, or goes to a person. Sees only their own products. Can be asked three things only: which product, whether to start the pre-qualification, and monthly income when the file has none.',
   ],
   fixed: [
     'Juan `CLI-9EDEKZ8OUNUR`: `PREQUALIFIED`, R05, score 812.',
@@ -280,19 +273,16 @@ node('alba', {
   parent: 'context', kind: 'system', name: 'Alba', tech: 'credit pre-qualification assistant',
   summary: 'A versioned policy decides. The model only classifies the sentence and drafts a clarification.',
   desc: [
-    'A web service for the synthetic LATAM bank of the hackathon. If the request names no product, the assistant asks which one. If income is missing, it asks for it and the case stays with the assistant. If the data is enough, the policy `alba-credit-v1` decides and a template writes the certificate. A borderline score, a missing score, or an out-of-scope request goes to a person, who closes it as pre-qualified or not.',
-    'It is not a production bank and moves no money. Reviewers use the deployed link and read the repo; they are not expected to run the stack.',
+    'A web service for the synthetic LATAM bank of the hackathon. If the request names no product, the assistant asks which one. Once the product is known, it asks for consent before the policy runs. If income is missing, it asks for it and the case stays with the assistant. If the data is enough, the policy `alba-credit-v1` decides and a template writes the certificate. A borderline score, a missing score, or an out-of-scope request goes to a person, who closes it as pre-qualified or not.',
+    'It is not a production bank and moves no money. Reviewers run it with `docker compose up` and open it in the browser. There is no cloud deploy for the submission.',
   ],
   fixed: [
     'One process, `credit_prequalification`, with the states `ai_active`, `human_active`, `ended`.',
     'Four outcomes: `PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, `NEEDS_INFO`. End reasons: `prequalified`, `not_prequalified`.',
     'No credit limit, no rate for the new product, no delinquency prediction.',
-    'The same `docker compose` stack runs locally and on the deploy host, Postgres included.',
-  ],
-  open: [
-    ['D2', 'The deploy host, and whether the public deploy runs with `DEMO_INBOX=1`.'],
-    ['D8', 'Whether `policy.run` needs explicit customer consent first.'],
-    ['D4', 'Whether `credit_score` is presented as the external risk estimate, or a separate risk service exists.'],
+    'One `docker compose` stack with Postgres inside. No cloud deploy for the submission; the local demo runs with `DEMO_INBOX=1` (D2).',
+    'The only action that needs the customer\'s consent is starting the simulated pre-qualification (D8). No money moves and no account changes.',
+    'Conversation, risk estimate, and eligibility stay separate. The risk estimate is the dataset\'s `credit_score` (D4).',
   ],
   src: 'ARCHITECTURE.md, "Contract for implementers", "Process", "Closed stack", "Docker"',
 });
@@ -306,7 +296,7 @@ node('openai', {
   ],
   fixed: [
     'What leaves the service: the message text, the process state, four booleans (`income_on_file`, `score_on_file`, `has_active_card`, `has_active_personal_loan`), and the two-product catalog.',
-    '`OPENAI_API_KEY` lives in `.env` and in the host secrets. Never in git, the image, a log, or a prompt.',
+    '`OPENAI_API_KEY` lives in `.env`. Never in git, the image, a log, or a prompt.',
     'A failed call is a failed command attempt. After 3, `human_active` with `tool_failed`. No silent fallback model.',
   ],
   src: 'ARCHITECTURE.md, "How the model is called"',
@@ -362,7 +352,7 @@ node('postgres', {
   noun: 'table groups',
   summary: 'Read tables, the gold profile, and the cycle tables: events, processes, commands.',
   desc: [
-    'A service of the same compose stack, locally and on the deploy host. No managed database. `db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`.',
+    'A service of the same compose stack. No managed database. `db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`.',
     'The volume keeps gold. Deleting the volume reloads.',
   ],
   files: ['db/migrations/001_init.sql'],
@@ -402,7 +392,7 @@ node('eval', {
   noun: 'parts',
   summary: 'Held-out scenarios, baselines, and metrics. Not in the running stack.',
   desc: [
-    'The contract says `eval/` "comes later; does not block the flow". The brief makes the evaluation mandatory. The Sep 27 design is carried in `PLAN.md` §7 and is pending D1, D3, and D7.',
+    'The contract says `eval/` "comes later; does not block the flow". The brief makes the evaluation mandatory. The Sep 27 design is carried in `PLAN.md` §7. D3 (what is evaluated) is closed; D1 and D7 are open.',
   ],
   files: ['eval/'],
   src: 'ARCHITECTURE.md, "File tree"; PLAN.md §5 and §7',
@@ -461,7 +451,7 @@ node('events', {
 });
 node('rules', {
   parent: 'api', kind: 'component', name: 'Process rules', tech: 'api/rules.py',
-  summary: 'An in-memory catalog of 17 rules. A pure match over the event just written; the output is commands.',
+  summary: 'An in-memory catalog of 19 rules. A pure match over the event just written; the output is commands.',
   desc: ['A list in code. No `rules` table in v1 and no per-organization override. Each rule appears once; a copy would fire twice. The rules, not the worker, choose what follows a classified turn.'],
   files: ['api/rules.py'],
   src: 'ARCHITECTURE.md, "Process rules"',
@@ -489,7 +479,7 @@ node('policy', {
 });
 node('templates', {
   parent: 'api', kind: 'component', name: 'Templates', tech: 'api/policy/templates.py',
-  summary: 'The certificate and three notices, in `es` or `pt`. The model never writes this text.',
+  summary: 'The certificate and four notices, in `es` or `pt`. The model never writes this text.',
   desc: ['The only place outcome wording and notices come from. The Portuguese text is written by the team; the dataset has none.'],
   files: ['api/policy/templates.py'],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1", "Commands"',
@@ -564,8 +554,8 @@ spec('routers', 'r-login', {
     '`POST /session/code` takes an existing `customer_id`, or `random=true`. It creates a 6-digit code valid 10 minutes in `login_codes`.',
     'With `DEMO_INBOX=1` the response includes the code. There is no SMS.',
     '`POST /session` with the code returns the JWT: `sub` = `customer_id`, `role` = `customer`, `exp` 15 minutes.',
+    'The local demo runs with `DEMO_INBOX=1` by default (D2).',
   ],
-  open: [['D2', 'Whether the public deploy runs with `DEMO_INBOX=1`.']],
   src: 'ARCHITECTURE.md, "Auth and screens"',
 });
 spec('routers', 'r-agent-session', {
@@ -731,16 +721,21 @@ spec('rules', 'ru-message', {
   src: 'ARCHITECTURE.md, "Process rules"',
 });
 spec('rules', 'ru-turn', {
-  name: 'On a classified turn', tech: '8 rules', status: 'partial',
-  summary: 'Run the policy, ask which product, hand off, or show the reply.',
+  name: 'On a classified turn', tech: '10 rules', status: 'partial',
+  summary: 'Ask for consent, run the policy, ask which product, hand off, or show the reply.',
   fixed: [
-    '`run_policy`: `prequalify_card` or `prequalify_loan`, then `policy.run` with that product. `run_policy_income`: `provide_income` with a product, then `policy.run` with the declared amount.',
-    '`ask_which_product`: `provide_income` with no product, then `template.send` for `which_product`.',
+    '`ask_confirm_prequalify`: `prequalify_card` or `prequalify_loan`, then `template.send` for `confirm_prequalify`. The product is stored; the policy is not called.',
+    '`run_policy`: `confirm_prequalify` with a product, then `policy.run`. `decline_prequalify`: then `conversation.show_reply`; the case stays `ai_active`.',
+    '`run_policy_income`: `provide_income` with a product, then `policy.run` with the declared amount. It does not ask for consent again.',
+    '`ask_which_product`: `provide_income` or `confirm_prequalify` with no product, then `template.send` for `which_product`.',
     '`hand_off_human`, `hand_off_scope`, `hand_off_language`, `hand_off_reply`: to `human_active` with `customer_requested_human`, `out_of_scope`, `language_unsupported`, or the turn\'s own code.',
-    '`show_reply`: `clarify`, `product_info`, or `chit_chat`, then `conversation.show_reply`. The policy is not called.',
-    'Every rule except `hand_off_language` and `hand_off_reply` requires `reply_ok` and `language` `es` or `pt`.',
+    '`show_reply`: `clarify`, `product_info`, or `chit_chat`, then `conversation.show_reply`.',
+    'Every rule except `hand_off_reply` requires `reply_ok`. Every rule except `hand_off_language`, `hand_off_reply`, and `ask_which_product` requires `language` `es` or `pt`.',
   ],
-  open: [['New', '`ask_which_product` does not check `language`, so a `provide_income` turn with `language = other` matches it and `hand_off_language` at once.']],
+  open: [
+    ['New', '`ask_which_product` does not check `language`, so a `provide_income` or `confirm_prequalify` turn with `language = other` matches it and `hand_off_language` at once.'],
+    ['New', '`run_policy_income` does not check that consent was given. A customer who states an income right after the consent question, instead of answering it, starts `policy.run` without confirming.'],
+  ],
   tests: ['Every rule has a test that it does not fire.'],
   src: 'ARCHITECTURE.md, "Process rules"; AGENTS.md, "Tests"',
 });
@@ -798,6 +793,7 @@ spec('worker', 'w-generate', {
     'Persists the JSON and writes `conversation.turn_classified`. It does not enqueue `policy.run` or `process.transition`.',
     'If the message `process_id` is null, the turn takes the process this cycle just opened for that customer.',
     'Stores `language` on the process, and `product` when set. If the model sends no product and the process has one, the turn uses the stored one.',
+    'The model sets `language` on every turn (`es`, `pt`, or `other`). That is how the template locale is chosen.',
   ],
   tests: ['Unit tests inject `ConversationTurn` JSON. They do not call OpenAI.'],
   src: 'ARCHITECTURE.md, "Events", "Commands"',
@@ -821,12 +817,10 @@ spec('worker', 'w-guard', {
   fixed: [
     '`reply_ok` is false when `reply_text` contains `precalifica`, `no precalifica`, `pré-qualificado`, or `não pré-qualifica` (`reply_forbidden`), or when the JSON fails twice (`model_output_invalid`).',
     'That text is not shown. `hand_off_reply` moves the case to `human_active`.',
+    'Injection defense is structural (D9): booleans only, no tools, the `customer_id` from the JWT, and the forbidden-phrase escalation. No injection classifier. The held-out eval includes injection and cross-customer attempts.',
   ],
-  open: [
-    ['New', 'How a stated credit limit is detected in `reply_text`. Only the outcome phrases are listed.'],
-    ['D9', 'Whether this structure is enough against prompt injection, and how that is evaluated.'],
-  ],
-  src: 'ARCHITECTURE.md, "Events", "How the model is called"',
+  open: [['New', 'How a stated credit limit is detected in `reply_text`. Only the outcome phrases are listed.']],
+  src: 'ARCHITECTURE.md, "Events", "How the model is called", "Prompt-injection defense"',
 });
 
 spec('processes', 'p-catalog', {
@@ -843,6 +837,7 @@ spec('processes', 'p-states', {
   name: 'States and transitions', tech: 'ai_active, human_active, ended', status: 'partial',
   summary: 'Six allowed transitions. Any other is an error and is not written.',
   fixed: [
+    'In `ai_active` the assistant clarifies, asks for consent, asks for income, decides, or hands off.',
     '`ai_active` to `ai_active`: clarification or `NEEDS_INFO`. `ai_active` to `ended`: `prequalified` or `not_prequalified`.',
     '`ai_active` to `human_active`: policy `REFER`, request for a human, tool failure, unsupported language.',
     '`human_active`: nobody talks in the thread. The customer may write; the message is stored. The agent closes with `prequalified` or `not_prequalified`.',
@@ -923,10 +918,12 @@ spec('policy', 'po-rules', {
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; AGENTS.md, "Tests"',
 });
 spec('policy', 'po-asks', {
-  name: 'What the customer is asked', tech: 'two questions', status: 'defined',
-  summary: 'Which product, and monthly income when the file has none. Nothing else.',
+  name: 'What the customer is asked', tech: 'three questions', status: 'defined',
+  summary: 'Which product, consent to start, and monthly income. Nothing else.',
   fixed: [
-    'Which product, when the turn names none. Monthly income, when `income_local` is null, read in the country\'s currency.',
+    'Which product, when the turn names none.',
+    'Whether to start this pre-qualification, once the product is known (`confirm_prequalify`, D8). Once per product request: a decline keeps the case open, and a later request asks again.',
+    'Monthly income, when a consented run returned `NEEDS_INFO`, read in the country\'s currency. Stating it does not ask for consent again.',
     'Never asked: score, days past due, status, or whether they hold the product. A null score is `REFER` with no question.',
     'After those asks the engine runs. `REFER` goes to the agent; there is no further question.',
   ],
@@ -942,14 +939,14 @@ spec('policy', 'po-decision', {
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; AGENTS.md, "Types"',
 });
 spec('policy', 'po-absent', {
-  name: 'What does not exist', tech: 'negative spec', status: 'partial',
+  name: 'What does not exist', tech: 'negative spec', status: 'defined',
   summary: 'No limit, no rate, no delinquency model, no R07 or R08.',
   fixed: [
-    'R07 and R08 do not exist in the code.',
-    'No income threshold, no `k * income` limit, no rate for the new product, no delinquency prediction.',
+    'R07 and R08 do not exist in the code. No income threshold, no `k * income` limit, no rate for the new product.',
+    'The risk estimate is the dataset\'s `credit_score`, treated as an external bureau-style score (D4). The policy reads it in R04 and R05; it computes no score.',
+    'No delinquency or PD model is shipped. The rejected delinquency probe is described in `docs/model_card_risk.md` when written.',
   ],
-  open: [['D4', 'Whether `credit_score` is presented as the external risk estimate, with a model card for the rejected delinquency model.']],
-  src: 'ARCHITECTURE.md, "Policy alba-credit-v1", "Not decided"',
+  src: 'ARCHITECTURE.md, "Policy alba-credit-v1", "Risk estimate", "Not decided"',
 });
 spec('policy', 'po-oracle', {
   name: 'Oracle fixtures', tech: 'api/fixtures/oracle_customers.json', status: 'partial',
@@ -963,14 +960,13 @@ spec('policy', 'po-oracle', {
 });
 
 spec('templates', 't-locales', {
-  name: 'Locales', tech: 'es, pt', status: 'partial',
+  name: 'Locales', tech: 'es, pt', status: 'defined',
   summary: 'Two locales, picked from the `language` on the triggering event.',
   fixed: [
-    'Two locales: `es` and `pt`. The dataset has no Portuguese.',
-    '`decision.render` and `template.send` read `language` from the triggering event. Nothing reads `llm_turns` for the locale.',
+    'Two locales: `es` and `pt`. Portuguese templates are team-written; the dataset has none (D6).',
+    'The model sets `language` on every turn. `decision.render` and `template.send` read it from the triggering event. Nothing reads `llm_turns` for the locale.',
   ],
-  open: [['D6', 'Where Portuguese test utterances come from and how they are disclosed.']],
-  src: 'ARCHITECTURE.md, "Commands", "Known gaps" 7',
+  src: 'ARCHITECTURE.md, "Commands", "How the model is called"',
 });
 spec('templates', 't-cert', {
   name: 'Certificate', tech: 'prequalification.decided', status: 'partial',
@@ -986,13 +982,14 @@ spec('templates', 't-cert', {
 });
 spec('templates', 't-notices', {
   name: 'Notices', tech: 'conversation.template_sent', status: 'partial',
-  summary: '`needs_income`, `which_product`, `refer_notice`. Non-terminal.',
+  summary: '`confirm_prequalify`, `needs_income`, `which_product`, `refer_notice`. Non-terminal.',
   fixed: [
+    '`confirm_prequalify` once the product is known: asks whether to start the pre-qualification. The policy waits for the answer.',
     '`needs_income` on `NEEDS_INFO`: asks for monthly income. The case stays `ai_active`.',
-    '`which_product` when a stated income names no product. The policy waits.',
+    '`which_product` when a stated income or a confirmation names no product. The policy waits.',
     '`refer_notice` on `REFER`: a person will review. No score, and no word on whether the customer pre-qualifies.',
   ],
-  open: [['Copy', 'The sentences for all three, in `es` and `pt`.']],
+  open: [['Copy', 'The sentences for all four, in `es` and `pt`.']],
   src: 'ARCHITECTURE.md, "Process rules", "Commands", "The other three flows"',
 });
 spec('templates', 't-handoff', {
@@ -1007,7 +1004,7 @@ spec('llm', 'l-schema', {
   name: 'ConversationTurn', tech: 'api/llm/schema.py', status: 'defined',
   summary: 'The one JSON shape the model returns.',
   fixed: [
-    '`intent`: `product_info`, `prequalify_card`, `prequalify_loan`, `provide_income`, `human_request`, `out_of_scope`, `clarify`, `chit_chat`.',
+    '`intent`: `product_info`, `prequalify_card`, `prequalify_loan`, `confirm_prequalify`, `decline_prequalify`, `provide_income`, `human_request`, `out_of_scope`, `clarify`, `chit_chat`.',
     '`product`: `credit_card`, `personal_loan`, or null. `declared_income_amount`, and `declared_income_currency` (MXN, COP, ARS), or null.',
     '`language`: `es`, `pt`, `other`. Plus `needs_clarification`, `clarification_question`, `reply_text`.',
   ],
@@ -1040,7 +1037,6 @@ spec('llm', 'l-prompt', {
     ['D11', 'Whether ID-like numbers typed by the customer are masked before the call.'],
     ['New', 'The prompt carries no earlier turns, yet `out_of_scope` depends on whether one clarification already happened.'],
     ['New', 'The prompt text itself, and where it is versioned so eval runs can cite it.'],
-    ['D9', 'Prompt-injection defense beyond the structure.'],
   ],
   src: 'ARCHITECTURE.md, "How the model is called"',
 });
@@ -1091,7 +1087,7 @@ spec('config', 'c-settings', {
   summary: 'Five settings. Secrets come from `.env` or the host.',
   fixed: [
     '`DATABASE_URL`, `JWT_SECRET`, `OPENAI_API_KEY`, `LLM_MODEL` (default `gpt-6-luna`), `DEMO_INBOX`.',
-    'Secrets live in `.env` or the host secrets. Never in git, the image, a log, or a prompt.',
+    'Secrets live in `.env`. Never in git, the image, a log, or a prompt.',
     '`.env.example` lists the names with empty values.',
   ],
   src: 'ARCHITECTURE.md, "File tree", "Docker"',
@@ -1154,14 +1150,13 @@ view('web', {
 });
 
 spec('pg-login', 'lg-customer', {
-  name: 'Customer login', tech: 'search, code, JWT', status: 'partial',
+  name: 'Customer login', tech: 'search, code, JWT', status: 'defined',
   summary: 'Any of the 150,000 customers, by search or at random.',
   fixed: [
     'Search by name, document, or `customer_id`, or pick at random. Then the 6-digit code, then the JWT.',
-    'With `DEMO_INBOX=1` the code shows in a test inbox, because there is no SMS.',
+    'The local demo runs with `DEMO_INBOX=1`, so the code shows in a test inbox. There is no SMS.',
   ],
-  open: [['D2', 'Whether the public deploy shows the code (`DEMO_INBOX=1`).']],
-  src: 'ARCHITECTURE.md, "Auth and screens"; README.md, "What a bank would see"',
+  src: 'ARCHITECTURE.md, "Auth and screens", "Docker"; README.md, "What a bank would see"',
 });
 spec('pg-login', 'lg-agent', {
   name: 'Agent login', tech: 'service_agents', status: 'partial',
@@ -1189,6 +1184,7 @@ spec('pg-case', 'cs-thread', {
     '`messages` rows with `author` `customer`, `assistant`, or `template`.',
     'Each send carries a new `client_message_id`.',
     'After the handoff the customer can still write; nobody replies until the agent closes and the template message arrives.',
+    'While the page waits for the API after a send, it shows a typing indicator ("escribiendo…"). No fixed sleep is added.',
   ],
   open: [['New', 'How messages the worker writes later reach the page: polling or push.']],
   src: 'ARCHITECTURE.md, "Process", "Events", "Cycle"',
@@ -1315,8 +1311,9 @@ spec('ld-entry', 'en-skip', {
     'Files already in `data/raw/` are not copied again.',
     'The `sha256` is of the file on disk. If `load_batches` already holds that hash, the file is not copied into Postgres again.',
     'Deleting the volume reloads.',
+    'Update-correctness fixture: changing one file on disk gives a new `sha256`, and `load` reloads silver and gold. It is labeled as a fixture in `docs/data_quality.md` when written.',
   ],
-  src: 'ARCHITECTURE.md, "Docker"',
+  src: 'ARCHITECTURE.md, "Docker", "Pipeline"',
 });
 spec('ld-entry', 'en-fail', {
   name: 'Failure', tech: 'fail loud', status: 'defined',
@@ -1328,15 +1325,23 @@ spec('ld-entry', 'en-fail', {
   ],
   src: 'ARCHITECTURE.md, "Docker", "Data: what is touched and what is not"',
 });
+spec('ld-entry', 'en-checks', {
+  name: 'Quality checks', tech: 'fail the load', status: 'defined',
+  summary: 'Counts, null rates, and product-to-customer links. Any failure stops `load`.',
+  fixed: [
+    'Row counts of the four files match the expected snapshot sizes.',
+    'Null rates for `credit_score` and `estimated_monthly_income` are reported.',
+    'Every `products.customer_id` exists in `customers`.',
+    'If any check fails, the `load` container fails (D5). No pandera or Great Expectations suite.',
+  ],
+  src: 'ARCHITECTURE.md, "Pipeline"',
+});
 spec('ld-entry', 'en-report', {
   name: 'Load report', tech: 'counts', status: 'partial',
   summary: 'Rows read, null scores, null incomes, active products by type.',
   fixed: ['The report writes counts: rows read, null scores, null incomes, active products by type.'],
-  open: [
-    ['New', 'Where the report is written: log or table.'],
-    ['D5', 'Which data contracts, quality checks, lineage, freshness policy, and update-correctness fixture enter the contract.'],
-  ],
-  src: 'ARCHITECTURE.md, "Data: what is touched and what is not"; PLAN.md §5',
+  open: [['New', 'Where the report is written: log or table.']],
+  src: 'ARCHITECTURE.md, "Data: what is touched and what is not"',
 });
 
 spec('ld-migrations', 'mg-tables', {
@@ -1530,11 +1535,9 @@ node('ev-suite', {
   fixed: [
     'Sep 27 design: normal ~45%, ambiguous or unsupported ~20%, human-required ~15% (review-band score, DPD 1-29, missing score, asks for a human), adversarial or failure ~20%.',
     'Each case has an `expected_route` and an `expected_decision`. Test customers are disjoint from prompt tuning.',
+    'Portuguese utterances are team-written or machine-translated, and disclosed as a limitation (D6). Injection and cross-customer attempts are in the suite (D9).',
   ],
-  open: [
-    ['D7', 'How many cases and repeated runs fit the API budget and rate limits, and the spend cap.'],
-    ['D6', 'Where Portuguese utterances come from and how they are disclosed.'],
-  ],
+  open: [['D7', 'How many cases and repeated runs fit the API budget and rate limits, and the spend cap.']],
   src: 'PLAN.md §7.1',
 });
 node('ev-systems', {
@@ -1548,11 +1551,14 @@ node('ev-systems', {
   src: 'PLAN.md §7.2',
 });
 node('ev-learned', {
-  parent: 'eval', kind: 'component', name: 'Learned component', tech: 'brief requirement', status: 'open',
-  summary: 'At least one learned component against a baseline.',
-  fixed: ['Organizers said on Sep 25 that a prompted LLM counts if it is defined, evaluated, and justified. The `ConversationTurn` classifier on a team-labeled held-out set qualifies with no contract change.'],
-  open: [['D3', 'Which component is evaluated, its baseline, and the label set.']],
-  src: 'PLAN.md §5, D3',
+  parent: 'eval', kind: 'component', name: 'Learned component', tech: 'ConversationTurn vs B0', status: 'defined',
+  summary: 'The `ConversationTurn` classifier against a keyword-rules baseline.',
+  fixed: [
+    'The evaluated learned component is the `ConversationTurn` classifier (`gpt-6-luna`, Structured Outputs): product, consent, clarify, and out-of-scope intents (D3).',
+    'The baseline is B0, a keyword-rules bot, on the same team-labeled held-out set. There is no separate intent router in the runtime.',
+    'Customers used while tuning prompts are disjoint from the held-out set.',
+  ],
+  src: 'ARCHITECTURE.md, "Learned component (evaluation)"; PLAN.md §5, D3',
 });
 node('ev-metrics', {
   parent: 'eval', kind: 'component', name: 'Metrics', tech: 'the brief\'s names', status: 'open',
