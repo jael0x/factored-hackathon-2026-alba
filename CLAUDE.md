@@ -6,6 +6,7 @@ Before planning or editing, read `AGENTS.md` and `ARCHITECTURE.md` in this direc
 - `AGENTS.md`: the coding standard, including how docs are written.
 - `PLAN.md`: hackathon requirements, data evidence, open decisions (§5), research backlog (§6), schedule. It does not override the contract.
 - `README.md`: product view, repo map, data access.
+- `diagrams/c4.html`: clickable C4 view of the contract. When a gap or decision closes, update the matching spec status there in the same change.
 
 Current phase: research and definition. There is no application code yet. Work now closes a research item (`PLAN.md` §6) or an open decision (`PLAN.md` §5, including the known gaps at the end of `ARCHITECTURE.md`). A closed decision is written into `ARCHITECTURE.md` in the same change.
 
