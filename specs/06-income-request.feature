@@ -5,7 +5,8 @@ Feature: Income request
 
   Scenario: A customer with no income on file is asked for it
     Given Juliana Castro Gómez has no income on file and a credit score of 714
-    When Juliana writes "quiero una tarjeta de crédito"
+    And the assistant asked Juliana whether to start the pre-qualification for a credit card
+    When Juliana writes "sí"
     Then the assistant asks for her monthly income
     And no certificate is shown
     And her case stays with the assistant
@@ -16,6 +17,11 @@ Feature: Income request
     Then Juliana sees a certificate that says she pre-qualifies for a credit card
     And her case never enters the review queue
 
+  Scenario: Stating income after consenting does not ask for consent again
+    Given the assistant asked Juliana for her monthly income for a credit card
+    When Juliana writes "gano 45,000 pesos al mes"
+    Then the assistant does not ask again whether to start the pre-qualification
+
   Scenario: A stated income is read in the country's currency and marked as self-declared
     Given the assistant asked Juliana for her monthly income for a credit card
     When Juliana writes "gano 45,000 pesos al mes"
@@ -24,7 +30,7 @@ Feature: Income request
 
   Scenario: A stated income is not saved to the customer record
     Given Juliana pre-qualified for a credit card with a stated income of 45,000 MXN
-    When Juliana later asks to pre-qualify for a personal loan
+    When Juliana later confirms a pre-qualification for a personal loan
     Then the assistant asks for her monthly income again
 
   Scenario: An income stated before naming a product gets asked which product
@@ -35,5 +41,6 @@ Feature: Income request
 
   Scenario: The income on file wins over a typed amount
     Given Juan Alberto Romero González has an income of 306,753.45 MXN on file
-    When Juan writes "quiero una tarjeta de crédito, gano 10,000 pesos al mes"
+    And the assistant asked Juan whether to start the pre-qualification for a credit card
+    When Juan writes "sí, gano 10,000 pesos al mes"
     Then his decision uses the income of 306,753.45 MXN
