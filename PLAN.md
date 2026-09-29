@@ -54,13 +54,13 @@ Source: the problem statement PDF. "Status" says whether `ARCHITECTURE.md` answe
 | Brief requirement | Where the contract answers it | Status |
 |---|---|---|
 | One coherent workflow | `credit_prequalification`, credit card and personal loan | Covered |
-| Normal, ambiguous or unsupported, and human-required paths | Juan (normal), "quiero un crédito" (clarify), mortgage and others (`out_of_scope`), Alicia and Juliana (human) | Covered |
+| Normal, ambiguous or unsupported, and human-required paths | Juan (normal), "quiero un crédito" (clarify), Juliana (ask for income, then R05), mortgage and others (`out_of_scope`), Alicia (human) | Covered |
 | Spanish and Portuguese interactions; report language limits | `es` and `pt` templates; the model may clarify in Portuguese | Partial: PT test data and PT quality of `gpt-6-luna` not measured (D6) |
 | 1. Problem supported by data (contact reasons, demand, data quality, constraints) | §4 of this file | Partial: Jan 2025 numbers come from one month and need a full-table recount (R5) |
-| 2. Context, clarification, grounding, tools, only verified actions reported | events per process, `ConversationTurn`, `facts` cite source columns | Covered in design, but see known gaps 1, 4, 5 in the contract |
+| 2. Context, clarification, grounding, tools, only verified actions reported | events per process, `conversation.turn_classified`, `facts` cite source columns | Covered in design |
 | 3. What it answers, what needs confirmation, when it abstains or transfers | rules table, transitions, `out_of_scope` | Partial: which actions need confirmation is not defined (D8) |
 | 3. Permissions and policy enforced outside model prose | JWT `customer_id`, pure policy, templates | Covered |
-| 3. Handoff with request, verified facts, actions taken, evidence, open questions | packet read from `analysis.completed` | Partial: the packet schema and "open questions" field are not specified |
+| 3. Handoff with request, verified facts, actions taken, evidence, open questions | packet read from `analysis.completed`: request, score, income, deciding rule. The agent does not chat | Partial: a separate "open questions" field is not in the contract |
 | 4. Repeatable prep with contracts, quality checks, lineage, update/freshness policy | `load` container, `load_batches` sha256, load report counts | Partial: contracts, lineage, freshness, and an update-correctness fixture are open (D5) |
 | 4. At least one learned component against a baseline; valid labels, no leakage, justified splits | not in the contract | Open (D3) |
 | 5. Held-out eval incl. bad or missing data, expired sessions, unauthorized access, prompt injection, tool failures, multilingual ambiguity; report success, unsafe outcomes, handoffs, latency, cost, sample sizes | `eval/` "comes later" | Open (D7); design carried in §7 |
@@ -99,7 +99,7 @@ Not required by the brief: training a new model, multiple agents, a tool-count t
 | Cases that cannot be auto-decided | 32.0% lack `credit_score` (15.0%) or `estimated_monthly_income` (20.0%) | full `customers`, n=150,000 |
 | Existing delinquency | 14,864 customers (9.9%) have a credit product 30+ days past due | full `products` |
 
-Consequence: about a third of pre-qualification requests must take a collect-info or human-review path. That is a design requirement, not a failure.
+Consequence: about a third of customers are missing a score or an income. Missing income stays with the assistant until the customer states it. A missing score, a review-band score, or another `REFER` goes to a person. That is a design requirement, not a failure.
 
 ### 4.2 Contact reasons (Jan 2025 `call_center_interactions`, n=19,496; `contact_reason` equals `reason_category`)
 
@@ -176,7 +176,7 @@ Each entry says what the Sep 27 plan assumed, what the contract says now, and wh
 
 **D9. Prompt-injection defense.** The Sep 27 plan had input guards (injection heuristics and classifier) and an output guard (every number in a reply must appear in tool results). The contract relies on structure: the model sees only booleans, has no tools, `customer_id` comes from the JWT, and forbidden phrases in `reply_text` escalate. Still open: whether that is enough and how it is evaluated.
 
-**D10. Contract known gaps.** Thirteen internal gaps listed at the end of `ARCHITECTURE.md` (first message never reaches the model, the model turn is not an event, no `NEEDS_INFO` or `REFER` renderer, open `reason_code` list, and others). They block implementation of the worker and rules. The switch to OpenAI does not change them.
+**D10. Contract known gaps.** Closed on Sep 28. The thirteen gaps are written into `ARCHITECTURE.md`. None remain open. Template sentences are still not written; that is named in the contract, not left as a gap.
 
 **D11. Customer text sent to OpenAI.** The model is now an external service, and the brief forbids private records in external model requests. The prompt already carries only booleans, the process state, the catalog, and the message text. Still open: whether ID-like numbers typed by the customer are masked before the call, and what `docs/ops.md` says about OpenAI's handling and retention of API data.
 
@@ -205,7 +205,7 @@ About 300 held-out cases built from real customer profiles, stratified by policy
 |---|---|---|
 | Normal | ~45% | pre-qualify (every outcome), product questions |
 | Ambiguous or unsupported | ~20% | "quiero un crédito", mortgage, missing amount, mixed ES/PT |
-| Human-required | ~15% | review-band score, DPD 1-29, missing income, customer asks for a human |
+| Human-required | ~15% | review-band score, DPD 1-29, missing score, customer asks for a human |
 | Adversarial or failure | ~20% | prompt injection (ES/PT), asking for another customer's data, expired session, injected tool timeout or 500, missing profile fields |
 
 ### 7.2 Systems on the same suite
@@ -232,7 +232,7 @@ The Sep 27 day-by-day assumed the old stack. The dates that were fixed then are 
 
 | Days | A (system) | B (data and eval) |
 |---|---|---|
-| Mon Sep 28 - Tue Sep 29 | Definition: close D2, D8, D9, D10 into `ARCHITECTURE.md`. Repo skeleton, compose with Postgres | Research R1-R12 (R8, R9, R11 first). Close D3, D4, D5, D6. Start the data-quality report |
+| Mon Sep 28 - Tue Sep 29 | Definition: D10 is closed. Close D2, D8, D9 into `ARCHITECTURE.md`. Repo skeleton, compose with Postgres | Research R1-R12 (R8, R9, R11 first). Close D3, D4, D5, D6. Start the data-quality report |
 | Wed Sep 30 | Migrations, events, rules, worker, policy engine with unit tests (oracle test green) | Pipeline bronze, silver, gold; contracts per D5; eval labels and splits per D3 |
 | Thu Oct 1 | Model adapter, templates ES and PT, auth and login codes | Eval harness, scenario generator, B0 and B1 |
 | Fri Oct 2 | Frontend screens from the mock; deploy per D2. **Feature freeze at night** | First full eval run, error analysis, ranked fix list |
@@ -271,3 +271,7 @@ Cut list if behind, in order: model comparison, LLM judge, B0, PT templates for 
 | Sep 28 | Policy trimmed to R01-R06 and R09. R07 (income threshold), R08 (indicative limit), and R10 (freshness) removed; R05 bands are <580, 580-619, ≥620 | R08: a limit number would be a promise. R07 is left open on purpose in the contract. No reason was recorded for dropping R10 (see D5) |
 | Sep 28 | Docs standardized in English; `ARQUITECTURA.md` became `ARCHITECTURE.md`; `HANDOFF.md` folded into this file and `README.md` | One home per fact |
 | Sep 28 | Organizer PDFs removed from git history | The data dictionary holds the S3 keys and the repo will be public |
+| Sep 28 | The thirteen known gaps are closed | First message, turn event, templates for `NEEDS_INFO` and `REFER`, language on the event, product on the process, closed `reason_code` list, agent close, file wins on income, JWT for another customer |
+| Sep 28 | A typed income fills a null and evaluation continues. The file wins when income is present. Juliana, score 714, pre-qualifies after she states an amount | She is not sent to review only because the number was typed |
+| Sep 28 | The agent does not chat. Close is `PREQUALIFIED` or `NOT_PREQUALIFIED`, plus a template | `referred_closed` is not an end reason |
+| Sep 28 | `load` copies four S3 keys with `aws s3 cp` into Postgres read tables and gold. The API does not call S3 | Chat reads one gold row |
