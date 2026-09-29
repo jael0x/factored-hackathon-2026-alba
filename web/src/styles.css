@@ -1,0 +1,59 @@
+:root {
+  color: #12201c;
+  background: #e8f0ec;
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+.page {
+  min-height: 100vh;
+  display: grid;
+  align-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  background:
+    radial-gradient(circle at 10% 20%, #cfe3d8 0%, transparent 45%),
+    radial-gradient(circle at 90% 10%, #d9e7f2 0%, transparent 40%),
+    #e8f0ec;
+}
+
+.brand {
+  margin: 0;
+  font-size: clamp(3rem, 8vw, 5.5rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.lede {
+  margin: 0;
+  max-width: 36rem;
+  color: #3a4a44;
+}
+
+.status {
+  margin-top: 0.5rem;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.95rem;
+}
+
+.status-ok {
+  color: #1f6b45;
+}
+
+.status-error {
+  color: #8a2b2b;
+}
+
+.status-loading {
+  color: #4a5a54;
+}
