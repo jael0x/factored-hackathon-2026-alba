@@ -4,13 +4,35 @@ Alba is a customer-service demo for the synthetic LATAM bank of the Factored AI 
 
 It is not a production bank and it moves no money. "Alba" is the name of this interface. Customers, products, scores, incomes, and agents come from the organizer dataset, snapshot of June 17, 2026.
 
-**Status (Sep 28, 2026): research and definition phase.** There is no application code yet. `mocks/index.html` is a static walkthrough of the screens. Submission is due Mon Oct 5.
+**Status (Sep 29, 2026): compose load path in progress.** `docker compose up` brings up Postgres, the one-shot `load` container (bronze → silver → gold), a health API, and a placeholder web. Login, chat, policy, and agent screens are not built yet. `mocks/index.html` remains the screen walkthrough. Submission is due Mon Oct 5.
 
-Planned stack: FastAPI and PostgreSQL 16 in one Docker Compose stack, with GPT-6 Luna (`gpt-6-luna`) on the OpenAI API for the conversation. Details in `ARCHITECTURE.md`.
+Stack: FastAPI and PostgreSQL 16 in one Docker Compose stack, with GPT-6 Luna (`gpt-6-luna`) on the OpenAI API for the conversation (when wired). Details in `ARCHITECTURE.md`.
 
 ## How to review
 
-Run `docker compose up` with a documented `.env` (see "Data" below and `ARCHITECTURE.md` "Docker"), then open the web service in the browser. Default demo uses `DEMO_INBOX=1` so the login code appears in the API response. There is no cloud deploy for the submission; optional host steps will live in `docs/ops.md`.
+Copy `.env.example` to `.env` and fill the values. `S3_BUCKET` is the bucket name only; a trailing `/data` is accepted and stripped. Then:
+
+```bash
+docker compose up --build
+```
+
+Open http://localhost:5173/ (API health at http://localhost:8000/health). `load` downloads the four CSVs into `data/raw/` if missing, applies migrations, and builds gold. Default compose sets `DEMO_INBOX=1`. There is no cloud deploy for the submission; optional host steps will live in `docs/ops.md`.
+
+### Tests
+
+Full suite (unit + integration against an isolated `alba_test` DB), preferred:
+
+```bash
+docker compose --profile test run --rm test
+```
+
+On the host (unit always; integration needs Postgres on host port **55432**):
+
+```bash
+docker compose up -d postgres
+python -m pip install -r requirements-dev.txt
+pytest
+```
 
 ## Where things are
 

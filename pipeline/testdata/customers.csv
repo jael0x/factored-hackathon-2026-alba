@@ -1,0 +1,4 @@
+customer_id,document_number,first_name,last_name,country,segment,credit_score,estimated_monthly_income,customer_status
+CLI-TEST-JUAN,DOC001,Juan,Romero,México,Premium,812.0,306753.45,Active
+CLI-TEST-JULI,DOC002,Juliana,Castro,México,Plus,,,Active
+CLI-TEST-MARI,DOC003,Mariana,Acosta,Argentina,Basic,515.0,801583.70,Active

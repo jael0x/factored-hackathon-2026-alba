@@ -10,6 +10,6 @@ Before planning or editing, read `AGENTS.md` and `ARCHITECTURE.md` in this direc
 - `diagrams/c4.html`: clickable C4 view of the contract. When a gap or decision closes, update the matching spec status there in the same change.
 - `specs/`: Gherkin behavior specs, one feature per file, numbered by the customer journey. Use `/spec` to draft or update them. A contract change that alters behavior updates the matching feature in the same change.
 
-Current phase: research and definition. There is no application code yet. The known gaps in `ARCHITECTURE.md` are closed. Work now closes a research item (`PLAN.md` §6) or an open decision (`PLAN.md` §5). A closed decision is written into `ARCHITECTURE.md` in the same change.
+Current phase: build has started with the compose load path (`postgres`, one-shot `load`, API health, placeholder `web`). Login, conversation, policy, and agent screens are not implemented yet. `ARCHITECTURE.md` still wins. A contract change that alters behavior updates the matching `specs/` feature in the same change. When a C4 open item is closed by code (for example how `data/raw/` reaches `load`), update `diagrams/c4.html` in the same change.
 
 S3 credentials and `OPENAI_API_KEY` live only in `.env`. Never read, print, log, or commit them. Never commit `*.pdf` or anything under `data/`. Do not open page 2 of `docs/LATAM_Bank_Complete_Data_Dictionary.pdf`: it holds the keys.

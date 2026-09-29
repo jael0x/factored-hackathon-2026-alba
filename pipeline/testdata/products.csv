@@ -1,0 +1,3 @@
+product_id,customer_id,product_type,product_number,currency,current_balance,product_status,days_past_due
+PRD-1,CLI-TEST-JUAN,Préstamo Hipotecario,LOAN-1,USD,109159.57,Active,0
+PRD-2,CLI-TEST-MARI,Tarjeta Crédito,****5476,ARS,111079.25,Active,180
