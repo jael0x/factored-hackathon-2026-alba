@@ -1,9 +1,25 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Response, status
 
 from api import db
 from api.contract_models import Health, ReadyDown, ReadyOk
+from api.errors import install_error_handlers
+from api.routers import customer, session
+from api.settings import require_jwt_secret, settings
 
-app = FastAPI(title="Alba", docs_url=None, redoc_url=None, openapi_url=None)
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    require_jwt_secret(settings.jwt_secret)
+    yield
+
+
+app = FastAPI(title="Alba", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+install_error_handlers(app)
+app.include_router(session.router)
+app.include_router(customer.router)
 
 
 @app.get("/health", response_model=Health)
