@@ -6,6 +6,7 @@ import yaml
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
+from api import contract_models
 from api.contract_models import Certificate, CloseCaseRequest
 from api.main import app
 
@@ -17,12 +18,14 @@ SCHEMA_PATH = ROOT / "web" / "src" / "api" / "schema.d.ts"
 EXPECTED_PATHS = {
     "/health",
     "/ready",
+    "/config",
     "/customers/search",
     "/session/code",
     "/session",
     "/agents/search",
     "/agent/session/code",
     "/agent/session",
+    "/me",
     "/products",
     "/messages",
     "/case/{process_id}",
@@ -85,6 +88,17 @@ def test_live_routes_are_declared_on_the_spec() -> None:
                     declared.add(ref.rsplit("/", 1)[-1])
         assert _model_modules(route.response_model) == {"api.contract_models"}
         assert _model_names(route.response_model) == declared
+
+
+def test_every_spec_enum_has_a_named_alias() -> None:
+    enums = {
+        name: schema["enum"]
+        for name, schema in load_spec()["components"]["schemas"].items()
+        if schema.get("type") == "string" and schema.get("enum")
+    }
+    assert enums
+    for name, values in enums.items():
+        assert list(get_args(getattr(contract_models, name))) == values
 
 
 def test_close_body_is_only_the_two_outcomes() -> None:

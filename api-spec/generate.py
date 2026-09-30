@@ -18,8 +18,23 @@ def run(cmd: list[str]) -> None:
     subprocess.run(cmd, check=True, cwd=ROOT)
 
 
-def main() -> None:
-    digest = spec_sha256()
+def string_enums(spec: dict) -> dict[str, list[str]]:
+    schemas = spec["components"]["schemas"]
+    return {
+        name: schema["enum"]
+        for name, schema in schemas.items()
+        if schema.get("type") == "string" and schema.get("enum")
+    }
+
+
+def enum_aliases(models: str, enums: dict[str, list[str]]) -> str:
+    clashes = [name for name in enums if f"class {name}(" in models]
+    if clashes:
+        raise SystemExit(f"Enum aliases would shadow generated classes: {clashes}")
+    return "\n".join(f"{name} = Literal[{', '.join(repr(value) for value in values)}]" for name, values in enums.items())
+
+
+def generate_python(digest: str) -> None:
     run(
         [
             sys.executable,
@@ -47,9 +62,14 @@ def main() -> None:
             "utf-8",
         ]
     )
-    models = MODELS.read_text(encoding="utf-8")
-    MODELS.write_text(f"# spec-sha256: {digest}\n{models}", encoding="utf-8")
+    import yaml
 
+    models = MODELS.read_text(encoding="utf-8")
+    aliases = enum_aliases(models, string_enums(yaml.safe_load(SPEC.read_text(encoding="utf-8"))))
+    MODELS.write_text(f"# spec-sha256: {digest}\n{models}\n\n{aliases}\n", encoding="utf-8")
+
+
+def generate_typescript(digest: str) -> None:
     npx = shutil.which("npx")
     if npx is None:
         raise SystemExit("npx is not on PATH")
@@ -67,6 +87,12 @@ def main() -> None:
     )
     schema = SCHEMA.read_text(encoding="utf-8")
     SCHEMA.write_text(f"// spec-sha256: {digest}\n{schema}", encoding="utf-8")
+
+
+def main() -> None:
+    digest = spec_sha256()
+    generate_python(digest)
+    generate_typescript(digest)
 
 
 if __name__ == "__main__":

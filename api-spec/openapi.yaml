@@ -54,17 +54,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/ReadyDown"
 
+  /config:
+    get:
+      tags: [Ops]
+      operationId: getConfig
+      security: []
+      summary: Whether the demo login helpers are on.
+      description: >
+        demo_login is true when the API runs with DEMO_LOGIN=1. The login screen shows the
+        customer search and the random pick only then.
+      responses:
+        "200":
+          description: Client configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Config"
+
   /customers/search:
     get:
       tags: [Session]
       operationId: searchCustomers
       security: []
-      summary: Search the loaded customers by name, document number, or customer_id.
+      summary: Demo helper. Search the loaded customers, or pick one with an email at random.
       description: >
-        At most 20 rows. Order is last_name, first_name, customer_id, ascending.
+        Only with DEMO_LOGIN=1; not found otherwise. It fills the login form and never opens a session.
+        Send q or random=true, not both and not neither.
+        With q, at most 20 rows matching name, document number, or customer_id,
+        ordered by last_name, first_name, customer_id ascending.
+        With random=true, one customer with an email on file.
         Any customer in gold can be found. The four oracle profiles are not an allowlist.
       parameters:
-        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/OptionalSearchQuery"
+        - $ref: "#/components/parameters/RandomPick"
       responses:
         "200":
           description: Matching customers.
@@ -72,34 +94,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CustomerSearchResults"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/InvalidRequest"
 
   /session/code:
     post:
       tags: [Session]
-      operationId: issueCustomerCode
+      operationId: requestCustomerCode
       security: []
-      summary: Issue a 6-digit code for an existing customer, or for one customer picked at random.
+      summary: Email a 6-digit code to the customer with this document number.
       description: >
-        The code is valid for 10 minutes. When DEMO_INBOX is 1, code is the 6 digits.
-        When DEMO_INBOX is not 1, code is null. A customer_id that is not in customers is not found.
-        Sending both customer_id and random, or neither, is invalid_body.
+        When document_number matches a customer with an email on file, a code valid for 10 minutes
+        is stored as a hash and emailed to that address. A new request replaces any unused code
+        for the same customer. The response is the same whether or not the document matches and
+        whether or not the customer has an email. It never carries the code, the address, or the name.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/IssueCustomerCodeRequest"
+              $ref: "#/components/schemas/RequestCustomerCode"
       responses:
         "200":
-          description: A code was stored for one customer.
+          description: The request was taken. A code was sent only if the document matched a customer with an email.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CustomerCodeIssued"
-        "404":
-          $ref: "#/components/responses/NotFound"
+                $ref: "#/components/schemas/CodeRequested"
         "422":
           $ref: "#/components/responses/InvalidRequest"
 
@@ -108,18 +131,20 @@ paths:
       tags: [Session]
       operationId: openCustomerSession
       security: []
-      summary: Exchange a customer code for a JWT.
+      summary: Exchange a document number and its emailed code for a JWT.
       description: >
         Claims inside the token are sub = customer_id, role = customer, exp 15 minutes.
         The body repeats sub and role so the client can route without decoding the token.
-        A code older than 10 minutes, an unknown code, or a customer_id with no code does not open a session.
+        The code must be the latest unused one for the customer with this document number,
+        under 10 minutes old, with fewer than 5 wrong tries. The fifth wrong code spends it.
+        A used code does not open a second session. Every failure is the same unauthorized answer.
         An expired token on a later call is 401. The session is not renewed.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/OpenSessionRequest"
+              $ref: "#/components/schemas/OpenCustomerSessionRequest"
       responses:
         "200":
           description: Customer session.
@@ -137,9 +162,9 @@ paths:
       tags: [Session]
       operationId: searchAgents
       security: []
-      summary: Search the loaded agents by name, employee code, or agent_id.
+      summary: Demo helper. Search the loaded agents by name, employee code, or agent_id.
       description: >
-        Same limit and the same steps as customer search, over service_agents.
+        Only with DEMO_LOGIN=1; not found otherwise. How an agent identifies is open (PLAN.md D18).
         At most 20 rows. Order is last_name, first_name, agent_id, ascending.
       parameters:
         - $ref: "#/components/parameters/SearchQuery"
@@ -150,6 +175,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AgentSearchResults"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/InvalidRequest"
 
@@ -160,8 +187,8 @@ paths:
       security: []
       summary: Issue a 6-digit code for an existing agent, or for one agent picked at random.
       description: >
-        Same rules as POST /session/code, against service_agents.
-        When DEMO_INBOX is 1, code is the 6 digits. Otherwise code is null.
+        Demo-only until PLAN.md D18 decides how an agent identifies. Only with DEMO_LOGIN=1;
+        not found otherwise. The code is valid for 10 minutes and is returned in the response.
       requestBody:
         required: true
         content:
@@ -206,6 +233,26 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "422":
           $ref: "#/components/responses/InvalidRequest"
+
+  /me:
+    get:
+      tags: [Customer]
+      operationId: getCurrentCustomer
+      summary: The session customer's id and name.
+      description: >
+        Requires role customer. customer_id is the token sub. The app bar and the home greeting
+        read the name from here; the login responses never carry it.
+      responses:
+        "200":
+          description: The customer on the token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentCustomer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /products:
     get:
@@ -418,6 +465,20 @@ components:
       schema:
         type: string
         minLength: 1
+    OptionalSearchQuery:
+      name: q
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+    RandomPick:
+      name: random
+      in: query
+      required: false
+      schema:
+        type: boolean
+        enum: [true]
     ProcessId:
       name: process_id
       in: path
@@ -624,6 +685,14 @@ components:
       type: string
       enum: [credit_prequalification]
 
+    Config:
+      type: object
+      additionalProperties: false
+      required: [demo_login]
+      properties:
+        demo_login:
+          type: boolean
+
     CustomerSearchHit:
       type: object
       additionalProperties: false
@@ -676,28 +745,14 @@ components:
           items:
             $ref: "#/components/schemas/AgentSearchHit"
 
-    CustomerCodeById:
+    RequestCustomerCode:
       type: object
       additionalProperties: false
-      required: [customer_id]
+      required: [document_number]
       properties:
-        customer_id:
+        document_number:
           type: string
           minLength: 1
-
-    CustomerCodeRandom:
-      type: object
-      additionalProperties: false
-      required: [random]
-      properties:
-        random:
-          type: boolean
-          enum: [true]
-
-    IssueCustomerCodeRequest:
-      oneOf:
-        - $ref: "#/components/schemas/CustomerCodeById"
-        - $ref: "#/components/schemas/CustomerCodeRandom"
 
     AgentCodeById:
       type: object
@@ -722,22 +777,15 @@ components:
         - $ref: "#/components/schemas/AgentCodeById"
         - $ref: "#/components/schemas/AgentCodeRandom"
 
-    CustomerCodeIssued:
+    CodeRequested:
       type: object
       additionalProperties: false
-      required: [customer_id, first_name, last_name, code]
+      required: [expires_in_seconds]
       properties:
-        customer_id:
-          type: string
-        first_name:
-          type: string
-        last_name:
-          type: string
-        code:
-          type: string
-          nullable: true
-          pattern: "^[0-9]{6}$"
-          description: The 6-digit code when DEMO_INBOX is 1. Null otherwise.
+        expires_in_seconds:
+          type: integer
+          enum: [600]
+          description: How long a sent code is valid. The same value whether or not a code was sent.
 
     AgentCodeIssued:
       type: object
@@ -755,6 +803,18 @@ components:
         code:
           type: string
           nullable: true
+          pattern: "^[0-9]{6}$"
+
+    OpenCustomerSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [document_number, code]
+      properties:
+        document_number:
+          type: string
+          minLength: 1
+        code:
+          type: string
           pattern: "^[0-9]{6}$"
 
     OpenSessionRequest:
@@ -778,6 +838,18 @@ components:
           description: customer_id or agent_id, the same value as the token sub claim.
         role:
           $ref: "#/components/schemas/Role"
+
+    CurrentCustomer:
+      type: object
+      additionalProperties: false
+      required: [customer_id, first_name, last_name]
+      properties:
+        customer_id:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
 
     Product:
       type: object

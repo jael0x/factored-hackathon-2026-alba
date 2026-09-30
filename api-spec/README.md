@@ -15,7 +15,18 @@ npm install --prefix api-spec
 python api-spec/generate.py
 ```
 
+Without a local Python environment, the Python half runs in the test image (it has the generator), and the TypeScript half runs with `npx`:
+
+```bash
+docker compose --profile test run --rm --no-deps -v "$PWD:/work" -w /work test \
+  python -c "import sys; sys.path.insert(0, 'api-spec'); import generate; generate.generate_python(generate.spec_sha256())"
+npm install --prefix api-spec
+python3 -c "import sys; sys.path.insert(0, 'api-spec'); import generate; generate.generate_typescript(generate.spec_sha256())"
+```
+
 `generate.py` rewrites two files and stamps the SHA-256 of `openapi.yaml` on the first line of each. Do not edit those files by hand.
+
+Every string enum under `components/schemas` (`Role`, `ProcessState`, `Outcome`, `ReasonCode`, `Intent`, and the rest) also gets a named alias at the end of `api/contract_models.py`, for example `Role = Literal['customer', 'agent']`. Python code imports those names; it does not declare the same list again. A closed set that never crosses the wire (event names, command names, process rule ids) lives in the module that owns it.
 
 | Output | Consumer |
 |---|---|
@@ -24,7 +35,7 @@ python api-spec/generate.py
 
 `npm` is required (`npx` must be on `PATH`). The Python generator is `datamodel-code-generator`, pinned in `requirements-dev.txt`. The TypeScript generator is `openapi-typescript`, pinned in `api-spec/package.json`.
 
-A new path must also be added to `EXPECTED_PATHS` in `api/tests/test_contract.py`. The test fails if a path appears or disappears, if the generated hash does not match the YAML, or if a live FastAPI route is missing from the spec or returns a model that is not one of these schemas.
+A new path must also be added to `EXPECTED_PATHS` in `api/tests/test_contract.py`. The test fails if a path appears or disappears, if the generated hash does not match the YAML, if a live FastAPI route is missing from the spec or returns a model that is not one of these schemas, or if a string enum has no named alias.
 
 ## Backend
 
