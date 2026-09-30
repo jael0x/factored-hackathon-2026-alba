@@ -1,12 +1,13 @@
 # Alba design
 
-This file sets how Alba looks and moves on screen. It governs the `web/` app (the six routes in `ARCHITECTURE.md`, "Auth and screens"), `mocks/index.html`, and `diagrams/c4.html`. It does not decide outcomes, states, fields, or the wording that templates own.
+This file sets how Alba looks and moves on screen. It governs the `web/` app (the routes in `ARCHITECTURE.md`, "Auth and screens"), `mocks/index.html`, and `diagrams/c4.html`. It does not decide outcomes, states, fields, or the wording that templates own.
 
 `ARCHITECTURE.md` wins over this file. `AGENTS.md` ("Data fetching and UI") binds every screen. If a pattern here needs a field the API does not return, the pattern waits: it is listed under **Open**, and nobody builds around it.
 
 Decided with Jael:
 
 - Sep 28, 2026: glass for the conversation, a different surface for the record (Principle 1). One sans family; Georgia is dropped. This file also governs `diagrams/c4.html`. The product web ships light only for the Oct 5 demo; the C4 page keeps a dark set.
+- Sep 30, 2026: the login is two columns (title, description, and the always-visible notice on the left; the form on the right), vertically centered. The demo search is a popover under a dashed "Demo" button in the app bar, hidden until pressed. The code step stacks its actions.
 - Sep 29, 2026: no cream anywhere. Records are solid white, and the one key record per screen is a deep indigo panel. Glass sits over a blurred color field so the effect shows. Screens fill the browser like the real app; the mock's notes live in a drawer. Buttons stay forest green, so green means both "act" and "pre-qualifies".
 
 ## Sources
@@ -69,7 +70,7 @@ Every product screen sits on the aurora: a cool base gradient with large blurred
 
 | Token | Value | Use |
 |---|---|---|
-| `--surface` | `#FFFFFF` | Template messages, product cards, result rows, the queue, trace cards, dialogs, the session-ended card |
+| `--surface` | `#FFFFFF` | Template messages, product cards, result rows, the queue, trace cards, dialogs, the demo popover, the login notice, the session-ended card |
 | `--surface-2` | `#F5F6FA` | Rows and insets inside a white surface |
 | `--line` | `#DCE0E8` | Dividers. Decorative only: never the sole edge of a control |
 | `--field-edge` | `#7F869A` | Input and secondary-button borders on white |
@@ -165,7 +166,7 @@ Screens fill the browser like the real app. There is no device frame.
 
 ### App bar and sidebar
 
-- Customer app bar: glass, 64px, sticky. The orb (24px) and "Alba" in label weight 600 on the left. On the right, the first name in a glass pill and a text button "Salir". The login shows the brand only.
+- Customer app bar: glass, 64px, sticky. The orb (24px) and "Alba" in label weight 600 on the left. On the right, the first name in a glass pill and a text button "Salir". The login shows the brand only, plus the "Demo" button when `DEMO_LOGIN=1` (see Login).
 - Agent sidebar: glass, full height. The brand at the top; one nav item, "Casos en revisión", with an ink count badge; the agent's name, specialty, and employee id at the bottom.
 
 ### Composer (`/case/:id`)
@@ -228,9 +229,11 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 
 | Kind | Look | Use |
 |---|---|---|
-| Primary | `--green` fill, white text, pill | "Abrir sesión", "Volver a entrar" |
+| Primary | `--green` fill, white text, pill | "Enviar código", "Abrir sesión", "Volver a entrar" |
 | Decisive | `--ink` fill, white text, pill | "Confirmar" in the agent confirm dialog |
-| Secondary | White fill, 1px `--field-edge`, ink text, pill | "Elegir al azar", "Volver" |
+| Secondary | White fill, 1px `--field-edge`, ink text, pill | "Pedir otro código", "Elegir al azar", "Volver" |
+| Text | No fill, ink text, pill | "Salir", "Cerrar", "Cambiar documento" |
+| Demo | White fill, dashed 1px `--field-edge`, ink text, pill | "Demo" in the login app bar, only with `DEMO_LOGIN=1` |
 | Secondary on hero | No fill, 1px `--hero-edge`, white text, pill | "Precalificar", "No precalificar" |
 | Send | 44px circle, `--green`, white icon | Composer |
 
@@ -245,11 +248,13 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 
 ### Login (`/login`)
 
-- A display title with a one-line lede, then two glass panels side by side (stacked on phones): search and code.
-- A two-way switch, "Cliente" and "Agente", picks whether the search covers customers or agents (`POST /session/code` or `POST /agent/session`).
-- A search field, then white result rows: name, city, segment, masked document. "Elegir al azar" asks the API for a random row (`random=true`).
-- The code panel: masked email, code field, "Abrir sesión". A caption says the code lasts ten minutes (`ARCHITECTURE.md`, "Auth and screens").
-- The test inbox shows only when the API returns the code (`DEMO_INBOX=1`). It has a dashed 1px `--field-edge` border and the label "Buzón de prueba", so nobody reads it as a bank feature.
+- Two columns: the display title and its one-line lede on the left, one glass panel with the two steps (document number, then code) on the right, so each step's buttons stay in view without scrolling. The block is vertically centered in the space under the app bar, so the code step grows evenly up and down and the title does not move. Stacked on phones, title first (`ARCHITECTURE.md`, "Auth and screens").
+- Under the lede, on both steps, a white notice reads "Si tu documento está registrado y tiene un correo asociado, te enviaremos un código. Si no te llega, acércate a una sucursal para registrar tu correo." It never changes with the answer, including for a registered document with no email: the screen never names the email or the customer, and never says whether the document is on file.
+- Step 1: the document field and "Enviar código" (primary).
+- Step 2: the document shown above, a caption "Revisa tu correo y escribe el código." ("Pedimos otro código. Revisa tu correo." after a resend), the code field with focus, a caption with the validity from `expires_in_seconds` (ten minutes), then the actions stacked: "Abrir sesión" (primary, full width), "Pedir otro código" (secondary, the same width), and "Cambiar documento" (text button, centered). Any failed code shows one line, "El código no es válido o venció."
+- The page itself shows nothing of the demo. With `DEMO_LOGIN=1` (read from `GET /config`) the app bar on `/login` carries a "Demo" button: a white pill with a dashed 1px `--field-edge` border, so nobody reads it as a bank feature. Pressing it opens the test-customer search right below it as a popover, not a modal: white, the same dashed border, `--r-card`, with the heading "Usuarios de prueba", a search field that takes focus, white result rows (full name, country, document masked to its last 4 digits; three rows show at a time and the rest scroll inside the list), "Elegir al azar", and "Cerrar". Choosing a row fills the document field and closes it; it never skips the code. Escape, a click outside, or "Cerrar" closes it too.
+- In the local demo the code arrives in Mailpit (http://localhost:8025). The screen never shows it.
+- Agents do not log in here. They have their own page, `/agent/login` (email and employee code, then the emailed code), decided Sep 30 and not built yet (`ARCHITECTURE.md`, "Auth and screens").
 
 ### Home (`/`)
 
@@ -307,7 +312,7 @@ Walkthrough tokens: background `rgba(22, 25, 34, 0.88)` with blur, text `#F2F4F8
 |---|---|---|
 | `--t-press` | 120ms | Button press |
 | `--t-enter` | 200ms | Messages, rows, view changes |
-| `--t-sheet` | 320ms | Sheets, dialogs, drawers, the certificate |
+| `--t-sheet` | 320ms | Sheets, dialogs, drawers, the demo popover, the certificate |
 | `--t-orb` | 4s, linear, loop | The orb |
 | `--ease` | `cubic-bezier(0.2, 0, 0, 1)` | Everything that is not a loop |
 
@@ -351,14 +356,14 @@ Contrast, WCAG 2.x formula, computed Sep 29, 2026 for the values in this file. G
 
 ## Interface copy
 
-Interface labels are Spanish. Until `web/` exists, the labels are the ones this file names and the ones in `mocks/index.html`. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the agent-close message) are not in this file: they live in `api/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
+Interface labels are Spanish. They are the ones this file names; a screen not built yet takes its labels from `mocks/index.html`. The login labels in `web/src/pages/Login.tsx` follow the Login section above. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the agent-close message) are not in this file: they live in `api/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
 
 ## Open
 
 Each item needs a contract change before it is built. None is worked around in the meantime.
 
 1. **Reply rows after `which_product` or `confirm_prequalify`.** The screen needs a typed field saying which template was sent last. A `messages` row has `author` and `body`, and no `template_id`.
-2. **A countdown for the login code.** It needs the code's expiry in the `POST /session/code` response. Until then the caption states ten minutes.
+2. **City, segment, and document type on the demo search rows.** The mock shows them; `CustomerSearchHit` carries the name, country, and document number only.
 3. **Portuguese interface labels.** The contract localizes templates, not interface labels.
 4. **How uncertainty shows on the certificate.** `PLAN.md` §2 marks it "Partial". This file gives the certificate no slot for it until that is decided.
 
