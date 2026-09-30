@@ -41,13 +41,23 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://alba:alba@postgres:5432/alba
-      DEMO_INBOX: "1"
+      DEMO_LOGIN: "1"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      MAIL_FROM: "Alba <no-reply@alba.local>"
       LLM_MODEL: gpt-6-luna
     ports:
       - "8000:8000"
     depends_on:
       load:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+
+  mailpit:
+    image: axllent/mailpit:v1.30.2
+    ports:
+      - "8025:8025"
 
   web:
     build:
