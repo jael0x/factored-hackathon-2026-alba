@@ -1,6 +1,6 @@
 # Implementation plan
 
-The build order for `ARCHITECTURE.md`, as of Tue Sep 29, 2026. The contract wins over this file: if an item here disagrees with it, the item is wrong. Open decisions live in `PLAN.md` §5, dates in `PLAN.md` §8, behavior in `specs/`. This file says what gets built, in which order, and which spec scenarios each item turns green.
+The build order for `ARCHITECTURE.md`, as of Wed Sep 30, 2026. The contract wins over this file: if an item here disagrees with it, the item is wrong. Open decisions live in `PLAN.md` §5, dates in `PLAN.md` §8, behavior in `specs/`. This file says what gets built, in which order, and which spec scenarios each item turns green.
 
 ## How the work is pulled
 
@@ -10,6 +10,7 @@ The build order for `ARCHITECTURE.md`, as of Tue Sep 29, 2026. The contract wins
 - Done means:
   - the listed scenarios have tests that run under `docker compose --profile test run --rm test`;
   - lint and the type checker are clean (I4);
+  - a request or response shape changes only in `api-spec/openapi.yaml`, followed by `python api-spec/generate.py`; handlers and the web client use the generated types (`ARCHITECTURE.md` "HTTP contract", `api-spec/README.md`);
   - a behavior change updates the matching feature in `specs/` (with `/spec update`) and the spec status in `diagrams/c4.html` in the same change;
   - an item that settles one of the C4 page's `New` open items updates that entry too.
 - Leakage wall for the learned component: the held-out set (M4) is written and frozen, with its sha256 recorded, before anyone tunes the prompt (M3). Prompt tuning uses the dev set only. Whoever wrote held-out cases does not take prompt-tuning work afterwards.
@@ -17,6 +18,12 @@ The build order for `ARCHITECTURE.md`, as of Tue Sep 29, 2026. The contract wins
 ## Where we are
 
 Built and merged on Sep 29 (PR #1, plus the AWS CLI architecture fix): `compose.yaml` with `postgres`, the one-shot `load`, `api` with `/health` and `/ready`, a placeholder `web` behind nginx, and a `test` service. `db/migrations/001_init.sql` already creates every table the contract lists, cycle tables included.
+
+Also on Sep 29 (e0e3532), the wire contract:
+- `api-spec/openapi.yaml` holds the paths: 15 in e0e3532, 17 after `/config` and `/me` (Sep 29).
+- It is generated into `api/contract_models.py` (Pydantic) and `web/src/api/schema.d.ts` (TypeScript).
+- `api/tests/test_contract.py` guards it.
+- `/health` and `/ready` already return the generated models, and the web shell calls them through `web/src/api/client.ts`.
 
 The full load on Sep 29 read 150,000 customers, 400,000 products, and 1,200 agents, found 22,492 empty scores and 30,033 empty incomes, passed the products-to-customers check, and wrote 150,000 gold rows (`load` output, full files). That matches the contract's Sep 27 measurements.
 
@@ -42,42 +49,25 @@ Gaps against the contract in what is built (item M0):
 - `daily_exchange_rates.csv` has no expected row count. The contract asks for all four files, and its snapshot size is not written in the contract.
 - The load report prints rows and empty scores and incomes, but not active products by type (**Data: what is touched and what is not**).
 - No lint or type-check config exists yet (I4).
+- Customer login built on Sep 29 and refined on Sep 30 (the two-column layout, the demo popover), one C4 component at a time: the screen (W2), the routes, and the engine. A browser mock (MSW) was tried and removed on Sep 30; screens are built against the local stack. `002_login.sql` adds `customers.email` and hashed codes; `mailpit` receives every code. `api/tests/test_login_integration.py` covers the `01` customer scenarios against Postgres.
+- I1, decided Sep 30: `api-spec/generate.py` appends a named alias for every string enum in `openapi.yaml` (`Role = Literal['customer', 'agent']` and 17 more) to `api/contract_models.py`. `api/auth.py` imports `Role` from there, and `test_every_spec_enum_has_a_named_alias` guards the list.
 
 ## Interfaces (do first)
 
-- [ ] **I1. Closed sets in code.** Every closed set from `AGENTS.md` "No magic strings" is defined once, in the module that owns it in the contract's file tree:
-  - `api/events.py`: event names, idempotency-key prefixes.
-  - `api/processes.py`: states, end reasons, reason codes.
-  - `api/worker.py`: command names.
-  - `api/rules.py`: process rule ids.
-  - `api/policy/engine.py`: outcomes, policy rule ids.
-  - `api/policy/templates.py`: template ids, locales.
-  - `api/llm/schema.py`: intents, products, languages.
-
-  Web types are generated from the API's OpenAPI schema, so the client never retypes a closed set. The additions from D13 and D15 wait for those decisions.
-- [ ] **I2. HTTP route contract.** Agree on the table below and write it into **Auth and screens** in `ARCHITECTURE.md`; that settles the C4 page's route items. Two points need an answer in the same change:
-  - **Thread source.** The first customer message has no process when it is written, and `messages.process_id` is `NOT NULL`. Proposal: the thread is read from the process's `messages` rows plus the message event that `process.started` points to through `caused_by_event_id`.
-  - **Updates.** How later worker output reaches the page. Proposal: while the typing indicator shows, the client polls the case about once a second.
-- [ ] **I3. `ConversationTurn` and turn fixtures.** `api/llm/schema.py` in the contract's shape, plus one JSON turn per step of the four oracle flows and the spec examples. Engine tests inject them; the web fixtures reuse them. Depends on I1.
-- [ ] **I4. Tooling.** ruff and mypy for Python, `tsc --noEmit` for the web app, all run by the `test` service. `README.md` names the one command.
-
-Proposed routes (the web app calls them under `/api`; nginx and Vite strip the prefix):
-
-| Method and path | Who | Body or result | In the contract |
-|---|---|---|---|
-| `GET /customers/search?q=` | anyone | up to 20 customers | yes |
-| `GET /agents/search?q=` | anyone | up to 20 agents, with employee code | proposed |
-| `POST /session/code` | anyone | `customer_id` or `random=true`; the code only with `DEMO_INBOX=1` | yes |
-| `POST /session` | anyone | the code; returns the customer JWT | yes |
-| `POST /agent/session/code`, `POST /agent/session` | anyone | the same for agents | "works the same"; paths proposed |
-| `GET /products` | customer | the session's products; any id in the request is ignored | proposed |
-| `POST /messages` | customer | `client_message_id`, `text`; returns 202 with the event id | proposed |
-| `GET /cases` | customer | the session's processes, newest first | proposed |
-| `GET /cases/{id}` | customer | state, product, language, thread, certificate if decided | proposed |
-| `GET /agent/queue` | agent | processes in `human_active` | proposed |
-| `GET /agent/case/{id}` | agent | the packet from `analysis.completed` | proposed |
-| `POST /agent/case/{id}/close` | agent | `outcome` | yes |
-| `GET /agent/case/{id}/events` | agent | the process's events, in order | proposed |
+- [ ] **I1. Closed sets in code.** Every closed set from `AGENTS.md` "No magic strings" is defined once.
+  - Sets the wire carries are generated as named `Literal` aliases at the end of `api/contract_models.py` from `api-spec/openapi.yaml` (decided Sep 30). Python code imports them and does not declare them again. These are: role, state, end reason, product, locale, language, outcome, close outcome, currency, reason code, intent, template id, `decided_by`, policy rule id, actor, message author, policy version, and process key.
+  - Sets the wire does not carry live in the module that owns them in the contract's file tree:
+    - `api/events.py`: idempotency-key prefixes;
+    - `api/worker.py`: command names;
+    - `api/rules.py`: process rule ids.
+  - Event names appear in the spec only as the trace discriminators. `api/events.py` defines them once, and a test checks that they equal the discriminator mapping in `openapi.yaml`.
+  - The additions from D13 and D15 wait for those decisions.
+- [x] **I2. HTTP route contract.** Done in e0e3532: `api-spec/openapi.yaml` and `ARCHITECTURE.md` "HTTP contract" (15 paths, roles, error codes, the `Case`, the packet, and the trace).
+  - **Thread source (settled):** customer lines come from the process's `conversation.message_received` events, plus the opening message reached through `process.started.caused_by_event_id`. Assistant and template lines come from `messages` rows.
+  - **Updates (settled):** `POST /messages` returns the `Case` after the worker finishes that cycle's commands, so the page does not poll.
+  - **Still open:** no route lists a customer's processes. After a reload or a new login, the client cannot find an open case or an issued certificate unless it kept the `process_id` from a `POST /messages` response.
+- [ ] **I3. `ConversationTurn` and turn fixtures.** `api/llm/schema.py` in the contract's shape, plus one JSON turn per step of the four oracle flows and the spec examples. Engine tests inject them. Depends on I1.
+- [ ] **I4. Tooling.** ruff and mypy for Python, `tsc --noEmit` for the web app, all run by the `test` service. `README.md` names the one command. `web` already has `npm run typecheck` (Sep 29); nothing runs it in the `test` service yet.
 
 ## Engine (E)
 
@@ -102,7 +92,8 @@ Proposed routes (the web app calls them under `/api`; nginx and Vite strip the p
   - takes `pending` commands with `FOR UPDATE SKIP LOCKED`;
   - makes at most 3 attempts, then moves the case to `human_active` with `tool_failed`;
   - runs the eight handlers;
-  - takes the model call as an injected function, so tests pass turns as JSON.
+  - takes the model call as an injected function, so tests pass turns as JSON;
+  - lets the `POST /messages` handler wait until the commands enqueued from its event are done, because the response is the `Case` after that cycle. The handler waits; it does not run commands itself.
 
   Event-chain tests cross the worker (`AGENTS.md` "Tests"). Settles the C4 items on who calls `match_rules`, whether an event and its commands commit together, and the poll interval.
   - Specs: `07` "Repeated model failures send the case to a person".
@@ -110,22 +101,24 @@ Proposed routes (the web app calls them under `/api`; nginx and Vite strip the p
 - [ ] **E5. Templates.** `api/policy/templates.py`, ES and PT, for `confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the policy certificate, and the two agent-path messages. The contract says these sentences are not written yet: they are written here, read by both of us, then noted in the contract. The certificate shows income in local currency with the USD equivalent and the rate date, and no limit or rate.
   - Specs: `05` certificate scenarios and "A request in Portuguese gets a Portuguese certificate"; `07` "The referral notice tells the customer a person will review".
   - Depends on E1. **Blocked** by D15 (1) for the non-`REFER` notice.
-- [ ] **E6. Auth.** `api/auth.py`:
-  - 6-digit codes valid 10 minutes in `login_codes`;
+- [ ] **E6. Auth.** `api/auth.py`. The customer half is built (Sep 29). The agent half follows D18 (decided Sep 30: `/agent/login`, email plus employee code, `Active` agents only) and is built later:
+  - 6-digit codes valid 10 minutes, stored hashed in `login_codes`, emailed by `api/mail.py` to Mailpit; a new code replaces the unused one; the fifth wrong code spends it;
+  - the same answer for every document on `POST /session/code`, and the same 401 for every failure on `POST /session`;
   - JWT HS256 for 15 minutes with `role`, and the `get_session` dependency;
-  - 401 on expiry;
-  - agent routes require `role = agent`;
+  - 401 on a missing or expired token;
+  - 403 for a customer token on an agent route, and the reverse;
+  - a customer code does not open an agent session;
   - a missing `JWT_SECRET` stops startup and names the variable.
 
-  Settles the C4 items on code hashing, wrong-attempt limits, and which routes need the agent role.
+  Settles the C4 items on code hashing and wrong-attempt limits.
   - Specs: `01` all.
   - Depends on I1 and I2.
-- [ ] **E7. Read routes.** Customer and agent search, and products with the session filter. `api/tools/profile.py`, `products.py`, `catalog.py`.
+- [ ] **E7. Read routes.** Customer and agent search, and products with the session filter. The demo customer search and `GET /me` are built (Sep 29). `api/tools/profile.py`, `products.py`, `catalog.py`.
   - Specs: `01` search scenarios; `02` all.
   - Depends on E6.
-- [ ] **E8. Case and agent routes.** Post a message, list and read cases, agent queue, packet, close, trace. Queue and trace order use an explicit tie-break after `created_at`.
+- [ ] **E8. Case and agent routes.** `POST /messages`, `GET /case/{process_id}`, the agent queue, packet, trace, and close, exactly as in `ARCHITECTURE.md` "HTTP contract", typed with the generated models. That section already fixes the order (`created_at`, then id), the 404 and 409 cases, and the packet with null analysis fields when no `analysis.completed` exists.
   - Specs: `08` for `REFER` cases; `09` all; the HTTP side of `03` to `07`.
-  - Depends on E4 and E6. **Blocked** by D15 for packets and closes on non-`REFER` cases.
+  - Depends on E4 and E6. **Blocked** by D15 (3) for closes on non-`REFER` cases.
 - [ ] **E9. Oracle integration test.** The four flows through HTTP and the worker with injected turns:
   - Juan: `PREQUALIFIED` by R05.
   - Juliana: `NEEDS_INFO`, then `PREQUALIFIED` after her income.
@@ -162,22 +155,23 @@ Proposed routes (the web app calls them under `/api`; nginx and Vite strip the p
 
 ## Web (W)
 
-Every screen follows `DESIGN.md` and `mocks/index.html`, and handles loading, error, and success on every fetch. Until E8 lands, screens read fixture JSON built from I2 and I3.
+Every screen follows `DESIGN.md` and `mocks/index.html`, and handles loading, error, and success on every fetch. Every call goes through `web/src/api/client.ts` with the generated types; no screen calls `fetch` directly. Screens are built against the local stack, not a mock API (Sep 30): a screen is built together with, or after, the routes it calls.
 
-- [ ] **W1. App shell.** Routes from the contract's screen table, the generated API types, and a session-ended screen on 401. Depends on I1 and I2.
-- [ ] **W2. Login.** Customer and agent search, random pick, and code entry. The demo inbox shows the code. Specs: `01`.
+- [x] **W1. App shell.** Built Sep 29: routing, the aurora and tokens, the bearer token on every call, and the "Tu sesión terminó" card on 401. Each later page adds its own route.
+- [x] **W2. Customer login.** The document number, then the code from the email (Mailpit in the demo), and the demo search and random pick when `GET /config` says `demo_login`. Built Sep 29-30 against the real API. Specs: `01`.
 - [ ] **W3. Home.** Products in the row's currency. Specs: `02`.
-- [ ] **W4. Case.** The thread; one uuid per send; the typing indicator "escribiendo…" while waiting, with no fixed sleep; the certificate when it exists. Specs: `03` to `07` as the customer sees them.
-- [ ] **W5. Agent queue and case.** The packet, two close actions, and no reply field. Specs: `08`. **Blocked** by D15 for non-`REFER` cases.
+- [ ] **W4. Case.** The thread; one uuid per send; the typing indicator "escribiendo…" until the `POST /messages` response arrives, with no fixed sleep and no polling; the returned `Case` replaces the thread; the certificate when it exists. Specs: `03` to `07` as the customer sees them.
+- [ ] **W5. Agent queue and case.** The packet, two close actions, and no reply field. Specs: `08`. **Blocked** by D15 (3) for closes on non-`REFER` cases.
 - [ ] **W6. Trace.** The process's events in order, with the detail column of `09`. Specs: `09`.
-- [ ] **W7. Real API.** Fixtures off. The four oracle flows in the browser, one of them in Portuguese. Depends on E9 and W2 to W6.
+- [ ] **W7. Oracle flows in the browser.** The four oracle flows, one of them in Portuguese. Depends on E9 and W2 to W6.
+- [ ] **W8. Agent login page.** `/agent/login` (D18): email and employee code, then the emailed code; `Active` agents only. Depends on the agent half of E6.
 
 ## Spec work from the Sep 29 review
 
 - After each of D12 to D16 is decided: update `03`, `04`, `06`, `07`, and `08` to match, in the change that writes the decision into the contract.
 - Scenarios missing for behavior the contract already defines. Each is added in the item that builds the behavior:
   - two invalid model outputs send the case to a person with `model_output_invalid` (`07`, M3);
-  - an agent opens a session with a code (`01`, E6);
+  - the agent login (email and employee code, `Active` agents only, D18) goes into `01` with W8 and the agent half of E6;
   - a customer session is refused on agent routes (`08`, E6).
 
 ## Milestones
@@ -185,7 +179,7 @@ Every screen follows `DESIGN.md` and `mocks/index.html`, and handles loading, er
 | Milestone | Day | Done when |
 |---|---|---|
 | 1 | Wed Sep 30 | I1 to I4, E1 to E4, M0 to M2 are in. D12 to D16 are decided. pytest decides the four oracle cases through the worker with injected turns |
-| 2 | Thu Oct 1 | E5 to E8, M3 to M5, and W1 to W6 on fixtures are in |
+| 2 | Thu Oct 1 | E5 to E8, M3 to M5, and W1 to W6 are in |
 | 3 | Fri Oct 2, feature freeze | E9 and W7 pass, the first full eval run (M6) is written, M7 is started |
 
 Saturday to Monday follow `PLAN.md` §8. The cut list is in `PLAN.md` §8.
