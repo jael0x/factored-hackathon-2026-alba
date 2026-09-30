@@ -64,7 +64,6 @@ services:
       dockerfile: docker/test.Dockerfile
     environment:
       ALBA_TEST_ADMIN_DATABASE_URL: postgresql://alba:alba@postgres:5432/postgres
-      ALBA_TEST_DATABASE_URL: postgresql://alba:alba@postgres:5432/alba_test
     depends_on:
       postgres:
         condition: service_healthy

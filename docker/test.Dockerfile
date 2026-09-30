@@ -12,9 +12,9 @@ COPY api-spec/openapi.yaml /app/api-spec/openapi.yaml
 COPY web/src/api /app/web/src/api
 COPY db /app/db
 COPY pytest.ini /app/pytest.ini
+COPY conftest.py /app/conftest.py
 
 ENV PYTHONPATH=/app
 ENV ALBA_TEST_ADMIN_DATABASE_URL=postgresql://alba:alba@postgres:5432/postgres
-ENV ALBA_TEST_DATABASE_URL=postgresql://alba:alba@postgres:5432/alba_test
 
 CMD ["pytest", "-v"]

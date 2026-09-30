@@ -1,4 +1,4 @@
-import os
+from collections.abc import Callable
 from pathlib import Path
 
 import psycopg
@@ -7,20 +7,11 @@ import pytest
 from pipeline.batches import all_hashes_loaded, new_batch_id, record_batches
 from pipeline.bronze import BronzeFile, file_sha256
 from pipeline.gold import rebuild_gold
-from pipeline.migrate import apply_migrations
 from pipeline.silver import reload_silver
 
 pytestmark = pytest.mark.integration
 
-ADMIN_URL = os.environ.get(
-    "ALBA_TEST_ADMIN_DATABASE_URL",
-    "postgresql://alba:alba@127.0.0.1:55432/postgres",
-)
-TEST_DB = os.environ.get("ALBA_TEST_DATABASE_NAME", "alba_test")
-TEST_URL = os.environ.get(
-    "ALBA_TEST_DATABASE_URL",
-    f"postgresql://alba:alba@127.0.0.1:55432/{TEST_DB}",
-)
+TEST_DB = "alba_test"
 
 
 def _bronze(path: Path) -> BronzeFile:
@@ -32,47 +23,15 @@ def _bronze(path: Path) -> BronzeFile:
     )
 
 
-def _postgres_available() -> bool:
-    try:
-        with psycopg.connect(ADMIN_URL, connect_timeout=3) as conn:
-            conn.execute("SELECT 1")
-        return True
-    except Exception:
-        return False
-
-
 @pytest.fixture(scope="module")
-def test_database_url() -> str:
-    if not _postgres_available():
-        pytest.skip("Postgres not reachable for integration tests")
-    with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
-        exists = conn.execute(
-            "SELECT 1 FROM pg_database WHERE datname = %s",
-            (TEST_DB,),
-        ).fetchone()
-        if not exists:
-            conn.execute(f'CREATE DATABASE "{TEST_DB}"')
-        else:
-            conn.execute(
-                """
-                SELECT pg_terminate_backend(pid)
-                FROM pg_stat_activity
-                WHERE datname = %s AND pid <> pg_backend_pid()
-                """,
-                (TEST_DB,),
-            )
-            conn.execute(f'DROP DATABASE "{TEST_DB}"')
-            conn.execute(f'CREATE DATABASE "{TEST_DB}"')
-    return TEST_URL
+def database_url(migrated_database: Callable[[str], str]) -> str:
+    return migrated_database(TEST_DB)
 
 
 @pytest.fixture
-def migrated_db(test_database_url: str, monkeypatch: pytest.MonkeyPatch) -> str:
-    monkeypatch.setenv("DATABASE_URL", test_database_url)
-    root = Path(__file__).resolve().parents[2]
-    monkeypatch.setenv("MIGRATIONS_DIR", str(root / "db" / "migrations"))
-    apply_migrations()
-    return test_database_url
+def migrated_db(database_url: str, monkeypatch: pytest.MonkeyPatch) -> str:
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    return database_url
 
 
 def test_migration_creates_core_tables(migrated_db: str) -> None:
