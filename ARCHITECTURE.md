@@ -2,7 +2,7 @@
 
 This is the build contract. Anyone who implements from this file, person or model, must end up with what is written here. What is not decided is listed under **Not decided** and **Known gaps**. Filling those in on your own changes the demo.
 
-Related files: `README.md` (product view and data access), `mocks/index.html` (screens), `AGENTS.md` (coding standard), `PLAN.md` (hackathon requirements, data evidence, open decisions, schedule). If `PLAN.md` offers an alternative (another host, another model, a credit limit), this file wins.
+Related files: `README.md` (product view and data access), `mocks/index.html` (screens), `DESIGN.md` (look and motion), `AGENTS.md` (coding standard), `PLAN.md` (hackathon requirements, data evidence, open decisions, schedule), `IMPLEMENTATION.md` (build order), `specs/` (behavior as examples), `api-spec/openapi.yaml` (the wire contract). If `PLAN.md` offers an alternative (another host, another model, a credit limit), this file wins.
 
 This file is in English. Dataset literals, customer-facing copy, and the phrases the model must not emit stay in Spanish or Portuguese exactly as written.
 
@@ -16,7 +16,7 @@ This file is in English. Dataset literals, customer-facing copy, and the phrases
 - Delinquency is not predicted. A model trained on `days_past_due` is not shipped.
 - No credit limit is shown. There is no income multiplier.
 - Product names in the file are Spanish, with these exact strings: `Tarjeta Crédito`, `Préstamo Personal`, `Préstamo Hipotecario`. Do not translate them to `Credit Card` when reading the CSV. The organizer data dictionary lists English product types; the measured file does not use them.
-- Any row of `customers.csv` can open a session. The four profiles below are the test oracle, not an allowlist.
+- Any customer with an email on file can open a session: 147,016 of the 150,000 rows. The four profiles below are the test oracle, not an allowlist.
 
 ## What gets built
 
@@ -31,7 +31,7 @@ Four outcomes, from real rows of the file (snapshot of June 17, 2026):
 | Alicia Mariana Parra Álvarez | `CLI-440CO5FZIY6A` | `REFER` | R05, score 615 | `human_active` |
 | Mariana Mónica Acosta Rojas | `CLI-ZGOY1V6ZC46J` | `NOT_PREQUALIFIED` | R02, 180 days past due | `ended` / `not_prequalified` |
 
-These four rows are the oracle of an integration test. If an outcome changes, the test fails. Login does not hardcode them: it searches the 150,000 customers and the 1,200 agents.
+These four rows are the oracle of an integration test. If an outcome changes, the test fails. Login does not hardcode them: any customer with an email on file logs in with their document number and an emailed code (**Auth and screens**).
 
 ### Oracle fixtures
 
@@ -69,7 +69,7 @@ Stored in `api/fixtures/oracle_customers.json`. Values read from the file on Sep
 | Frontend | TypeScript, React, Vite. One app |
 | Database | PostgreSQL 16 as a service of the same `docker compose` stack. No managed database. The schema lives in `db/migrations/` |
 | How it runs | `docker compose up` applies the schema, downloads the missing CSVs, and builds the profile. Nobody runs SQL by hand. Reviewers (and anyone else) run that stack locally and open the app in the browser. There is no cloud deploy for the submission. `docs/ops.md` will list optional steps if a host is used later |
-| Auth | Own JWT, HS256, 15 minutes, issued by this API |
+| Auth | Document number plus a one-time code emailed to the address on file (Mailpit in the compose stack), then an own JWT, HS256, 15 minutes, issued by this API |
 | Pipeline | Python, in the `load` container. Reads local CSVs. DuckDB only if the aggregate needs it; the result lands in Postgres |
 | LLM | OpenAI API, model `gpt-6-luna` (GPT-6 Luna). The adapter `api/llm/conversation.py` makes one call with Structured Outputs (the `ConversationTurn` JSON schema) and returns `ConversationTurn`. The policy does not use this adapter |
 | Tests | pytest in the API. Vitest only if the client has logic; business logic does not live in the client |
@@ -82,11 +82,15 @@ api-spec/
   openapi.yaml            # wire contract; generate both clients from this file
   generate.py
 api/
-  main.py                 # FastAPI, routers
+  main.py                 # FastAPI app, error handlers, includes the routers
+  routers/                # session.py (config, demo search, login), customer.py (me)
+  errors.py               # {error: ...} bodies for 401, 403, 404, 422
+  customers.py            # read-table lookups: by document, by id, the demo search
   contract_models.py      # generated from api-spec/openapi.yaml
-  settings.py             # env: DATABASE_URL, JWT_SECRET, OPENAI_API_KEY, LLM_MODEL, DEMO_INBOX
+  settings.py             # env: DATABASE_URL, JWT_SECRET, OPENAI_API_KEY, LLM_MODEL, DEMO_LOGIN, SMTP_HOST, SMTP_PORT, MAIL_FROM
   db.py                   # connection
   auth.py                 # one-time code, JWT, get_session dependency
+  mail.py                 # sends the login code by SMTP; the only module that opens SMTP
   events.py               # append to events, idempotency
   rules.py                # catalog and pure match
   worker.py               # takes commands and runs handlers
@@ -105,7 +109,9 @@ api/
   fixtures/
     oracle_customers.json # the four profiles and César
 web/
-  src/api/client.ts           # openapi-fetch client, typed by schema.d.ts
+  src/api/client.ts           # openapi-fetch client, typed by schema.d.ts; adds the bearer token, ends the session on 401
+  src/session/session.ts      # the session in sessionStorage; never renewed
+  src/styles/tokens.css       # DESIGN.md tokens
   src/api/schema.d.ts         # generated from api-spec/openapi.yaml
   src/pages/Login.tsx
   src/pages/Home.tsx
@@ -118,6 +124,7 @@ pipeline/
   silver.py
   gold.py
 db/migrations/001_init.sql
+db/migrations/002_login.sql
 eval/                       # comes later; does not block the flow
 compose.yaml
 docker/api.Dockerfile
@@ -423,15 +430,30 @@ While the client waits for the API after a customer send, the chat shows a typin
 
 ## Auth and screens
 
-Any customer in gold can log in. `GET /customers/search?q=` searches by name, document, or `customer_id` over the 150,000 rows, limit 20, ordered by `last_name`, `first_name`, `customer_id`. `POST /session/code` takes an existing `customer_id`, or `random=true` to pick one at random. It creates a 6-digit code, valid 10 minutes, in `login_codes`. With `DEMO_INBOX=1` the response includes the code. Otherwise `code` is null. `POST /session` with the code returns the JWT. Claims: `sub` = `customer_id`, `role` = `customer`, `exp` 15 minutes. The JSON repeats `sub` and `role` next to `token`.
+A customer logs in with their document number, and a one-time code sent to the email on file proves it is them. The document says who someone claims to be; the code opens the session.
 
-Agent login is the same three steps against the 1,200 rows of `service_agents`: `GET /agents/search?q=` (order `last_name`, `first_name`, `agent_id`), `POST /agent/session/code`, `POST /agent/session`. Claims: `sub` = `agent_id`, `role` = `agent`. A customer code does not open an agent session.
+- `POST /session/code` takes `document_number`. When it matches a customer with an email, the API stores a 6-digit code for that customer in `login_codes`, valid 10 minutes, and emails it to that address. A new request replaces any unused code for the same customer.
+- The answer is the same whether or not the document matches and whether or not the customer has an email: `{expires_in_seconds: 600}`. It never carries the code, the address, or the name, so the form cannot be used to learn who is on file.
+- `POST /session` takes `document_number` and `code`. It opens a session only when the code is the latest unused one for that customer, is under 10 minutes old, and has had fewer than 5 wrong tries. The fifth wrong code spends it. Every failure is the same 401. A used code does not open a second session.
+- Claims: `sub` = `customer_id`, `role` = `customer`, `exp` 15 minutes. The JSON repeats `sub` and `role` next to `token`.
+- `login_codes` stores a hash of the code, never the code. The code is not logged.
+
+The email is Spanish copy written in `api/mail.py`: the code and its 10-minute validity. It goes out by SMTP. The compose stack sends only to Mailpit, a local mail catcher, and anyone trying the demo reads the code in its inbox at http://localhost:8025. Nothing leaves the machine. The dataset's addresses use real domains (gmail.com, yahoo.com, and others), so the stack must never point SMTP at a real provider while it holds this dataset.
+
+Email is the channel, not the identifier. 24,203 addresses are shared by 2 to 31 customers, 79,930 rows in all, Juliana's and Mariana's among them (`PLAN.md` §4.3). `document_number` is unique. The 2,984 customers with no email (2.0%) cannot log in: their request gets the same answer and no code. That one answer tells anyone who gets no code to register an email at a branch (`DESIGN.md`, "Login"); it does not single them out. That is a stated limitation.
+
+Demo helpers. With `DEMO_LOGIN=1`, `GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20, ordered by `last_name`, `first_name`, `customer_id`, and `GET /customers/search?random=true` returns one customer with an email on file, at random. The login screen uses them only to fill the document field; the code still goes by mail. `GET /agents/search?q=` is the same search over `service_agents`, ordered by `last_name`, `first_name`, `agent_id`. With `DEMO_LOGIN` off those routes are 404. `GET /config` tells the web app whether the helpers are on. The local compose stack sets `DEMO_LOGIN=1`.
+
+Agent login, decided Sep 30 (`PLAN.md` D18) and built later with its own component. Agents log in on their own page, `/agent/login`, and land on `/agent`. The agent types their email and employee code. Neither is unique alone (13 employee codes and 12 emails are each shared by two agents), but the pair is unique for all 1,200. When the pair matches an agent whose `agent_status` is `Active` (1,090 of 1,200), the API emails a 6-digit code to that address with the customer code's rules: 10 minutes, latest code only, five wrong tries, one use, stored hashed. The answer is the same for every pair and every status, so an agent on `Vacation`, `Leave`, or `Inactive` gets no code and no hint. `POST /agent/session` takes the email, the employee code, and the code. `service_agents` then gains `email` and `agent_status`, and the demo agent search fills both fields.
+
+Until that component is built, agent login keeps the demo-only path: `GET /agents/search?q=`, `POST /agent/session/code`, `POST /agent/session`, only with `DEMO_LOGIN=1`, and `POST /agent/session/code` returns the code in its response, as the removed `DEMO_INBOX` did. Claims: `sub` = `agent_id`, `role` = `agent`. A customer code does not open an agent session.
 
 Expired JWT: 401. The customer sees that the session ended. It is not silently renewed during the case being shown.
 
 | Frontend route | Who | What it renders |
 |---|---|---|
-| `/login` | both | search and code |
+| `/login` | customer | document number, then the code from the email. The demo helpers when `DEMO_LOGIN=1` |
+| `/agent/login` | agent | email and employee code, then the code from the email. Decided Sep 30, not built yet |
 | `/` | customer | their products, in the row's currency |
 | `/case/:id` | customer | thread, plus the certificate if `prequalification.decided` exists |
 | `/agent` | agent | processes in `human_active` |
@@ -444,20 +466,22 @@ Currency on the home screen: the row's `products.currency` column. For customers
 
 ## HTTP contract
 
-`api-spec/openapi.yaml` is the wire contract. `python api-spec/generate.py` writes `api/contract_models.py` and `web/src/api/schema.d.ts`. Handlers type requests and responses with the generated models. The web client is `web/src/api/client.ts` (`openapi-fetch` over those types). A hand-written DTO for one of these bodies is a bug. FastAPI does not publish a second OpenAPI document.
+`api-spec/openapi.yaml` is the wire contract. `python api-spec/generate.py` writes `api/contract_models.py` and `web/src/api/schema.d.ts`, and appends to the Python file a named `Literal` alias for every string enum in the spec (`Role`, `ProcessState`, `Outcome`, and the rest). Python code imports those aliases and does not declare the same list again. Handlers type requests and responses with the generated models. The web client is `web/src/api/client.ts` (`openapi-fetch` over those types). A hand-written DTO for one of these bodies is a bug. FastAPI does not publish a second OpenAPI document.
 
-Regenerate after every edit to `openapi.yaml`. `api/tests/test_contract.py` fails if the generated files do not carry the spec hash, if a path appears or disappears, or if a live route is missing from the spec or returns a model from anywhere else.
+Regenerate after every edit to `openapi.yaml`. `api/tests/test_contract.py` fails if the generated files do not carry the spec hash, if a path appears or disappears, if a live route is missing from the spec or returns a model from anywhere else, or if a string enum has no alias.
 
 | Method and path | Who | Body in | Body out |
 |---|---|---|---|
 | `GET /health` | public | | `{status: ok}` |
 | `GET /ready` | public | | `{status: ready}` or 503 `{status: not_ready, error}` |
-| `GET /customers/search?q=` | public | | up to 20 `{customer_id, document_number, first_name, last_name, country}` |
-| `POST /session/code` | public | `{customer_id}` or `{random: true}` | customer name and `code` (null unless `DEMO_INBOX=1`) |
-| `POST /session` | public | `{code}` | `{token, sub, role}` |
-| `GET /agents/search?q=` | public | | up to 20 `{agent_id, employee_code, first_name, last_name}` |
-| `POST /agent/session/code` | public | `{agent_id}` or `{random: true}` | agent name, employee code, and `code` |
+| `GET /config` | public | | `{demo_login}` |
+| `GET /customers/search?q=` or `?random=true` | public, only with `DEMO_LOGIN=1` | | up to 20 `{customer_id, document_number, first_name, last_name, country}`; one for `random`. 404 when off |
+| `POST /session/code` | public | `{document_number}` | `{expires_in_seconds: 600}`, the same for every document |
+| `POST /session` | public | `{document_number, code}` | `{token, sub, role}`. 401 for any failure |
+| `GET /agents/search?q=` | public, only with `DEMO_LOGIN=1` | | up to 20 `{agent_id, employee_code, first_name, last_name}`. 404 when off |
+| `POST /agent/session/code` | public, only with `DEMO_LOGIN=1` | `{agent_id}` or `{random: true}` | agent name, employee code, and `code`. 404 when off. Replaced by the email and employee code login when it is built |
 | `POST /agent/session` | public | `{code}` | `{token, sub, role}` |
+| `GET /me` | customer | | `{customer_id, first_name, last_name}` of the token's customer. The login responses never carry a name |
 | `GET /products` | customer | optional `customer_id` query | that customer's products, or `[]` if the query id is not the token `sub` |
 | `POST /messages` | customer | `{text, client_message_id}` | the `Case` after the worker finishes that cycle's commands |
 | `GET /case/{process_id}` | customer | | `Case` for the token's customer. Another customer's id is 404 |
@@ -488,7 +512,7 @@ The trace includes events with this `process_id`, plus that one opening message 
 
 PostgreSQL 16. `load` is the only process that reads S3. The API and `policy.run` read Postgres.
 
-`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`.
+`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email.
 
 ### Read tables
 
@@ -496,7 +520,7 @@ Copied from the four CSVs. Other columns in the data dictionary are not copied.
 
 | Table | Columns |
 |---|---|
-| `customers` | `customer_id`, `document_number`, `first_name`, `last_name`, `country`, `segment`, `credit_score`, `estimated_monthly_income`, `customer_status` |
+| `customers` | `customer_id`, `document_number`, `first_name`, `last_name`, `email`, `country`, `segment`, `credit_score`, `estimated_monthly_income`, `customer_status` |
 | `products` | `product_id`, `customer_id`, `product_type`, `product_number`, `currency`, `current_balance`, `product_status`, `days_past_due` |
 | `daily_exchange_rates` | `date`, `source_currency`, `target_currency`, `exchange_rate` |
 | `service_agents` | `agent_id`, `employee_code`, `first_name`, `last_name` |
@@ -515,12 +539,12 @@ The customer API does not list this table. `policy.run` reads one row, the one f
 - `processes` also holds `product` and `language`, null until a turn sets them
 - `messages`: `id`, `process_id`, `author` (`customer` | `assistant` | `template`), `body`, `event_id`
 - `llm_turns`: `id`, `process_id`, `command_id`, `request jsonb`, `raw_response text`, `parsed jsonb`, `parse_ok bool`, `model text`, `input_tokens int`, `output_tokens int`, `latency_ms int`, `created_at`
-- `login_codes`: the 6-digit code, the customer or agent it belongs to, and the 10-minute expiry
+- `login_codes`: a hash of the 6-digit code, the customer or agent it belongs to, the 10-minute expiry, the count of wrong tries, and when it was used
 - `load_batches`: `path`, `bytes`, `sha256` of each file on disk
 
 ### Indexes
 
-- `customers`: primary key `customer_id`, index on `document_number`, index on `(last_name, first_name)`
+- `customers`: primary key `customer_id`, unique index on `document_number`, index on `(last_name, first_name)`
 - `products (customer_id)`
 - `customer_credit_profile`: primary key `customer_id`
 - `commands (status)` where `status = 'pending'`
@@ -541,10 +565,11 @@ Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` exclude
 | `load` | waits for Postgres, applies `db/migrations/`, downloads CSVs if missing, fills the read tables and gold, exits with code 0 | no |
 | `api` | starts when `load` finished successfully | yes |
 | `web` | the frontend, proxies to the API | yes |
+| `mailpit` | local mail catcher. The API's only SMTP target; its inbox is at http://localhost:8025 | yes |
 
-Who runs it: anyone with the repo, a `.env`, and Docker. Default local demo uses `DEMO_INBOX=1` so the one-time code is returned in the API response (there is no SMS). Reviewers run `docker compose up` and open the web URL from the compose file. Secrets stay in `.env`; they are not committed.
+Who runs it: anyone with the repo, a `.env`, and Docker. The default local demo sets `DEMO_LOGIN=1` and sends every login code to Mailpit. There is no SMS and no real email. Reviewers run `docker compose up` and open the web URL from the compose file. Secrets stay in `.env`; they are not committed.
 
-With a `.env` holding `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION=us-east-2`, `S3_BUCKET`, `OPENAI_API_KEY`, and `JWT_SECRET`, `docker compose up` needs no other command. `.env.example` lists the same names with empty values. `load` uses the AWS CLI and runs `aws s3 cp` for these four keys, prefix `data/`:
+With a `.env` holding `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION=us-east-2`, `S3_BUCKET`, `OPENAI_API_KEY`, and `JWT_SECRET`, `docker compose up` needs no other command. `JWT_SECRET` must be at least 32 characters; the API refuses to start without it and names the variable. `.env.example` lists the same names with empty values. `load` uses the AWS CLI and runs `aws s3 cp` for these four keys, prefix `data/`:
 
 - `customers.csv`
 - `products.csv`
@@ -597,7 +622,7 @@ No model is trained on the transcripts. They are templates. They do not feed the
 
 ## Juan's flow, step by step
 
-1. Login. JWT `sub = CLI-9EDEKZ8OUNUR`.
+1. Login with his document number and the code emailed to him. JWT `sub = CLI-9EDEKZ8OUNUR`.
 2. Home. Savings `1,559.57 USD`, mortgage `109,159.57 USD`, 0 days past due. No credit card.
 3. He writes "quiero una tarjeta de crédito". Event `conversation.message_received`. Columns: `customer_id` from the JWT, `process_id` null, `process_state` `ai_active`. Payload: the text and the `client_message_id`.
 4. `open_process` inserts the process in `ai_active`.
@@ -632,12 +657,14 @@ These points are left open on purpose. Implementing them on your own breaks the 
 - Tying login to the four oracle profiles, or seeding only those four rows.
 - Filling empty scores or incomes, or converting to MXN balances the file stores in USD.
 - A cloud deploy for the submission (local `docker compose up` is how the project is tried; optional host steps are documentation only).
+- Sending login codes to the dataset's addresses through a real mail provider.
+- Search or a random pick in the login outside `DEMO_LOGIN=1`.
 - A separate injection classifier or input-heuristic guard beyond the structural defense above.
 - A separate risk microservice; the dataset `credit_score` is the risk estimate.
 - A separate intent router beside `ConversationTurn`.
 - Full pandera/Great Expectations suites or a policy freshness rule (R10).
 
-Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), and D12 to D16, found by the Sep 29 spec review (the policy run key after `NEEDS_INFO`, a second vague request, an income typed before consent, handoffs that are not `REFER`, and three wording fixes). Each one that gets decided is written into this file.
+Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D12 to D16, found by the Sep 29 spec review (the policy run key after `NEEDS_INFO`, a second vague request, an income typed before consent, handoffs that are not `REFER`, and three wording fixes), and D17 (no route lists a customer's cases). Each one that gets decided is written into this file.
 
 ## Known gaps
 
