@@ -36,6 +36,7 @@ CUSTOMERS_COLUMNS: Final = (
     "document_number",
     "first_name",
     "last_name",
+    "email",
     "country",
     "segment",
     "credit_score",
