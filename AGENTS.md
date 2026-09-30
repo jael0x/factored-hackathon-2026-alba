@@ -47,6 +47,8 @@ A correct diagnosis plus a patch that skips the owner is a failed fix. The small
 | History | Append to `events`, with `caused_by_event_id` | `UPDATE` a past event, or join two facts by clock time |
 | Decision wording | `api/policy/templates.py` | Model prose |
 | Model call | `api/llm/conversation.py` | Import the OpenAI SDK from policy or UI |
+| Login codes and sessions | `api/auth.py`: codes stored hashed, JWT, `get_session` | A code in a log, a response body, or a plain-text column |
+| Sending email | `api/mail.py`, to Mailpit in the compose stack | Opening SMTP from another module, or pointing it at a real provider while the stack holds this dataset |
 | HTTP request and response | `api-spec/openapi.yaml`, generated into `api/contract_models.py` and `web/src/api/schema.d.ts` | A hand-written DTO in `api/` or `web/` |
 | Facts the policy reads | `customer_credit_profile` | Recompute score, delinquency, or income on the request |
 | Limit, new rate, delinquency prediction | They do not exist | Invent them because a plan or a chat mentioned them |

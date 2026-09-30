@@ -4,7 +4,7 @@ Alba is a customer-service demo for the synthetic LATAM bank of the Factored AI 
 
 It is not a production bank and it moves no money. "Alba" is the name of this interface. Customers, products, scores, incomes, and agents come from the organizer dataset, snapshot of June 17, 2026.
 
-**Status (Sep 29, 2026): compose load path in progress.** `docker compose up` brings up Postgres, the one-shot `load` container (bronze → silver → gold), a health API, and a placeholder web. Login, chat, policy, and agent screens are not built yet. `mocks/index.html` remains the screen walkthrough. Submission is due Mon Oct 5.
+**Status (Sep 30, 2026): customer login built.** `docker compose up` brings up Postgres, the one-shot `load` container (bronze, silver, gold), the API with the customer login, Mailpit for the login codes, and the web login. Home, chat, policy, and agent screens are not built yet. `mocks/index.html` remains the screen walkthrough. Submission is due Mon Oct 5.
 
 Stack: FastAPI and PostgreSQL 16 in one Docker Compose stack, with GPT-6 Luna (`gpt-6-luna`) on the OpenAI API for the conversation (when wired). Details in `ARCHITECTURE.md`.
 
@@ -16,11 +16,17 @@ Copy `.env.example` to `.env` and fill the values. `S3_BUCKET` is the bucket nam
 docker compose up --build
 ```
 
-Open http://localhost:5173/ (API health at http://localhost:8000/health). `load` downloads the four CSVs into `data/raw/` if missing, applies migrations, and builds gold. Default compose sets `DEMO_INBOX=1`. There is no cloud deploy for the submission; optional host steps will live in `docs/ops.md`.
+`.env` needs a `JWT_SECRET` of at least 32 characters (`openssl rand -hex 32`); the API refuses to start without it.
+
+Open http://localhost:5173/ (API health at http://localhost:8000/health). `load` downloads the four CSVs into `data/raw/` if missing, applies migrations, and builds gold. Login codes are emailed to Mailpit, a local mail catcher: read them at http://localhost:8025. Nothing is sent outside your machine. Default compose sets `DEMO_LOGIN=1`, which adds a "Demo" button to the login header; it opens a test-customer search right below it that fills the document field. There is no cloud deploy for the submission; optional host steps will live in `docs/ops.md`.
+
+### Web with hot reload
+
+With the stack up, `cd web && npm install && npm run dev` serves the app from source and proxies `/api` to the API on port 8000. Vite takes the next free port (5174) when the compose `web` service already holds 5173.
 
 ### Tests
 
-Full suite (unit + integration against an isolated `alba_test` DB), preferred:
+Full suite (unit and integration tests; the integration tests recreate and migrate throwaway databases, `alba_test` and `alba_api_test`, through one fixture in `conftest.py`), preferred:
 
 ```bash
 docker compose --profile test run --rm test
@@ -53,11 +59,11 @@ pytest
 
 ## What a bank would see
 
-A session is not opened with a national ID or a `customer_id`. Those say who someone claims to be. A one-time code opens the session, bound to that customer. In the demo the code shows up in a test inbox because there is no SMS.
+A customer logs in with their document number. That says who they claim to be; a 6-digit code emailed to the address on file proves it and opens the session, bound to that customer. The login answers the same way whether or not the document is on file. In the demo the email lands in Mailpit, never in a real inbox: the dataset's addresses use real domains.
 
 Inside the session, the customer sees only their own products. Typing another person's id changes nothing.
 
-Any of the 150,000 customers can log in, and any of the 1,200 agents. These four rows cover every outcome; they are examples, not the list of who can try it:
+Any customer with an email on file can log in (147,016 of the 150,000; the rest have no address to send a code to). Agents will log in on their own page with their email and employee code (decided Sep 30, not built yet); until then agent login works only with `DEMO_LOGIN=1`. These four rows cover every outcome; they are examples, not the list of who can try it:
 
 | Person | What happens | Why |
 |---|---|---|
@@ -142,6 +148,6 @@ s3ls() {   # s3ls <prefix>: XML, max 1000 keys; page with &continuation-token=..
 mkdir -p data/raw && s3get "data/customers.csv" data/raw/customers.csv
 ```
 
-The running stack does not use the curl helper above. `load` runs `aws s3 cp` for four keys under `data/` — `customers.csv`, `products.csv`, `daily_exchange_rates.csv`, `service_agents.csv` — into `data/raw/`, then into Postgres. The API does not call S3. `data/sample/` currently holds three partitions used for spot checks: `call_center_interactions_20260601.csv`, `call_transcripts_20250315.csv`, `call_transcripts_20260601.csv`.
+The running stack does not use the curl helper above. `load` runs `aws s3 cp` for four keys under `data/` (`customers.csv`, `products.csv`, `daily_exchange_rates.csv`, `service_agents.csv`) into `data/raw/`, then into Postgres. The API does not call S3. `data/sample/` currently holds three partitions used for spot checks: `call_center_interactions_20260601.csv`, `call_transcripts_20250315.csv`, `call_transcripts_20260601.csv`.
 
 Data findings and their samples are in `PLAN.md` §4.
