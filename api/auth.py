@@ -3,6 +3,7 @@ import hmac
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from collections.abc import Callable
 from typing import Annotated, get_args
 from uuid import UUID
 
@@ -10,7 +11,7 @@ import jwt
 import psycopg
 from fastapi import Depends, Header
 
-from api import customers
+from api import agents, customers
 from api.contract_models import Role
 from api.errors import forbidden, unauthorized
 from api.settings import settings
@@ -148,6 +149,24 @@ def open_customer_session(
     return SessionClaims(sub=customer.customer_id, role=CUSTOMER)
 
 
+def issue_agent_code(
+    conn: psycopg.Connection, secret: str, email: str, employee_code: str, now: datetime
+) -> CodeDelivery | None:
+    agent = agents.find_active_by_login(conn, email, employee_code)
+    if agent is None:
+        return None
+    return issue_code(conn, secret, agent.agent_id, AGENT, agent.email, now)
+
+
+def open_agent_session(
+    conn: psycopg.Connection, secret: str, email: str, employee_code: str, code: str, now: datetime
+) -> SessionClaims | None:
+    agent = agents.find_active_by_login(conn, email, employee_code)
+    if agent is None or not redeem_code(conn, secret, agent.agent_id, AGENT, code, now):
+        return None
+    return SessionClaims(sub=agent.agent_id, role=AGENT)
+
+
 def get_session(authorization: Annotated[str | None, Header()] = None) -> SessionClaims:
     if authorization is None or not authorization.startswith(BEARER_PREFIX):
         raise unauthorized()
@@ -157,7 +176,14 @@ def get_session(authorization: Annotated[str | None, Header()] = None) -> Sessio
     return claims
 
 
-def require_customer(session: Annotated[SessionClaims, Depends(get_session)]) -> SessionClaims:
-    if session.role != CUSTOMER:
-        raise forbidden()
-    return session
+def require_role(role: Role) -> Callable[[SessionClaims], SessionClaims]:
+    def check(session: Annotated[SessionClaims, Depends(get_session)]) -> SessionClaims:
+        if session.role != role:
+            raise forbidden()
+        return session
+
+    return check
+
+
+require_customer = require_role(CUSTOMER)
+require_agent = require_role(AGENT)

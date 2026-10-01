@@ -5,11 +5,11 @@ import pytest
 
 from api import auth
 from api.settings import settings
-from api.tests.login_harness import JUAN, Harness, Login, customer_login
+from api.tests.login_harness import CESAR, JUAN, Harness, Login, customer_login, login_of
 
 pytestmark = pytest.mark.integration
 
-LOGINS = [customer_login(JUAN.document_number)]
+LOGINS = [customer_login(JUAN.document_number), login_of(CESAR)]
 
 
 @pytest.fixture(params=LOGINS, ids=[login.role for login in LOGINS])

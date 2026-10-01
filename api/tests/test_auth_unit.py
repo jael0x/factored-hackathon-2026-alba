@@ -4,6 +4,7 @@ from uuid import uuid4
 import jwt
 
 from api import auth
+from api.agents import normalize_email, normalize_employee_code
 from api.mail import LOGIN_CODE_SUBJECT, login_code_message
 from api.search import like_escape
 
@@ -96,3 +97,11 @@ def test_login_code_message_names_code_and_validity() -> None:
 
 def test_like_escape_keeps_wildcards_literal() -> None:
     assert like_escape("50%_off\\") == "50\\%\\_off\\\\"
+
+
+def test_an_agent_email_is_matched_trimmed_and_in_lower_case() -> None:
+    assert normalize_email("  Cesar.Gonzalez@EXAMPLE.com \t") == "cesar.gonzalez@example.com"
+
+
+def test_an_employee_code_is_matched_trimmed_and_in_upper_case() -> None:
+    assert normalize_employee_code(" e75612 ") == "E75612"
