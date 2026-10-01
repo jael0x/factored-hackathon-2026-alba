@@ -7,6 +7,7 @@ This file sets how Alba looks and moves on screen. It governs the `web/` app (th
 Decided with Jael:
 
 - Sep 28, 2026: glass for the conversation, a different surface for the record (Principle 1). One sans family; Georgia is dropped. This file also governs `diagrams/c4.html`. The product web ships light only for the Oct 5 demo; the C4 page keeps a dark set.
+- Sep 30, 2026 (later): agents get their own login page with the same layout, steps, and Demo popover. Each login links to the other with a centered text button under the form.
 - Sep 30, 2026: the login is two columns (title, description, and the always-visible notice on the left; the form on the right), vertically centered. The demo search is a popover under a dashed "Demo" button in the app bar, hidden until pressed. The code step stacks its actions.
 - Sep 29, 2026: no cream anywhere. Records are solid white, and the one key record per screen is a deep indigo panel. Glass sits over a blurred color field so the effect shows. Screens fill the browser like the real app; the mock's notes live in a drawer. Buttons stay forest green, so green means both "act" and "pre-qualifies".
 
@@ -232,7 +233,7 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 | Primary | `--green` fill, white text, pill | "Enviar código", "Abrir sesión", "Volver a entrar" |
 | Decisive | `--ink` fill, white text, pill | "Confirmar" in the agent confirm dialog |
 | Secondary | White fill, 1px `--field-edge`, ink text, pill | "Pedir otro código", "Elegir al azar", "Volver" |
-| Text | No fill, ink text, pill | "Salir", "Cerrar", "Cambiar documento" |
+| Text | No fill, ink text, pill | "Salir", "Cerrar", "Cambiar documento", "Cambiar datos", "Acceso para agentes", "Acceso para clientes" |
 | Demo | White fill, dashed 1px `--field-edge`, ink text, pill | "Demo" in the login app bar, only with `DEMO_LOGIN=1` |
 | Secondary on hero | No fill, 1px `--hero-edge`, white text, pill | "Precalificar", "No precalificar" |
 | Send | 44px circle, `--green`, white icon | Composer |
@@ -254,7 +255,16 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 - Step 2: the document shown above, a caption "Revisa tu correo y escribe el código." ("Pedimos otro código. Revisa tu correo." after a resend), the code field with focus, a caption with the validity from `expires_in_seconds` (ten minutes), then the actions stacked: "Abrir sesión" (primary, full width), "Pedir otro código" (secondary, the same width), and "Cambiar documento" (text button, centered). Any failed code shows one line, "El código no es válido o venció."
 - The page itself shows nothing of the demo. With `DEMO_LOGIN=1` (read from `GET /config`) the app bar on `/login` carries a "Demo" button: a white pill with a dashed 1px `--field-edge` border, so nobody reads it as a bank feature. Pressing it opens the test-customer search right below it as a popover, not a modal: white, the same dashed border, `--r-card`, with the heading "Usuarios de prueba", a search field that takes focus, white result rows (full name, country, document masked to its last 4 digits; three rows show at a time and the rest scroll inside the list), "Elegir al azar", and "Cerrar". Choosing a row fills the document field and closes it; it never skips the code. Escape, a click outside, or "Cerrar" closes it too.
 - In the local demo the code arrives in Mailpit (http://localhost:8025). The screen never shows it.
-- Agents do not log in here. They have their own page, `/agent/login` (email and employee code, then the emailed code), decided Sep 30 and not built yet (`ARCHITECTURE.md`, "Auth and screens").
+- Agents do not log in here. Under the panel, a centered text button "Acceso para agentes" leads to their own page (Agent login, below).
+
+### Agent login (`/agent/login`)
+
+- The customer login's layout, steps, and motion. Display title "Entra como agente"; lede "Escribe tu correo y tu código de empleado. Te enviaremos un código de un solo uso a ese correo."
+- The notice reads "Si tus datos corresponden a un agente activo, te enviaremos un código." It never changes with the answer, so it never says whether the pair is on file or the agent is away (`ARCHITECTURE.md`, "Auth and screens").
+- Step 1: "Correo" and "Código de empleado", then "Enviar código". Step 2: both values shown above in rows, then the customer login's code step; the text button reads "Cambiar datos".
+- With `DEMO_LOGIN=1` the same Demo popover, headed "Agentes de prueba". It lists only active agents; a row is the full name and "código de empleado" with the code in mono. Choosing a row fills both fields.
+- Under the panel, "Acceso para clientes" leads back to `/login`.
+- Until the queue is built, `/agent` shows the customer home's greeting with the agent's first name, the lede "Los casos en revisión aparecerán aquí.", and a caption with the specialty (when the file has one) and the employee code in mono.
 
 ### Home (`/`)
 
@@ -356,7 +366,7 @@ Contrast, WCAG 2.x formula, computed Sep 29, 2026 for the values in this file. G
 
 ## Interface copy
 
-Interface labels are Spanish. They are the ones this file names; a screen not built yet takes its labels from `mocks/index.html`. The login labels in `web/src/pages/Login.tsx` follow the Login section above. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the agent-close message) are not in this file: they live in `api/domain/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
+Interface labels are Spanish. They are the ones this file names; a screen not built yet takes its labels from `mocks/index.html`. The login labels in `web/src/pages/Login.tsx` and `web/src/pages/AgentLogin.tsx` follow the Login and Agent login sections above. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the agent-close message) are not in this file: they live in `api/domain/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
 
 ## Open
 

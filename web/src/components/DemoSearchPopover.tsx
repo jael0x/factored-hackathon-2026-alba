@@ -1,13 +1,14 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-import { DemoCustomerSearch } from "./DemoCustomerSearch";
+import { DemoSearch, type DemoSource } from "./DemoSearch";
 
-type DemoSearchPopoverProps = {
-  selectedDocument: string;
-  onPick: (documentNumber: string) => void;
+type DemoSearchPopoverProps<Hit> = {
+  source: DemoSource<Hit>;
+  isSelected: (hit: Hit) => boolean;
+  onPick: (hit: Hit) => void;
 };
 
-export function DemoSearchPopover({ selectedDocument, onPick }: DemoSearchPopoverProps) {
+export function DemoSearchPopover<Hit>({ source, isSelected, onPick }: DemoSearchPopoverProps<Hit>) {
   const panelId = useId();
   const titleId = useId();
   const [open, setOpen] = useState(false);
@@ -42,8 +43,8 @@ export function DemoSearchPopover({ selectedDocument, onPick }: DemoSearchPopove
     triggerRef.current?.focus();
   };
 
-  const pick = (documentNumber: string) => {
-    onPick(documentNumber);
+  const pick = (hit: Hit) => {
+    onPick(hit);
     setOpen(false);
   };
 
@@ -64,7 +65,7 @@ export function DemoSearchPopover({ selectedDocument, onPick }: DemoSearchPopove
       </button>
       <div id={panelId} className="popover" role="dialog" aria-labelledby={titleId} hidden={!open}>
         {open && (
-          <DemoCustomerSearch titleId={titleId} selectedDocument={selectedDocument} onPick={pick} onClose={close} />
+          <DemoSearch titleId={titleId} source={source} isSelected={isSelected} onPick={pick} onClose={close} />
         )}
       </div>
     </div>

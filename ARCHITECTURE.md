@@ -69,7 +69,7 @@ Stored in `api/fixtures/oracle_customers.json`. Values read from the file on Sep
 | Frontend | TypeScript, React, Vite. One app |
 | Database | PostgreSQL 16 as a service of the same `docker compose` stack. No managed database. The schema lives in `db/migrations/` |
 | How it runs | `docker compose up` applies the schema, downloads the missing CSVs, and builds the profile. Nobody runs SQL by hand. Reviewers (and anyone else) run that stack locally and open the app in the browser. There is no cloud deploy for the submission. `docs/ops.md` will list optional steps if a host is used later |
-| Auth | Document number plus a one-time code emailed to the address on file (Mailpit in the compose stack), then an own JWT, HS256, 15 minutes, issued by this API |
+| Auth | Customers: document number plus a one-time code emailed to the address on file. Agents: email and employee code plus the same kind of code. Mailpit receives every code in the compose stack. Then an own JWT, HS256, 15 minutes, issued by this API |
 | Pipeline | Python, in the `load` container. Reads local CSVs. DuckDB only if the aggregate needs it; the result lands in Postgres |
 | LLM | OpenAI API, model `gpt-6-luna` (GPT-6 Luna). The adapter `api/infrastructure/llm/conversation.py` makes one call with Structured Outputs (the `ConversationTurn` JSON schema) and returns `ConversationTurn`. The policy does not use this adapter |
 | Tests | pytest in the API. Vitest only if the client has logic; business logic does not live in the client |
@@ -90,7 +90,10 @@ api/
       tokens.py           # JWT and Role
     customers/
       identity.py         # CustomerIdentity and the search hit
-      search.py           # exactly one search criterion
+    agents/
+      identity.py         # AgentIdentity and the search hit
+      login.py            # the login key (trimmed, case ignored) and who can receive a code (Active)
+    search.py             # exactly one search criterion, for both demo searches
     policy/               # credit rules, when that component is built
       engine.py           # pure function
       alba-credit-v1.yaml # rules and thresholds
@@ -103,8 +106,11 @@ api/
       issue_code.py
       open_session.py
       read_current_customer.py
+      read_current_agent.py
     customers/
       search_customers.py
+    agents/
+      search_agents.py
     processes.py          # start, transition, end, when that component is built
   infrastructure/
     config/settings.py    # env, including DB_POOL_MIN and DB_POOL_MAX
@@ -112,6 +118,8 @@ api/
       pool.py             # connection pool, opened in the process lifespan
       login_codes.py      # SQL for login_codes
       customers.py        # SQL for customers
+      agents.py           # SQL for service_agents
+      search.py           # the demo search limit and LIKE escaping, shared by both searches
       events.py           # append to events, when that component is built
       profile.py          # gold by customer_id, when that read is built
       products.py
@@ -124,7 +132,7 @@ api/
     http/
       errors.py           # {error: ...} bodies for 401, 403, 404, 422
       dependencies.py     # wires a request to a use case. get_session lives here
-      routes/             # session (prefix /session), customers (/me and /customers), config, health
+      routes/             # session (/session and /agent/session), customers (/me and /customers), agents (/agent/me and /agents), config, health
     worker/               # takes commands, when that loop is built
   fixtures/
     oracle_customers.json # the four profiles and César
@@ -133,8 +141,10 @@ web/
   src/session/session.ts      # the session in sessionStorage; never renewed
   src/styles/tokens.css       # DESIGN.md tokens
   src/api/schema.d.ts         # generated from api-spec/openapi.yaml
-  src/pages/Login.tsx
+  src/pages/Login.tsx         # customer login; shares LoginShell, IdentityForm, CodeStep with the agent login
+  src/pages/AgentLogin.tsx    # email and employee code, then the code
   src/pages/Home.tsx
+  src/pages/AgentHome.tsx     # greeting from GET /agent/me until the queue is built
   src/pages/Case.tsx          # customer: chat, plus the certificate if it exists
   src/pages/AgentQueue.tsx
   src/pages/AgentCase.tsx     # handoff packet and the two close actions
@@ -145,6 +155,7 @@ pipeline/
   gold.py
 db/migrations/001_init.sql
 db/migrations/002_login.sql
+db/migrations/003_agent_login.sql
 eval/                       # comes later; does not block the flow
 compose.yaml
 docker/api.Dockerfile
@@ -464,18 +475,22 @@ The email is Spanish copy written in `api/infrastructure/mail/smtp.py`: the code
 
 Email is the channel, not the identifier. 24,203 addresses are shared by 2 to 31 customers, 79,930 rows in all, Juliana's and Mariana's among them (`PLAN.md` §4.3). `document_number` is unique. The 2,984 customers with no email (2.0%) cannot log in: their request gets the same answer and no code. That one answer tells anyone who gets no code to register an email at a branch (`DESIGN.md`, "Login"); it does not single them out. That is a stated limitation.
 
-Demo helpers. With `DEMO_LOGIN=1`, `GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20, ordered by `last_name`, `first_name`, `customer_id`, and `GET /customers/search?random=true` returns one customer with an email on file, at random. The login screen uses them only to fill the document field; the code still goes by mail. `GET /agents/search?q=` is the same search over `service_agents`, ordered by `last_name`, `first_name`, `agent_id`. With `DEMO_LOGIN` off those routes are 404. `GET /config` tells the web app whether the helpers are on. The local compose stack sets `DEMO_LOGIN=1`.
+Demo helpers. With `DEMO_LOGIN=1`, `GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20, ordered by `last_name`, `first_name`, `customer_id`, and `GET /customers/search?random=true` returns one customer with an email on file, at random. The login screen uses them only to fill the document field; the code still goes by mail. `GET /agents/search?q=` and `GET /agents/search?random=true` do the same over `Active` agents only, by name, employee code, or `agent_id`, ordered by `last_name`, `first_name`, `agent_id`. They also return the email, so a pick fills both fields of the agent login; the code still goes by mail. With `DEMO_LOGIN` off those routes are 404. `GET /config` tells the web app whether the helpers are on. The local compose stack sets `DEMO_LOGIN=1`.
 
-Agent login, decided Sep 30 (`PLAN.md` D18) and built later with its own component. Agents log in on their own page, `/agent/login`, and land on `/agent`. The agent types their email and employee code. Neither is unique alone (13 employee codes and 12 emails are each shared by two agents), but the pair is unique for all 1,200. When the pair matches an agent whose `agent_status` is `Active` (1,090 of 1,200), the API emails a 6-digit code to that address with the customer code's rules: 10 minutes, latest code only, five wrong tries, one use, stored hashed. The answer is the same for every pair and every status, so an agent on `Vacation`, `Leave`, or `Inactive` gets no code and no hint. `POST /agent/session` takes the email, the employee code, and the code. `service_agents` then gains `email` and `agent_status`, and the demo agent search fills both fields.
+Agents log in on their own page, `/agent/login` (`PLAN.md` D18, decided and built Sep 30), and land on `/agent`. The agent types their email and employee code. Neither is unique alone (13 employee codes and 12 emails are each shared by two agents), but the pair is unique for all 1,200, also with case ignored. The API trims both fields and compares the email in lower case and the employee code in upper case. A unique index on that pair keeps it unique.
 
-Until that component is built, agent login keeps the demo-only path: `GET /agents/search?q=`, `POST /agent/session/code`, `POST /agent/session`, only with `DEMO_LOGIN=1`, and `POST /agent/session/code` returns the code in its response, as the removed `DEMO_INBOX` did. Claims: `sub` = `agent_id`, `role` = `agent`. A customer code does not open an agent session.
+- `POST /agent/session/code` takes `email` and `employee_code`. When the pair matches an agent whose `agent_status` is `Active` (1,090 of 1,200), the API emails a 6-digit code to that address with the customer code's rules: 10 minutes, latest code only, five wrong tries, one use, stored hashed. The answer is `{expires_in_seconds: 600}` for every pair and every status, so an agent on `Vacation`, `Leave`, or `Inactive` gets no code and no hint.
+- `POST /agent/session` takes `email`, `employee_code`, and `code`. The pair must still match an `Active` agent. Every failure is the same 401. Claims: `sub` = `agent_id`, `role` = `agent`, `exp` 15 minutes. A customer code does not open an agent session, and an agent code does not open a customer session.
+- `GET /agent/me` gives the agent screens the name, `employee_code`, and `specialty`, which is null for the 476 agents the file gives none.
+
+The agent's email is the same Spanish message as the customer's. Each login page links to the other: "Acceso para agentes" on `/login`, "Acceso para clientes" on `/agent/login`. One browser tab holds one session; logging in on the other page replaces it.
 
 Expired JWT: 401. The customer sees that the session ended. It is not silently renewed during the case being shown.
 
 | Frontend route | Who | What it renders |
 |---|---|---|
 | `/login` | customer | document number, then the code from the email. The demo helpers when `DEMO_LOGIN=1` |
-| `/agent/login` | agent | email and employee code, then the code from the email. Decided Sep 30, not built yet |
+| `/agent/login` | agent | email and employee code, then the code from the email. The demo helpers when `DEMO_LOGIN=1` |
 | `/` | customer | their products, in the row's currency |
 | `/case/:id` | customer | thread, plus the certificate if `prequalification.decided` exists |
 | `/agent` | agent | processes in `human_active` |
@@ -500,10 +515,11 @@ Regenerate after every edit to `openapi.yaml`. `api/tests/test_contract.py` fail
 | `GET /customers/search?q=` or `?random=true` | public, only with `DEMO_LOGIN=1` | | up to 20 `{customer_id, document_number, first_name, last_name, country}`; one for `random`. 404 when off |
 | `POST /session/code` | public | `{document_number}` | `{expires_in_seconds: 600}`, the same for every document |
 | `POST /session` | public | `{document_number, code}` | `{token, sub, role}`. 401 for any failure |
-| `GET /agents/search?q=` | public, only with `DEMO_LOGIN=1` | | up to 20 `{agent_id, employee_code, first_name, last_name}`. 404 when off |
-| `POST /agent/session/code` | public, only with `DEMO_LOGIN=1` | `{agent_id}` or `{random: true}` | agent name, employee code, and `code`. 404 when off. Replaced by the email and employee code login when it is built |
-| `POST /agent/session` | public | `{code}` | `{token, sub, role}` |
+| `GET /agents/search?q=` or `?random=true` | public, only with `DEMO_LOGIN=1` | | up to 20 `Active` agents `{agent_id, employee_code, first_name, last_name, email}`; one for `random`. 404 when off |
+| `POST /agent/session/code` | public | `{email, employee_code}` | `{expires_in_seconds: 600}`, the same for every pair and status |
+| `POST /agent/session` | public | `{email, employee_code, code}` | `{token, sub, role}`. 401 for any failure |
 | `GET /me` | customer | | `{customer_id, first_name, last_name}` of the token's customer. The login responses never carry a name |
+| `GET /agent/me` | agent | | `{agent_id, employee_code, first_name, last_name, specialty}` of the token's agent. `specialty` may be null |
 | `GET /products` | customer | optional `customer_id` query | that customer's products, or `[]` if the query id is not the token `sub` |
 | `POST /messages` | customer | `{text, client_message_id}` | the `Case` after the worker finishes that cycle's commands |
 | `GET /case/{process_id}` | customer | | `Case` for the token's customer. Another customer's id is 404 |
@@ -534,7 +550,7 @@ The trace includes events with this `process_id`, plus that one opening message 
 
 PostgreSQL 16. `load` is the only process that reads S3. The API and `policy.run` read Postgres.
 
-`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
+`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_agent_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
 
 ### Read tables
 
@@ -545,7 +561,7 @@ Copied from the four CSVs. Other columns in the data dictionary are not copied.
 | `customers` | `customer_id`, `document_number`, `first_name`, `last_name`, `email`, `country`, `segment`, `credit_score`, `estimated_monthly_income`, `customer_status` |
 | `products` | `product_id`, `customer_id`, `product_type`, `product_number`, `currency`, `current_balance`, `product_status`, `days_past_due` |
 | `daily_exchange_rates` | `date`, `source_currency`, `target_currency`, `exchange_rate` |
-| `service_agents` | `agent_id`, `employee_code`, `first_name`, `last_name` |
+| `service_agents` | `agent_id`, `employee_code`, `first_name`, `last_name`, `email`, `agent_status`, `specialty` |
 
 ### Gold
 
@@ -568,6 +584,7 @@ The customer API does not list this table. `policy.run` reads one row, the one f
 
 - `customers`: primary key `customer_id`, unique index on `document_number`, index on `(last_name, first_name)`
 - `products (customer_id)`
+- `service_agents`: primary key `agent_id`, unique index on `(lower(email), upper(employee_code))`
 - `customer_credit_profile`: primary key `customer_id`
 - `commands (status)` where `status = 'pending'`
 - `events (process_id, created_at)`

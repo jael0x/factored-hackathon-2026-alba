@@ -11,7 +11,12 @@ class SearchAtRandom:
     pass
 
 
-def parse_customer_search(q: str | None, random: bool | None) -> SearchByText | SearchAtRandom | None:
+@dataclass(frozen=True)
+class RejectedSearch:
+    pass
+
+
+def parse_search(q: str | None, random: bool | None) -> SearchByText | SearchAtRandom | None:
     if (q is None) == (random is None) or random is False:
         return None
     if q is not None:

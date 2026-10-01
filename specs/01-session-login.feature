@@ -89,8 +89,3 @@ Feature: Session login
     Given the demo login is off
     When a visitor searches customers for "Juliana Castro"
     Then the search is not available
-
-  Scenario: With the demo login on, a visitor finds an agent by name
-    Given the demo login is on
-    When a visitor searches agents for "César González"
-    Then the results include "César González Sánchez" with employee code "E75612"

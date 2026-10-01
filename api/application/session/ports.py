@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
+from api.domain.agents.identity import AgentIdentity
+from api.domain.agents.login import AgentLoginKey
 from api.domain.customers.identity import CustomerIdentity
 from api.domain.session.codes import IssuedCode
 from api.domain.session.tokens import Role
@@ -11,6 +13,12 @@ class Customers(Protocol):
     def find_by_document(self, document_number: str) -> CustomerIdentity | None: ...
 
     def find_by_id(self, customer_id: str) -> CustomerIdentity | None: ...
+
+
+class Agents(Protocol):
+    def find_by_login(self, key: AgentLoginKey) -> AgentIdentity | None: ...
+
+    def find_by_id(self, agent_id: str) -> AgentIdentity | None: ...
 
 
 class LoginCodes(Protocol):

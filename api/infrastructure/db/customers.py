@@ -1,12 +1,7 @@
 import psycopg
 
 from api.domain.customers.identity import CustomerHit, CustomerIdentity
-
-SEARCH_LIMIT = 20
-
-
-def escape_like(text: str) -> str:
-    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+from api.infrastructure.db.search import SEARCH_LIMIT, escape_like
 
 
 class PostgresCustomers:

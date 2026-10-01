@@ -1,31 +1,37 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 
-import { api } from "../api/client";
-import type { components } from "../api/schema";
-import { fullName, lastFour } from "../format";
+export type DemoSource<Hit> = {
+  heading: string;
+  help: string;
+  queryLabel: string;
+  search: (q: string) => Promise<Hit[] | null>;
+  pickRandom: () => Promise<Hit | null>;
+  key: (hit: Hit) => string;
+  render: (hit: Hit) => ReactNode;
+};
 
-type Hit = components["schemas"]["CustomerSearchHit"];
-
-type Results =
+type Results<Hit> =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "error" }
   | { status: "ready"; hits: Hit[] };
 
-type DemoCustomerSearchProps = {
+type DemoSearchProps<Hit> = {
   titleId: string;
-  selectedDocument: string;
-  onPick: (documentNumber: string) => void;
+  source: DemoSource<Hit>;
+  isSelected: (hit: Hit) => boolean;
+  onPick: (hit: Hit) => void;
   onClose: () => void;
 };
 
 const SEARCH_DELAY_MS = 250;
 
-export function DemoCustomerSearch({ titleId, selectedDocument, onPick, onClose }: DemoCustomerSearchProps) {
+export function DemoSearch<Hit>({ titleId, source, isSelected, onPick, onClose }: DemoSearchProps<Hit>) {
   const queryId = useId();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Results>({ status: "idle" });
+  const [results, setResults] = useState<Results<Hit>>({ status: "idle" });
   const [attempt, setAttempt] = useState(0);
+  const { search, pickRandom } = source;
 
   useEffect(() => {
     const q = query.trim();
@@ -36,49 +42,44 @@ export function DemoCustomerSearch({ titleId, selectedDocument, onPick, onClose 
     let cancelled = false;
     setResults({ status: "loading" });
     const timer = window.setTimeout(async () => {
-      const { data } = await api.GET("/customers/search", { params: { query: { q } } }).catch(() => ({ data: undefined }));
+      const hits = await search(q);
       if (cancelled) {
         return;
       }
-      setResults(data ? { status: "ready", hits: data.customers } : { status: "error" });
+      setResults(hits ? { status: "ready", hits } : { status: "error" });
     }, SEARCH_DELAY_MS);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, attempt]);
+  }, [query, attempt, search]);
 
-  const pickRandom = async () => {
+  const pickAtRandom = async () => {
     setResults({ status: "loading" });
-    const { data } = await api
-      .GET("/customers/search", { params: { query: { random: true } } })
-      .catch(() => ({ data: undefined }));
-    const hit = data?.customers[0];
-    if (!hit) {
+    const hit = await pickRandom();
+    if (hit === null) {
       setResults({ status: "error" });
       return;
     }
     setResults({ status: "ready", hits: [hit] });
-    onPick(hit.document_number);
+    onPick(hit);
   };
 
   return (
     <div className="stack">
       <div className="panel-head popover-head">
         <h2 className="heading" id={titleId}>
-          Usuarios de prueba
+          {source.heading}
         </h2>
         <button type="button" className="btn text" onClick={onClose}>
           Cerrar
         </button>
       </div>
       <div className="stack">
-        <p className="caption muted">
-          Solo en el demo. Elegir a alguien llena su documento y cierra este panel; el código igual llega por correo.
-        </p>
+        <p className="caption muted">{source.help}</p>
         <div>
           <label className="field-label" htmlFor={queryId}>
-            Nombre, documento o número de cliente
+            {source.queryLabel}
           </label>
           <div className="field-wrap">
             <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
@@ -96,9 +97,15 @@ export function DemoCustomerSearch({ titleId, selectedDocument, onPick, onClose 
             />
           </div>
         </div>
-        <SearchResults results={results} selectedDocument={selectedDocument} onPick={onPick} onRetry={() => setAttempt((n) => n + 1)} />
+        <SearchResults
+          results={results}
+          source={source}
+          isSelected={isSelected}
+          onPick={onPick}
+          onRetry={() => setAttempt((n) => n + 1)}
+        />
         <div className="actions-row">
-          <button type="button" className="btn secondary" onClick={pickRandom}>
+          <button type="button" className="btn secondary" onClick={pickAtRandom}>
             Elegir al azar
           </button>
         </div>
@@ -107,14 +114,15 @@ export function DemoCustomerSearch({ titleId, selectedDocument, onPick, onClose 
   );
 }
 
-type SearchResultsProps = {
-  results: Results;
-  selectedDocument: string;
-  onPick: (documentNumber: string) => void;
+type SearchResultsProps<Hit> = {
+  results: Results<Hit>;
+  source: DemoSource<Hit>;
+  isSelected: (hit: Hit) => boolean;
+  onPick: (hit: Hit) => void;
   onRetry: () => void;
 };
 
-function SearchResults({ results, selectedDocument, onPick, onRetry }: SearchResultsProps) {
+function SearchResults<Hit>({ results, source, isSelected, onPick, onRetry }: SearchResultsProps<Hit>) {
   if (results.status === "idle") {
     return null;
   }
@@ -137,15 +145,9 @@ function SearchResults({ results, selectedDocument, onPick, onRetry }: SearchRes
   return (
     <ul className="results solid" aria-label="Resultados">
       {results.hits.map((hit) => (
-        <li key={hit.customer_id}>
-          <button type="button" aria-pressed={hit.document_number === selectedDocument} onClick={() => onPick(hit.document_number)}>
-            <span className="grow">
-              <span className="name">{fullName(hit)}</span>
-              <br />
-              <span className="caption muted">
-                {hit.country} · documento <span aria-label={`terminado en ${lastFour(hit.document_number)}`}>••••{lastFour(hit.document_number)}</span>
-              </span>
-            </span>
+        <li key={source.key(hit)}>
+          <button type="button" aria-pressed={isSelected(hit)} onClick={() => onPick(hit)}>
+            <span className="grow">{source.render(hit)}</span>
           </button>
         </li>
       ))}

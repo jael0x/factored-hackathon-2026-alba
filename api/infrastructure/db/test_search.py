@@ -1,4 +1,4 @@
-from api.infrastructure.db.customers import escape_like
+from api.infrastructure.db.search import escape_like
 
 
 def test_escape_like_keeps_wildcards_literal() -> None:

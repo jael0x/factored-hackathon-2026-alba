@@ -2,9 +2,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from api.application.customers.search_customers import RejectedSearch
 from api.contract_models import CurrentCustomer, CustomerSearchHit, CustomerSearchResults
 from api.domain.customers.identity import CustomerHit
+from api.domain.search import RejectedSearch
 from api.domain.session.tokens import SessionClaims
 from api.presentation.http.dependencies import (
     ReadCurrentCustomer,

@@ -8,16 +8,16 @@ import { ErrorCard } from "../components/ErrorCard";
 import { LOGIN_PATH } from "../routes";
 import { signOut } from "../session/session";
 
-const loadCurrentCustomer = () => api.GET("/me");
+const loadCurrentAgent = () => api.GET("/agent/me");
 
-export function Home() {
+export function AgentHome() {
   const navigate = useNavigate();
   const [attempt, setAttempt] = useState(0);
-  const me = useLoad(loadCurrentCustomer, attempt);
+  const me = useLoad(loadCurrentAgent, attempt);
 
   const leave = () => {
     signOut();
-    navigate(LOGIN_PATH.customer, { replace: true });
+    navigate(LOGIN_PATH.agent, { replace: true });
   };
 
   return (
@@ -29,7 +29,11 @@ export function Home() {
         {me.status === "ready" && (
           <div className="intro enter">
             <h1 className="display">Hola, {me.data.first_name}</h1>
-            <p className="lede">Tus productos aparecerán aquí.</p>
+            <p className="lede">Los casos en revisión aparecerán aquí.</p>
+            <p className="caption muted">
+              {me.data.specialty && `${me.data.specialty} · `}
+              empleado <span className="mono">{me.data.employee_code}</span>
+            </p>
           </div>
         )}
       </main>

@@ -1,5 +1,6 @@
-from api.application.customers.search_customers import RejectedSearch, search_customers
+from api.application.customers.search_customers import search_customers
 from api.domain.customers.identity import CustomerHit
+from api.domain.search import RejectedSearch
 
 
 class MemDirectory:

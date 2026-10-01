@@ -162,15 +162,20 @@ paths:
       tags: [Session]
       operationId: searchAgents
       security: []
-      summary: Demo helper. Search the loaded agents by name, employee code, or agent_id.
+      summary: Demo helper. Search the active agents, or pick one at random.
       description: >
-        Only with DEMO_LOGIN=1; not found otherwise. How an agent identifies is open (PLAN.md D18).
-        At most 20 rows. Order is last_name, first_name, agent_id, ascending.
+        Only with DEMO_LOGIN=1; not found otherwise. It fills the agent login form and never opens a session.
+        Send q or random=true, not both and not neither.
+        Only agents whose agent_status is Active are listed, because only they can receive a code.
+        With q, at most 20 rows matching name, employee code, or agent_id,
+        ordered by last_name, first_name, agent_id ascending.
+        With random=true, one active agent.
       parameters:
-        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/OptionalSearchQuery"
+        - $ref: "#/components/parameters/RandomPick"
       responses:
         "200":
-          description: Matching agents.
+          description: Matching active agents.
           content:
             application/json:
               schema:
@@ -183,27 +188,28 @@ paths:
   /agent/session/code:
     post:
       tags: [Session]
-      operationId: issueAgentCode
+      operationId: requestAgentCode
       security: []
-      summary: Issue a 6-digit code for an existing agent, or for one agent picked at random.
+      summary: Email a 6-digit code to the active agent with this email and employee code.
       description: >
-        Demo-only until PLAN.md D18 decides how an agent identifies. Only with DEMO_LOGIN=1;
-        not found otherwise. The code is valid for 10 minutes and is returned in the response.
+        Spaces around either field are ignored, the email is compared in lower case, and the employee code
+        in upper case. When the pair matches an agent whose agent_status is Active, a code valid for
+        10 minutes is stored as a hash and emailed to that address. A new request replaces any unused code
+        for the same agent. The response is the same for every pair and every status.
+        It never carries the code, the address, or the name.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/IssueAgentCodeRequest"
+              $ref: "#/components/schemas/RequestAgentCode"
       responses:
         "200":
-          description: A code was stored for one agent.
+          description: The request was taken. A code was sent only if the pair matched an active agent.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AgentCodeIssued"
-        "404":
-          $ref: "#/components/responses/NotFound"
+                $ref: "#/components/schemas/CodeRequested"
         "422":
           $ref: "#/components/responses/InvalidRequest"
 
@@ -212,16 +218,19 @@ paths:
       tags: [Session]
       operationId: openAgentSession
       security: []
-      summary: Exchange an agent code for a JWT.
+      summary: Exchange an email, an employee code, and the emailed code for a JWT.
       description: >
         Claims inside the token are sub = agent_id, role = agent, exp 15 minutes.
-        A customer code does not open an agent session.
+        The pair is matched as on the code request and must still belong to an active agent.
+        The code must be the latest unused one for that agent, under 10 minutes old, with fewer than
+        5 wrong tries. The fifth wrong code spends it. A used code does not open a second session.
+        A customer code does not open an agent session. Every failure is the same unauthorized answer.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/OpenSessionRequest"
+              $ref: "#/components/schemas/OpenAgentSessionRequest"
       responses:
         "200":
           description: Agent session.
@@ -341,6 +350,26 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /agent/me:
+    get:
+      tags: [Agent]
+      operationId: getCurrentAgent
+      summary: The session agent's id, employee code, name, and specialty.
+      description: >
+        Requires role agent. agent_id is the token sub. specialty is null when the file has none.
+        The agent screens read the name from here; the login responses never carry it.
+      responses:
+        "200":
+          description: The agent on the token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentAgent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /agent/queue:
     get:
       tags: [Agent]
@@ -458,13 +487,6 @@ components:
       bearerFormat: JWT
 
   parameters:
-    SearchQuery:
-      name: q
-      in: query
-      required: true
-      schema:
-        type: string
-        minLength: 1
     OptionalSearchQuery:
       name: q
       in: query
@@ -723,7 +745,7 @@ components:
     AgentSearchHit:
       type: object
       additionalProperties: false
-      required: [agent_id, employee_code, first_name, last_name]
+      required: [agent_id, employee_code, first_name, last_name, email]
       properties:
         agent_id:
           type: string
@@ -732,6 +754,8 @@ components:
         first_name:
           type: string
         last_name:
+          type: string
+        email:
           type: string
 
     AgentSearchResults:
@@ -754,29 +778,6 @@ components:
           type: string
           minLength: 1
 
-    AgentCodeById:
-      type: object
-      additionalProperties: false
-      required: [agent_id]
-      properties:
-        agent_id:
-          type: string
-          minLength: 1
-
-    AgentCodeRandom:
-      type: object
-      additionalProperties: false
-      required: [random]
-      properties:
-        random:
-          type: boolean
-          enum: [true]
-
-    IssueAgentCodeRequest:
-      oneOf:
-        - $ref: "#/components/schemas/AgentCodeById"
-        - $ref: "#/components/schemas/AgentCodeRandom"
-
     CodeRequested:
       type: object
       additionalProperties: false
@@ -786,24 +787,6 @@ components:
           type: integer
           enum: [600]
           description: How long a sent code is valid. The same value whether or not a code was sent.
-
-    AgentCodeIssued:
-      type: object
-      additionalProperties: false
-      required: [agent_id, first_name, last_name, employee_code, code]
-      properties:
-        agent_id:
-          type: string
-        first_name:
-          type: string
-        last_name:
-          type: string
-        employee_code:
-          type: string
-        code:
-          type: string
-          nullable: true
-          pattern: "^[0-9]{6}$"
 
     OpenCustomerSessionRequest:
       type: object
@@ -817,11 +800,29 @@ components:
           type: string
           pattern: "^[0-9]{6}$"
 
-    OpenSessionRequest:
+    RequestAgentCode:
       type: object
       additionalProperties: false
-      required: [code]
+      required: [email, employee_code]
       properties:
+        email:
+          type: string
+          minLength: 1
+        employee_code:
+          type: string
+          minLength: 1
+
+    OpenAgentSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [email, employee_code, code]
+      properties:
+        email:
+          type: string
+          minLength: 1
+        employee_code:
+          type: string
+          minLength: 1
         code:
           type: string
           pattern: "^[0-9]{6}$"
@@ -850,6 +851,23 @@ components:
           type: string
         last_name:
           type: string
+
+    CurrentAgent:
+      type: object
+      additionalProperties: false
+      required: [agent_id, employee_code, first_name, last_name, specialty]
+      properties:
+        agent_id:
+          type: string
+        employee_code:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        specialty:
+          type: string
+          nullable: true
 
     Product:
       type: object

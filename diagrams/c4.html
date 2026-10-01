@@ -459,17 +459,17 @@ view('alba', {
   ],
 });
 node('routers', {
-  parent: 'api', kind: 'component', name: 'HTTP routers', tech: 'api/main.py',
+  parent: 'api', kind: 'component', name: 'HTTP routers', tech: 'api/presentation/http/routes/',
   summary: 'Login, search, the customer message, the agent close, and the reads behind each page.',
   desc: ['FastAPI app and routers. A customer message or an agent close appends an event; what happens next is a rule and a command, not an `if` in the handler. Every query filters by the id on the JWT.'],
-  files: ['api/main.py'],
+  files: ['api/main.py', 'api/presentation/http/routes/'],
   src: 'ARCHITECTURE.md, "Auth and screens", "Agent close"; AGENTS.md, "Owners in this system"',
 });
 node('auth', {
   parent: 'api', kind: 'component', name: 'Auth', tech: 'api/domain/session',
   summary: 'One-time code, own JWT (HS256, 15 min), and the `get_session` dependency.',
   desc: ['Issues and checks the one-time code and the JWT. `get_session` hands every handler the `customer_id` or `agent_id` from the token, never from the request body or the chat.'],
-  files: ['api/domain/session/codes.py', 'api/domain/session/tokens.py', 'api/application/session/issue_code.py', 'api/presentation/http/dependencies.py'],
+  files: ['api/domain/session/codes.py', 'api/domain/session/tokens.py', 'api/domain/agents/login.py', 'api/application/session/issue_code.py', 'api/application/session/open_session.py', 'api/presentation/http/dependencies.py'],
   src: 'ARCHITECTURE.md, "Auth and screens"',
 });
 node('events', {
@@ -529,9 +529,9 @@ node('tools', {
   src: 'ARCHITECTURE.md, "File tree", "Database"',
 });
 node('config', {
-  parent: 'api', kind: 'component', name: 'Settings and DB', tech: 'api/settings.py, api/db.py',
-  summary: 'Environment settings and the Postgres connection every other component uses.',
-  files: ['api/settings.py', 'api/db.py'],
+  parent: 'api', kind: 'component', name: 'Settings and DB', tech: 'api/infrastructure/config, api/infrastructure/db/pool.py',
+  summary: 'Environment settings and the Postgres pool every other component uses.',
+  files: ['api/infrastructure/config/settings.py', 'api/infrastructure/db/pool.py'],
   src: 'ARCHITECTURE.md, "File tree"',
 });
 
@@ -567,11 +567,11 @@ spec('routers', 'r-search', {
   summary: 'Only with `DEMO_LOGIN=1`. Fills the login form; never opens a session.',
   fixed: [
     '`GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20, ordered by `last_name`, `first_name`, `customer_id`. `?random=true` returns one customer with an email on file.',
-    '`GET /agents/search?q=` is the same search over `service_agents`, ordered by `last_name`, `first_name`, `agent_id`.',
+    '`GET /agents/search?q=` and `?random=true` do the same over `Active` agents only, by name, employee code, or `agent_id`, ordered by `last_name`, `first_name`, `agent_id`. They return the email too, so a pick fills both login fields.',
     'With `DEMO_LOGIN` off both are 404. `GET /config` tells the web app whether they are on.',
-    'Backed by indexes on `customers.document_number` and `(last_name, first_name)`. The query lives in `api/infrastructure/db/customers.py`.',
+    'Backed by indexes on `customers.document_number` and `(last_name, first_name)`. The queries live in `api/infrastructure/db/customers.py` and `api/infrastructure/db/agents.py`.',
   ],
-  tests: ['With the demo login off, the search is not available.'],
+  tests: ['With the demo login off, the search is not available.', 'A demo agent search lists only active agents.'],
   src: 'ARCHITECTURE.md, "Auth and screens", "HTTP contract", "Indexes"',
 });
 spec('routers', 'r-login', {
@@ -587,14 +587,15 @@ spec('routers', 'r-login', {
   src: 'ARCHITECTURE.md, "Auth and screens", "HTTP contract"; PLAN.md §4.3',
 });
 spec('routers', 'r-agent-session', {
-  name: 'POST /agent/session', tech: 'agent login', status: 'defined',
-  summary: 'Email plus employee code, then the emailed code. Decided Sep 30 (D18), not built yet.',
+  name: 'POST /agent/session/code, POST /agent/session', tech: 'agent login', status: 'defined',
+  summary: 'Email plus employee code, then the 6-digit code emailed to that address, then a 15-minute JWT. Built Sep 30 (D18).',
   fixed: [
-    'The agent sends email and employee code. The pair is unique for all 1,200 agents; neither field is unique alone.',
-    'Only `agent_status = Active` (1,090) gets a code. Same answer for every pair and status. Same code rules as the customer login.',
-    '`POST /agent/session` takes the email, the employee code, and the code. Claims: `sub` = `agent_id`, `role` = `agent`.',
-    'Until it is built: the demo-only path, `GET /agents/search`, `POST /agent/session/code` (code in the response), `POST /agent/session`, with `DEMO_LOGIN=1`.',
+    'The agent sends email and employee code, trimmed and matched without case. The pair is unique for all 1,200 agents; neither field is unique alone.',
+    'Only `agent_status = Active` (1,090) gets a code. The answer is `{expires_in_seconds: 600}` for every pair and status. Same code rules as the customer login.',
+    '`POST /agent/session` takes the email, the employee code, and the code; the pair must still be `Active`. Claims: `sub` = `agent_id`, `role` = `agent`. Every failure is the same 401.',
+    '`GET /agent/me` returns the name, employee code, and specialty (null for 476 agents) for the agent screens.',
   ],
+  tests: ['On a shared employee code the email decides who gets the code.', 'A customer code does not open an agent session.'],
   src: 'ARCHITECTURE.md, "Auth and screens", "HTTP contract"; PLAN.md D18',
 });
 spec('routers', 'r-customer-msg', {
@@ -625,7 +626,7 @@ spec('routers', 'r-reads', {
   name: 'Read endpoints', tech: 'api-spec/openapi.yaml', status: 'partial',
   summary: 'Products, thread, certificate, queue, handoff packet, trace.',
   fixed: [
-    '`GET /me`, `GET /products`, `GET /case/{process_id}`, `GET /agent/queue`, `GET /agent/case/{process_id}`, `GET /agent/case/{process_id}/trace`. Shapes are in `api-spec/openapi.yaml`.',
+    '`GET /me`, `GET /agent/me`, `GET /products`, `GET /case/{process_id}`, `GET /agent/queue`, `GET /agent/case/{process_id}`, `GET /agent/case/{process_id}/trace`. Shapes are in `api-spec/openapi.yaml`.',
     'The filter `customer_id = jwt.sub` is in every customer query. A `customer_id` query that is not the token sub returns an empty product list.',
     'The customer API does not list `customer_credit_profile`. The certificate has no score, no limit, and no rate.',
     'The agent queue shows processes in `human_active` only. The trace shows the process `events` in order, plus the opening message via `caused_by_event_id`.',
@@ -642,7 +643,8 @@ spec('auth', 'a-code', {
   summary: '6 digits, valid 10 minutes, emailed to the address on file. The code opens the session, not the document.',
   fixed: [
     '`login_codes` holds a hash of the code (never the code), the customer or agent, the 10-minute expiry, the count of wrong tries, and when it was used.',
-    'A new request replaces any unused code for the same customer. The fifth wrong code spends it. A used code does not open a second session.',
+    'A new request replaces any unused code for the same customer or agent. The fifth wrong code spends it. A used code does not open a second session.',
+    'Codes are kept per role: a customer code does not open an agent session, and an agent code does not open a customer session.',
     'The code is not logged. The email is Spanish copy in `api/infrastructure/mail/smtp.py`, sent by SMTP to Mailpit only.',
     'A document number or a `customer_id` does not prove identity.',
   ],
@@ -665,7 +667,7 @@ spec('auth', 'a-session', {
   fixed: [
     'The `customer_id` of every query comes from the JWT. Never from chat text or a model argument.',
     'Another customer\'s rows are the JWT filter: a query for another id returns no rows.',
-    'Customer routes (`/me`, `/products`, `/messages`, `/case/{process_id}`) require `role = customer`. Agent routes (`/agent/queue`, `/agent/case/{process_id}` and its trace and close) require `role = agent`. The other role is 403.',
+    'Customer routes (`/me`, `/products`, `/messages`, `/case/{process_id}`) require `role = customer`. Agent routes (`/agent/me`, `/agent/queue`, `/agent/case/{process_id}` and its trace and close) require `role = agent`. The other role is 403.',
   ],
   tests: ['Juan\'s session does not return Alicia\'s products.'],
   src: 'ARCHITECTURE.md, "Contract for implementers", "HTTP contract"',
@@ -1134,8 +1136,8 @@ spec('config', 'c-db', {
   src: 'AGENTS.md, "Database"',
 });
 node('pg-login', {
-  parent: 'web', kind: 'component', name: 'Login', tech: 'Login.tsx',
-  summary: '`/login` for customers: document number, then the emailed code. Agents get `/agent/login` (D18).',
+  parent: 'web', kind: 'component', name: 'Login', tech: 'Login.tsx, AgentLogin.tsx',
+  summary: '`/login` for customers: document number, then the emailed code. `/agent/login` for agents: email and employee code, then the emailed code (D18). Each links to the other.',
   src: 'ARCHITECTURE.md, "Auth and screens"',
 });
 node('pg-home', {
@@ -1196,13 +1198,15 @@ spec('pg-login', 'lg-customer', {
 });
 spec('pg-login', 'lg-agent', {
   name: 'Agent login', tech: '/agent/login', status: 'defined',
-  summary: 'Its own page: email and employee code, then the emailed code. Active agents only. Not built yet.',
+  summary: 'Its own page: email and employee code, then the emailed code. Active agents only. Built Sep 30.',
   fixed: [
-    'Agents log in on `/agent/login`, not on the customer page, and land on `/agent`.',
-    'Only the 1,090 `Active` agents get a code; the answer is the same for everyone.',
-    'Until it is built, agent login is the demo-only path with `DEMO_LOGIN=1`.',
+    'Agents log in on `/agent/login`, linked from the customer page as "Acceso para agentes", and land on `/agent`.',
+    'Only the 1,090 `Active` agents get a code; the screen says the same thing to everyone.',
+    'With `DEMO_LOGIN=1` the Demo popover searches active agents and fills both fields. It does not skip the code.',
+    'Until the queue is built, `/agent` greets the agent with the name, specialty, and employee code from `GET /agent/me`.',
   ],
-  src: 'ARCHITECTURE.md, "Auth and screens"; PLAN.md D18',
+  tests: ['A demo random pick fills in an active agent.'],
+  src: 'ARCHITECTURE.md, "Auth and screens"; DESIGN.md, "Agent login"; PLAN.md D18',
 });
 
 spec('pg-home', 'hm-products', {
@@ -1439,9 +1443,9 @@ spec('ld-silver', 'sv-tables', {
   name: 'Read tables', tech: 'listed columns only', status: 'partial',
   summary: 'Other columns in the data dictionary are not copied.',
   fixed: [
-    '`customers`: `customer_id`, `document_number`, `first_name`, `last_name`, `country`, `segment`, `credit_score`, `estimated_monthly_income`, `customer_status`.',
+    '`customers`: `customer_id`, `document_number`, `first_name`, `last_name`, `email`, `country`, `segment`, `credit_score`, `estimated_monthly_income`, `customer_status`.',
     '`products`: `product_id`, `customer_id`, `product_type`, `product_number`, `currency`, `current_balance`, `product_status`, `days_past_due`.',
-    '`daily_exchange_rates`: `date`, `source_currency`, `target_currency`, `exchange_rate`. `service_agents`: `agent_id`, `employee_code`, `first_name`, `last_name`.',
+    '`daily_exchange_rates`: `date`, `source_currency`, `target_currency`, `exchange_rate`. `service_agents`: `agent_id`, `employee_code`, `first_name`, `last_name`, `email`, `agent_status`, `specialty`.',
   ],
   open: [['R9', 'The `product_type` values and their mapping to `credit_card` and `personal_loan`.']],
   src: 'ARCHITECTURE.md, "Read tables"',
@@ -1565,7 +1569,7 @@ node('f-fx', {
 node('f-agents', {
   parent: 'raw', kind: 'file', name: 'service_agents.csv', tech: '1,200 rows',
   summary: 'The agents who can log in.',
-  fixed: ['1,200 rows, 0 duplicate `agent_id`.'],
+  fixed: ['1,200 rows, 0 duplicate `agent_id`. The (email, `employee_code`) pair is unique. `agent_status`: Active 1,090, Vacation 62, Leave 29, Inactive 19.'],
   src: 'ARCHITECTURE.md, "Data: what is touched and what is not"',
 });
 

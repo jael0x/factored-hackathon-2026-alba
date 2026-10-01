@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from api.infrastructure.config.settings import require_jwt_secret, settings
 from api.infrastructure.db.pool import open_pool
 from api.presentation.http.errors import install_error_handlers
-from api.presentation.http.routes import config, customers, health, session
+from api.presentation.http.routes import agents, config, customers, health, session
 
 
 @asynccontextmanager
@@ -23,6 +23,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Alba", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 install_error_handlers(app)
 app.include_router(session.router)
+app.include_router(session.agent_router)
 app.include_router(customers.router)
+app.include_router(agents.router)
 app.include_router(config.router)
 app.include_router(health.router)
