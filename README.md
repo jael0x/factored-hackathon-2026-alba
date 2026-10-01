@@ -4,7 +4,7 @@ Alba is a customer-service demo for the synthetic LATAM bank of the Factored AI 
 
 It is not a production bank and it moves no money. "Alba" is the name of this interface. Customers, products, scores, incomes, and agents come from the organizer dataset, snapshot of June 17, 2026.
 
-**Status (Sep 30, 2026): customer login built.** `docker compose up` brings up Postgres, the one-shot `load` container (bronze, silver, gold), the API with the customer login, Mailpit for the login codes, and the web login. Home, chat, policy, and agent screens are not built yet. `mocks/index.html` remains the screen walkthrough. Submission is due Mon Oct 5.
+**Status (Sep 30, 2026): customer and agent logins built.** `docker compose up` brings up Postgres, the one-shot `load` container (bronze, silver, gold), the API with both logins, Mailpit for the login codes, and the two login pages. Home, chat, policy, and the agent queue and case are not built yet. `mocks/index.html` remains the screen walkthrough. Submission is due Mon Oct 5.
 
 Stack: FastAPI and PostgreSQL 16 in one Docker Compose stack, with GPT-6 Luna (`gpt-6-luna`) on the OpenAI API for the conversation (when wired). Details in `ARCHITECTURE.md`.
 
@@ -18,7 +18,7 @@ docker compose up --build
 
 `.env` needs a `JWT_SECRET` of at least 32 characters (`openssl rand -hex 32`); the API refuses to start without it.
 
-Open http://localhost:5173/ (API health at http://localhost:8000/health). `load` downloads the four CSVs into `data/raw/` if missing, applies migrations, and builds gold. Login codes are emailed to Mailpit, a local mail catcher: read them at http://localhost:8025. Nothing is sent outside your machine. Default compose sets `DEMO_LOGIN=1`, which adds a "Demo" button to the login header; it opens a test-customer search right below it that fills the document field. There is no cloud deploy for the submission; optional host steps will live in `docs/ops.md`.
+Open http://localhost:5173/ (API health at http://localhost:8000/health). `load` downloads the four CSVs into `data/raw/` if missing, applies migrations, and builds gold. Login codes are emailed to Mailpit, a local mail catcher: read them at http://localhost:8025. Nothing is sent outside your machine. Default compose sets `DEMO_LOGIN=1`, which adds a "Demo" button to the login header; it opens a test-customer search right below it that fills the document field. Agents log in at http://localhost:5173/agent/login ("Acceso para agentes" under the customer form) with their email and employee code; there the Demo button searches active agents and fills both fields. There is no cloud deploy for the submission; optional host steps will live in `docs/ops.md`.
 
 ### Web with hot reload
 
@@ -52,7 +52,7 @@ pytest
 | `CLAUDE.md` | Entry instructions for Claude Code sessions |
 | `mocks/index.html` | Static screen walkthrough (Spanish UI), not the frontend |
 | `diagrams/c4.html` | Clickable C4 model of the contract, four levels. Level 4 lists, per component, what the contract fixes and what is still open. Open the file in a browser; if it disagrees with `ARCHITECTURE.md`, the contract wins |
-| `specs/` | Gherkin behavior specs, numbered in the order of the customer journey (`01-session-login.feature` to `10-data-load.feature`). They restate the contract as examples; `ARCHITECTURE.md` wins |
+| `specs/` | Gherkin behavior specs, numbered in the order of the customer journey (`01-session-login.feature` to `10-data-load.feature`; the agent login is `11-agent-login.feature`). They restate the contract as examples; `ARCHITECTURE.md` wins |
 | `api-spec/openapi.yaml` | Wire contract for the API. `python api-spec/generate.py` writes the Python models and the TypeScript types. `ARCHITECTURE.md` wins |
 | `docs/` | Organizer PDFs, local only. Never committed: the data dictionary holds the S3 keys |
 | `data/` | Local CSVs, never committed. `data/raw/` for the loader, `data/sample/` for spot checks |
@@ -63,7 +63,7 @@ A customer logs in with their document number. That says who they claim to be; a
 
 Inside the session, the customer sees only their own products. Typing another person's id changes nothing.
 
-Any customer with an email on file can log in (147,016 of the 150,000; the rest have no address to send a code to). Agents will log in on their own page with their email and employee code (decided Sep 30, not built yet); until then agent login works only with `DEMO_LOGIN=1`. These four rows cover every outcome; they are examples, not the list of who can try it:
+Any customer with an email on file can log in (147,016 of the 150,000; the rest have no address to send a code to). Agents log in on their own page with their email and employee code, and the code goes to that email. Only the 1,090 agents marked `Active` get one; the answer is the same for everyone else. These four rows cover every outcome; they are examples, not the list of who can try it:
 
 | Person | What happens | Why |
 |---|---|---|
