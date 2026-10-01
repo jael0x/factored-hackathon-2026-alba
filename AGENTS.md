@@ -67,6 +67,15 @@ A correct diagnosis plus a patch that skips the owner is a failed fix. The small
 
 Fix the class, not one row. A bug that shows up on Juan is a bug in the pure function for every customer with those facts. A `customer_id` branch in shared policy is the forbidden special case.
 
+## Consultants and service agents
+
+A person who reviews a handed-off case is a consultant (`ARCHITECTURE.md`, "Oracle fixtures"). Do not call that person an agent: agent is the AI agent's word.
+
+- Identifiers in `db/` and `pipeline/` keep the dataset's name: the `service_agents` table and `service_agents.csv`, the columns `agent_id` and `agent_status`, `AGENTS_COLUMNS`, and the `AGT-` ids. Comments there say consultant.
+- Everywhere else the word is consultant: Python and TypeScript names, routes (`/consultant/...`, `/consultants/search`), the JWT role, wire fields (`consultant_id`), event names, rule ids, idempotency keys, comments, docs, specs, and `diagrams/c4.html`.
+- SQL is the only code that names the dataset columns. `api/infrastructure/db/consultants.py` reads `agent_id` and `agent_status` and returns a `ConsultantIdentity`; nothing above it sees those names.
+- Spanish screens say "asesor". `mocks/index.html` still says "Agente", `conversation.agent_closed`, and `agent_close:`; read them as asesor, `conversation.consultant_closed`, and `consultant_close:`.
+
 ## No magic strings
 
 Identifiers from a closed set are constants or unions, defined once. Call sites use the constant. They do not repeat the raw literal.
@@ -140,7 +149,7 @@ Prefer a better name or an extracted function over a comment.
 - The UI renders structured fields from the API. It does not recompute eligibility, currency conversion, or certificate prose.
 - Every fetch has loading, error, and success. Handle all three when the fetch is written, not as a later polish.
 - Config that decides a field's behavior lives on the policy spec, not on a frontend list that sniffs ids.
-- An internal reason code is not customer copy. The customer reads the template. The agent packet may show the rule id and the facts.
+- An internal reason code is not customer copy. The customer reads the template. The consultant packet may show the rule id and the facts.
 
 ## Database
 
