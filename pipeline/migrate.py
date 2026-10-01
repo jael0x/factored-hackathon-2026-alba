@@ -3,6 +3,8 @@ from pathlib import Path
 
 from pipeline.db import connect
 
+FORMER_NAMES = {"003_consultant_login.sql": "003_agent_login.sql"}
+
 
 def migrations_dir() -> Path:
     return Path(os.environ.get("MIGRATIONS_DIR", "db/migrations"))
@@ -33,18 +35,31 @@ def apply_migrations() -> None:
         )
         conn.commit()
         for path in files:
-            applied = conn.execute(
-                "SELECT 1 FROM schema_migrations WHERE filename = %s",
-                (path.name,),
-            ).fetchone()
-            if applied:
+            applied = applied_names(conn, path.name)
+            if path.name in applied:
                 print(f"migration skip {path.name}")
                 continue
-            print(f"migration apply {path.name}")
             with conn.transaction():
-                run_sql_script(conn, path.read_text(encoding="utf-8"))
+                if applied:
+                    print(f"migration skip {path.name}, applied as {FORMER_NAMES[path.name]}")
+                else:
+                    print(f"migration apply {path.name}")
+                    run_sql_script(conn, path.read_text(encoding="utf-8"))
                 conn.execute(
                     "INSERT INTO schema_migrations (filename) VALUES (%s)",
                     (path.name,),
                 )
         conn.commit()
+
+
+def names_of(filename: str) -> list[str]:
+    former = FORMER_NAMES.get(filename)
+    return [filename] if former is None else [filename, former]
+
+
+def applied_names(conn, filename: str) -> set[str]:
+    rows = conn.execute(
+        "SELECT filename FROM schema_migrations WHERE filename = ANY(%s)",
+        (names_of(filename),),
+    ).fetchall()
+    return {row[0] for row in rows}

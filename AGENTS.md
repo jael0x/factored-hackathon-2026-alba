@@ -149,6 +149,7 @@ Prefer a better name or an extracted function over a comment.
 - Parameterized SQL only. Never concatenate request input into a statement.
 - `events` are append-only. A new fact points at the previous one with `caused_by_event_id`. Do not hard-delete history.
 - Migrations are one-way and safe while old code might still be running. No destructive drop in the same step that introduces the replacement.
+- A migration keeps its filename once it has run anywhere: `schema_migrations` is keyed by it, and a renamed file runs again. If one must be renamed, map the new name to the old one in `FORMER_NAMES` in `pipeline/migrate.py`, with a test.
 - The schema is the contract. `NOT NULL` means the app does not hunt for nulls. A nullable column means the app handles null. Empty income stays null. Do not impute. Do not convert Mexico balances out of USD.
 - If you create or replace a view, the same migration sets `security_invoker = true`. Otherwise the view runs as the owner and skips privileges.
 - Idempotency keys are derived from the gap that already exists (`process_id`, client message id, policy version, causing event id). No `Date.now()` and no random. Two runs of the same fact collide on the same key.
