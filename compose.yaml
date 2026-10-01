@@ -46,8 +46,12 @@ services:
       SMTP_PORT: "1025"
       MAIL_FROM: "Alba <no-reply@alba.local>"
       LLM_MODEL: gpt-6-luna
+      WATCHFILES_FORCE_POLLING: "true"
     ports:
       - "8000:8000"
+    volumes:
+      - ./api:/app/api
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/api"]
     depends_on:
       load:
         condition: service_completed_successfully
@@ -63,8 +67,15 @@ services:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
+    environment:
+      API_PROXY_TARGET: http://api:8000
+      VITE_USE_POLLING: "1"
     ports:
-      - "5173:80"
+      - "5173:5173"
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
     depends_on:
       - api
 

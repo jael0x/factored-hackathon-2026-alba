@@ -40,15 +40,15 @@ A correct diagnosis plus a patch that skips the owner is a failed fix. The small
 
 | Concern | Owner (through) | Around (forbidden) |
 |---|---|---|
-| Prequalified, not prequalified, refer, needs info | `api/policy/engine.py` and `alba-credit-v1` | The model says it, or the UI computes it |
+| Prequalified, not prequalified, refer, needs info | `api/domain/policy/engine.py` and `alba-credit-v1` | The model says it, or the UI computes it |
 | Whether a process rule matches | Fields already stamped on `events` | Re-read the customer inside the match |
 | What the system does next | A `commands` row and the worker | An `if` in the HTTP handler that changes state |
 | Who the customer is | `customer_id` on the JWT | Chat text, national id, or a model argument |
 | History | Append to `events`, with `caused_by_event_id` | `UPDATE` a past event, or join two facts by clock time |
-| Decision wording | `api/policy/templates.py` | Model prose |
-| Model call | `api/llm/conversation.py` | Import the OpenAI SDK from policy or UI |
-| Login codes and sessions | `api/auth.py`: codes stored hashed, JWT, `get_session` | A code in a log, a response body, or a plain-text column |
-| Sending email | `api/mail.py`, to Mailpit in the compose stack | Opening SMTP from another module, or pointing it at a real provider while the stack holds this dataset |
+| Decision wording | `api/domain/policy/templates.py` | Model prose |
+| Model call | `api/infrastructure/llm/conversation.py` | Import the OpenAI SDK from policy or UI |
+| Login codes and sessions | `api/domain/session` and `api/application/session`: codes stored hashed, JWT; `get_session` in `api/presentation/http/dependencies.py` | A code in a log, a response body, or a plain-text column |
+| Sending email | `api/infrastructure/mail/smtp.py`, to Mailpit in the compose stack | Opening SMTP from another module, or pointing it at a real provider while the stack holds this dataset |
 | HTTP request and response | `api-spec/openapi.yaml`, generated into `api/contract_models.py` and `web/src/api/schema.d.ts` | A hand-written DTO in `api/` or `web/` |
 | Facts the policy reads | `customer_credit_profile` | Recompute score, delinquency, or income on the request |
 | Limit, new rate, delinquency prediction | They do not exist | Invent them because a plan or a chat mentioned them |
@@ -113,7 +113,7 @@ Prefer a better name or an extracted function over a comment.
 13. **Pure core.** Policy, rule match, and row choice are pure. Database, HTTP, and the OpenAI API sit in thin functions that call the pure ones.
 14. **Composition.** If a function does A then B, export A and B and compose them. Do not nest B inside A.
 15. **DRY.** Copying a block means extract it. After a refactor, grep and delete the loser. Two live implementations of the same decision is a bug. Deleting the dead one is part of the change.
-16. **Adapter at the boundary.** Business logic does not import a provider SDK. Only `api/llm/conversation.py` imports the OpenAI SDK. Swapping the model changes that module.
+16. **Adapter at the boundary.** Business logic does not import a provider SDK. Only `api/infrastructure/llm/conversation.py` imports the OpenAI SDK. Swapping the model changes that module.
 17. **Explicit.** A side effect is in the name. A nullable value is in the type. A dependency is passed in or imported, not read from ambient global state.
 18. **Fail loud.** Validate at the boundary. Unexpected state surfaces immediately. Do not swallow an exception and continue.
 19. **Colocation.** Tests next to the pure module. Types next to the code that uses them. Constants next to the domain.

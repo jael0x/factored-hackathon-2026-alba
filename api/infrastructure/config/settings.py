@@ -2,6 +2,8 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 JWT_SECRET_MIN_LENGTH = 32
+DB_POOL_MIN_DEFAULT = 1
+DB_POOL_MAX_DEFAULT = 10
 
 
 class Settings(BaseSettings):
@@ -15,6 +17,8 @@ class Settings(BaseSettings):
     smtp_host: str = "localhost"
     smtp_port: int = 1025
     mail_from: str = "Alba <no-reply@alba.local>"
+    db_pool_min: int = DB_POOL_MIN_DEFAULT
+    db_pool_max: int = DB_POOL_MAX_DEFAULT
 
     @field_validator("demo_login", mode="before")
     @classmethod

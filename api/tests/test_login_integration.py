@@ -6,10 +6,11 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
-from api import auth
-from api.mail import get_mailer
+from api.domain.session import codes as login_codes
+from api.domain.session.tokens import SessionClaims, issue_token
+from api.infrastructure.config.settings import settings
+from api.infrastructure.mail.smtp import get_mailer
 from api.main import app
-from api.settings import settings
 
 pytestmark = pytest.mark.integration
 
@@ -70,8 +71,11 @@ def harness(database: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[Harness]
     monkeypatch.setattr(settings, "demo_login", True)
     mail = FakeMailer()
     app.dependency_overrides[get_mailer] = lambda: mail
-    yield Harness(http=TestClient(app), mail=mail)
-    app.dependency_overrides.clear()
+    try:
+        with TestClient(app) as client:
+            yield Harness(http=client, mail=mail)
+    finally:
+        app.dependency_overrides.clear()
 
 
 def codes(*values: str) -> Iterator[str]:
@@ -140,14 +144,14 @@ def test_a_document_number_without_a_code_does_not_open_a_session(harness: Harne
 
 
 def test_five_wrong_codes_spend_the_code(harness: Harness, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(auth, "new_code", lambda: "481206")
+    monkeypatch.setattr(login_codes, "new_code", lambda: "481206")
     harness.request_code(JUAN[1])
     assert [harness.open_session(JUAN[1], "000000") for _ in range(5)] == [401] * 5
     assert harness.open_session(JUAN[1], "481206") == 401
 
 
 def test_four_wrong_codes_still_allow_the_right_one(harness: Harness, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(auth, "new_code", lambda: "481206")
+    monkeypatch.setattr(login_codes, "new_code", lambda: "481206")
     harness.request_code(JUAN[1])
     assert [harness.open_session(JUAN[1], "000000") for _ in range(4)] == [401] * 4
     assert harness.open_session(JUAN[1], "481206") == 200
@@ -155,7 +159,7 @@ def test_four_wrong_codes_still_allow_the_right_one(harness: Harness, monkeypatc
 
 def test_a_new_code_replaces_the_unused_one(harness: Harness, monkeypatch: pytest.MonkeyPatch) -> None:
     issued = codes("111111", "222222")
-    monkeypatch.setattr(auth, "new_code", lambda: next(issued))
+    monkeypatch.setattr(login_codes, "new_code", lambda: next(issued))
     harness.request_code(JUAN[1])
     harness.request_code(JUAN[1])
     assert harness.open_session(JUAN[1], "111111") == 401
@@ -170,8 +174,8 @@ def test_a_used_code_does_not_open_a_second_session(harness: Harness) -> None:
 
 
 def test_an_expired_session_is_not_renewed(harness: Harness) -> None:
-    claims = auth.SessionClaims(sub=JUAN[0], role="customer")
-    token = auth.issue_token(settings.jwt_secret, claims, datetime.now(UTC) - timedelta(minutes=16))
+    claims = SessionClaims(sub=JUAN[0], role="customer")
+    token = issue_token(settings.jwt_secret, claims, datetime.now(UTC) - timedelta(minutes=16))
     response = harness.http.get("/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
     assert response.json() == {"error": "unauthorized"}
@@ -182,7 +186,7 @@ def test_me_without_a_token_is_401(harness: Harness) -> None:
 
 
 def test_an_agent_token_cannot_read_a_customer_route(harness: Harness) -> None:
-    token = auth.issue_token(settings.jwt_secret, auth.SessionClaims(sub="AGT-OJ9N4FGYV9", role="agent"), datetime.now(UTC))
+    token = issue_token(settings.jwt_secret, SessionClaims(sub="AGT-OJ9N4FGYV9", role="agent"), datetime.now(UTC))
     response = harness.http.get("/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403
     assert response.json() == {"error": "forbidden"}

@@ -356,7 +356,7 @@ Contrast, WCAG 2.x formula, computed Sep 29, 2026 for the values in this file. G
 
 ## Interface copy
 
-Interface labels are Spanish. They are the ones this file names; a screen not built yet takes its labels from `mocks/index.html`. The login labels in `web/src/pages/Login.tsx` follow the Login section above. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the agent-close message) are not in this file: they live in `api/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
+Interface labels are Spanish. They are the ones this file names; a screen not built yet takes its labels from `mocks/index.html`. The login labels in `web/src/pages/Login.tsx` follow the Login section above. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the agent-close message) are not in this file: they live in `api/domain/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
 
 ## Open
 

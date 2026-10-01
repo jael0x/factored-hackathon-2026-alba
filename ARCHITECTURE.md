@@ -71,7 +71,7 @@ Stored in `api/fixtures/oracle_customers.json`. Values read from the file on Sep
 | How it runs | `docker compose up` applies the schema, downloads the missing CSVs, and builds the profile. Nobody runs SQL by hand. Reviewers (and anyone else) run that stack locally and open the app in the browser. There is no cloud deploy for the submission. `docs/ops.md` will list optional steps if a host is used later |
 | Auth | Document number plus a one-time code emailed to the address on file (Mailpit in the compose stack), then an own JWT, HS256, 15 minutes, issued by this API |
 | Pipeline | Python, in the `load` container. Reads local CSVs. DuckDB only if the aggregate needs it; the result lands in Postgres |
-| LLM | OpenAI API, model `gpt-6-luna` (GPT-6 Luna). The adapter `api/llm/conversation.py` makes one call with Structured Outputs (the `ConversationTurn` JSON schema) and returns `ConversationTurn`. The policy does not use this adapter |
+| LLM | OpenAI API, model `gpt-6-luna` (GPT-6 Luna). The adapter `api/infrastructure/llm/conversation.py` makes one call with Structured Outputs (the `ConversationTurn` JSON schema) and returns `ConversationTurn`. The policy does not use this adapter |
 | Tests | pytest in the API. Vitest only if the client has logic; business logic does not live in the client |
 | Running processes | A loop inside the API process that takes `commands` rows with `status = pending`. No Kafka, no Redis, no Inngest |
 
@@ -82,30 +82,50 @@ api-spec/
   openapi.yaml            # wire contract; generate both clients from this file
   generate.py
 api/
-  main.py                 # FastAPI app, error handlers, includes the routers
-  routers/                # session.py (config, demo search, login), customer.py (me)
-  errors.py               # {error: ...} bodies for 401, 403, 404, 422
-  customers.py            # read-table lookups: by document, by id, the demo search
+  main.py                 # process: opens the pool, includes the routers
   contract_models.py      # generated from api-spec/openapi.yaml
-  settings.py             # env: DATABASE_URL, JWT_SECRET, OPENAI_API_KEY, LLM_MODEL, DEMO_LOGIN, SMTP_HOST, SMTP_PORT, MAIL_FROM
-  db.py                   # connection
-  auth.py                 # one-time code, JWT, get_session dependency
-  mail.py                 # sends the login code by SMTP; the only module that opens SMTP
-  events.py               # append to events, idempotency
-  rules.py                # catalog and pure match
-  worker.py               # takes commands and runs handlers
-  processes.py            # start / transition / end
-  policy/
-    engine.py             # pure function
-    alba-credit-v1.yaml   # rules and thresholds
-    templates.py          # certificate, ES and PT
-  llm/
-    conversation.py       # one call, JSON schema
-    schema.py             # ConversationTurn
-  tools/
-    profile.py            # reads gold by the session's customer_id
-    products.py
-    catalog.py
+  domain/                 # pure rules. No FastAPI, no psycopg, no settings
+    session/
+      codes.py            # one-time code: hash, 10 minutes, five wrong tries
+      tokens.py           # JWT and Role
+    customers/
+      identity.py         # CustomerIdentity and the search hit
+      search.py           # exactly one search criterion
+    policy/               # credit rules, when that component is built
+      engine.py           # pure function
+      alba-credit-v1.yaml # rules and thresholds
+      templates.py        # certificate, ES and PT
+    process/
+      rules.py            # pure match over the event already written, when the cycle is built
+  application/            # one file per use case. Defines the ports
+    session/
+      ports.py
+      issue_code.py
+      open_session.py
+      read_current_customer.py
+    customers/
+      search_customers.py
+    processes.py          # start, transition, end, when that component is built
+  infrastructure/
+    config/settings.py    # env, including DB_POOL_MIN and DB_POOL_MAX
+    db/
+      pool.py             # connection pool, opened in the process lifespan
+      login_codes.py      # SQL for login_codes
+      customers.py        # SQL for customers
+      events.py           # append to events, when that component is built
+      profile.py          # gold by customer_id, when that read is built
+      products.py
+      catalog.py
+    mail/smtp.py          # sends the login code by SMTP; the only module that opens SMTP
+    llm/                  # the only module that imports the OpenAI SDK, when the model is built
+      conversation.py     # one call, JSON schema
+      schema.py           # ConversationTurn
+  presentation/
+    http/
+      errors.py           # {error: ...} bodies for 401, 403, 404, 422
+      dependencies.py     # wires a request to a use case. get_session lives here
+      routes/             # session (prefix /session), customers (/me and /customers), config, health
+    worker/               # takes commands, when that loop is built
   fixtures/
     oracle_customers.json # the four profiles and César
 web/
@@ -133,6 +153,8 @@ docker/load.Dockerfile
 .env.example                # no secrets; the real .env is not committed
 mocks/index.html            # static walkthrough, not the frontend
 ```
+
+A new capability adds a rule under `domain/`, a use case under `application/`, a repository under `infrastructure/db/` when it reads Postgres, and a route under `presentation/http/routes/`. It does not add another kind of folder.
 
 The client does not compute the policy. It renders what the API returns: products, messages, certificate, process state.
 
@@ -307,7 +329,7 @@ Order inside `policy.run`: read profile → engine → insert the event. Whether
 
 ## Policy `alba-credit-v1`
 
-File `api/policy/alba-credit-v1.yaml`. Function `decide(profile, product) -> Decision`. `product` is `credit_card` or `personal_loan`.
+File `api/domain/policy/alba-credit-v1.yaml`. Function `decide(profile, product) -> Decision`. `product` is `credit_card` or `personal_loan`.
 
 Input `profile`, already materialized in `customer_credit_profile`:
 
@@ -372,9 +394,9 @@ Outcome phrases the template may emit, and the model is forbidden to emit on its
 
 ## How the model is called
 
-The model is GPT-6 Luna on the OpenAI API, model id `gpt-6-luna`. It only classifies the sentence and drafts the clarification. Juan pre-qualifies the same with this model or with the test JSON, because `api/policy/engine.py` decides that.
+The model is GPT-6 Luna on the OpenAI API, model id `gpt-6-luna`. It only classifies the sentence and drafts the clarification. Juan pre-qualifies the same with this model or with the test JSON, because `api/domain/policy/engine.py` decides that.
 
-`OPENAI_API_KEY` lives in `.env`. It never enters git, the image, a log, or a prompt. `LLM_MODEL` defaults to `gpt-6-luna`. Only `api/llm/conversation.py` imports the OpenAI SDK. Whether it calls Chat Completions or Responses is an adapter detail: both support Structured Outputs for this model.
+`OPENAI_API_KEY` lives in `.env`. It never enters git, the image, a log, or a prompt. `LLM_MODEL` defaults to `gpt-6-luna`. Only `api/infrastructure/llm/conversation.py` imports the OpenAI SDK. Whether it calls Chat Completions or Responses is an adapter detail: both support Structured Outputs for this model.
 
 If the key is missing, Postgres, login, and the policy still start. `conversation.generate` fails with an error that says the key is missing. A failed API call (timeout, rate limit, server error) is a failed attempt of the command, under the worker's limit of 3 attempts; after the third, `human_active` with `reason_code = tool_failed`. The model is not silently replaced with another one.
 
@@ -438,7 +460,7 @@ A customer logs in with their document number, and a one-time code sent to the e
 - Claims: `sub` = `customer_id`, `role` = `customer`, `exp` 15 minutes. The JSON repeats `sub` and `role` next to `token`.
 - `login_codes` stores a hash of the code, never the code. The code is not logged.
 
-The email is Spanish copy written in `api/mail.py`: the code and its 10-minute validity. It goes out by SMTP. The compose stack sends only to Mailpit, a local mail catcher, and anyone trying the demo reads the code in its inbox at http://localhost:8025. Nothing leaves the machine. The dataset's addresses use real domains (gmail.com, yahoo.com, and others), so the stack must never point SMTP at a real provider while it holds this dataset.
+The email is Spanish copy written in `api/infrastructure/mail/smtp.py`: the code and its 10-minute validity. It goes out by SMTP. The compose stack sends only to Mailpit, a local mail catcher, and anyone trying the demo reads the code in its inbox at http://localhost:8025. Nothing leaves the machine. The dataset's addresses use real domains (gmail.com, yahoo.com, and others), so the stack must never point SMTP at a real provider while it holds this dataset.
 
 Email is the channel, not the identifier. 24,203 addresses are shared by 2 to 31 customers, 79,930 rows in all, Juliana's and Mariana's among them (`PLAN.md` §4.3). `document_number` is unique. The 2,984 customers with no email (2.0%) cannot log in: their request gets the same answer and no code. That one answer tells anyone who gets no code to register an email at a branch (`DESIGN.md`, "Login"); it does not single them out. That is a stated limitation.
 
@@ -512,7 +534,7 @@ The trace includes events with this `process_id`, plus that one opening message 
 
 PostgreSQL 16. `load` is the only process that reads S3. The API and `policy.run` read Postgres.
 
-`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email.
+`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
 
 ### Read tables
 
@@ -563,8 +585,8 @@ Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` exclude
 |---|---|---|
 | `postgres` | PostgreSQL 16, named volume | yes |
 | `load` | waits for Postgres, applies `db/migrations/`, downloads CSVs if missing, fills the read tables and gold, exits with code 0 | no |
-| `api` | starts when `load` finished successfully | yes |
-| `web` | the frontend, proxies to the API | yes |
+| `api` | starts when `load` finished successfully. Mounts `api/` and reloads on save | yes |
+| `web` | the frontend, Vite, proxies `/api` to the API. Mounts `web/` and reloads on save | yes |
 | `mailpit` | local mail catcher. The API's only SMTP target; its inbox is at http://localhost:8025 | yes |
 
 Who runs it: anyone with the repo, a `.env`, and Docker. The default local demo sets `DEMO_LOGIN=1` and sends every login code to Mailpit. There is no SMS and no real email. Reviewers run `docker compose up` and open the web URL from the compose file. Secrets stay in `.env`; they are not committed.
@@ -691,4 +713,4 @@ The open-process key includes the triggering event id, so a later message after 
 
 We take the shape of the cycle and the state names `ai_active` and `human_active`. The customer's message is an event, `conversation.message_received`, and it is not the case. The case is the process. A new thread is born `ai_active`: the API stamps that column when it inserts the event, and the model rule matches that stamp, including on the first message. The message key is the send id, not `process_id`. The agent takes the thread through an event, and from that event on the model rule no longer matches. The agent does not write in the thread. Closing is `conversation.agent_closed`, and the customer-facing sentence is a template. The certificate and the packet are rebuilt by reading events, not the model's free text.
 
-We do not take the recruiting process catalog, the `interactions` table, the SQL trigger that stamps the mode, per-organization rules, the Sxxxxx SQL dispatcher, or the analyzer that scores forms. The analyzer of this demo is `api/policy/engine.py`. This API stamps `process_state` when it inserts the event.
+We do not take the recruiting process catalog, the `interactions` table, the SQL trigger that stamps the mode, per-organization rules, the Sxxxxx SQL dispatcher, or the analyzer that scores forms. The analyzer of this demo is `api/domain/policy/engine.py`. This API stamps `process_state` when it inserts the event.
