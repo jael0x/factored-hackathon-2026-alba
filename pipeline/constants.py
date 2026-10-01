@@ -67,4 +67,7 @@ AGENTS_COLUMNS: Final = (
     "employee_code",
     "first_name",
     "last_name",
+    "email",
+    "agent_status",
+    "specialty",
 )
