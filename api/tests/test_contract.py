@@ -26,6 +26,7 @@ EXPECTED_PATHS = {
     "/agent/session/code",
     "/agent/session",
     "/me",
+    "/agent/me",
     "/products",
     "/messages",
     "/case/{process_id}",
