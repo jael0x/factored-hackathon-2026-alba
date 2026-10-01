@@ -410,7 +410,7 @@ node('mailpit', {
     'The dataset\'s addresses use real domains (gmail.com, yahoo.com, and others), so the stack never points SMTP at a real provider while it holds this dataset.',
   ],
   fixed: [
-    'Only `api/mail.py` opens SMTP, and in the compose stack it sends only here.',
+    'Only `api/infrastructure/mail/smtp.py` opens SMTP, and in the compose stack it sends only here.',
     'Real delivery belongs to a host with real customer data; `docs/ops.md` names it as remaining work.',
   ],
   src: 'ARCHITECTURE.md, "Auth and screens", "Docker"',
@@ -459,79 +459,79 @@ view('alba', {
   ],
 });
 node('routers', {
-  parent: 'api', kind: 'component', name: 'HTTP routers', tech: 'api/main.py',
+  parent: 'api', kind: 'component', name: 'HTTP routers', tech: 'api/presentation/http/routes/',
   summary: 'Login, search, the customer message, the agent close, and the reads behind each page.',
   desc: ['FastAPI app and routers. A customer message or an agent close appends an event; what happens next is a rule and a command, not an `if` in the handler. Every query filters by the id on the JWT.'],
-  files: ['api/main.py'],
+  files: ['api/main.py', 'api/presentation/http/routes/'],
   src: 'ARCHITECTURE.md, "Auth and screens", "Agent close"; AGENTS.md, "Owners in this system"',
 });
 node('auth', {
-  parent: 'api', kind: 'component', name: 'Auth', tech: 'api/auth.py',
+  parent: 'api', kind: 'component', name: 'Auth', tech: 'api/domain/session',
   summary: 'One-time code, own JWT (HS256, 15 min), and the `get_session` dependency.',
   desc: ['Issues and checks the one-time code and the JWT. `get_session` hands every handler the `customer_id` or `agent_id` from the token, never from the request body or the chat.'],
-  files: ['api/auth.py'],
+  files: ['api/domain/session/codes.py', 'api/domain/session/tokens.py', 'api/domain/agents/login.py', 'api/application/session/issue_code.py', 'api/application/session/open_session.py', 'api/presentation/http/dependencies.py'],
   src: 'ARCHITECTURE.md, "Auth and screens"',
 });
 node('events', {
-  parent: 'api', kind: 'component', name: 'Event store', tech: 'api/events.py',
+  parent: 'api', kind: 'component', name: 'Event store', tech: 'api/infrastructure/db/events.py',
   summary: 'Appends immutable events with idempotency keys, and stamps the process columns on a message.',
   desc: ['Appends to `events`. No `UPDATE` of a payload. Repeating a POST with the same key creates no new event and no new decision.'],
-  files: ['api/events.py'],
+  files: ['api/infrastructure/db/events.py'],
   src: 'ARCHITECTURE.md, "Events"',
 });
 node('rules', {
-  parent: 'api', kind: 'component', name: 'Process rules', tech: 'api/rules.py',
+  parent: 'api', kind: 'component', name: 'Process rules', tech: 'api/domain/process/rules.py',
   summary: 'An in-memory catalog of 19 rules. A pure match over the event just written; the output is commands.',
   desc: ['A list in code. No `rules` table in v1 and no per-organization override. Each rule appears once; a copy would fire twice. The rules, not the worker, choose what follows a classified turn.'],
-  files: ['api/rules.py'],
+  files: ['api/domain/process/rules.py'],
   src: 'ARCHITECTURE.md, "Process rules"',
 });
 node('worker', {
-  parent: 'api', kind: 'component', name: 'Command worker', tech: 'api/worker.py',
+  parent: 'api', kind: 'component', name: 'Command worker', tech: 'api/presentation/worker/',
   summary: 'Takes pending commands with `FOR UPDATE SKIP LOCKED` and runs one of 8 handlers. At most 3 attempts.',
   desc: ['A loop inside the API process. A finished command may write another event, and the rules react to that event. A handler never enqueues the next command itself.'],
-  files: ['api/worker.py'],
+  files: ['api/presentation/worker/'],
   src: 'ARCHITECTURE.md, "Commands"',
 });
 node('processes', {
-  parent: 'api', kind: 'component', name: 'Process lifecycle', tech: 'api/processes.py',
+  parent: 'api', kind: 'component', name: 'Process lifecycle', tech: 'api/application/processes.py',
   summary: 'Start, transition, end of `credit_prequalification`. The row in `processes` is the projection.',
   desc: ['Owns the process row and the allowed transitions. Any transition not in the table is an error and is not written.'],
-  files: ['api/processes.py'],
+  files: ['api/application/processes.py'],
   src: 'ARCHITECTURE.md, "Process"',
 });
 node('policy', {
-  parent: 'api', kind: 'component', name: 'Policy engine', tech: 'api/policy/engine.py',
+  parent: 'api', kind: 'component', name: 'Policy engine', tech: 'api/domain/policy/engine.py',
   summary: '`decide(profile, product) -> Decision`. Pure: same input, same output. Lives in git.',
   desc: ['The only owner of eligibility. It is synthetic, because the dataset ships no credit manual, and the certificate says so. The model does not use it and cannot call it.'],
-  files: ['api/policy/engine.py', 'api/policy/alba-credit-v1.yaml'],
+  files: ['api/domain/policy/engine.py', 'api/domain/policy/alba-credit-v1.yaml'],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"',
 });
 node('templates', {
-  parent: 'api', kind: 'component', name: 'Templates', tech: 'api/policy/templates.py',
+  parent: 'api', kind: 'component', name: 'Templates', tech: 'api/domain/policy/templates.py',
   summary: 'The certificate and four notices, in `es` or `pt`. The model never writes this text.',
   desc: ['The only place outcome wording and notices come from. The Portuguese text is written by the team; the dataset has none.'],
-  files: ['api/policy/templates.py'],
+  files: ['api/domain/policy/templates.py'],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1", "Commands"',
 });
 node('llm', {
-  parent: 'api', kind: 'component', name: 'LLM adapter', tech: 'api/llm/',
+  parent: 'api', kind: 'component', name: 'LLM adapter', tech: 'api/infrastructure/llm/',
   summary: 'The only module that imports the OpenAI SDK. One call, Structured Outputs, returns `ConversationTurn`.',
   desc: ['Classifies the sentence and drafts the clarification. It gets no tool that accepts a `customer_id` and no path into the policy. Swapping the model changes only this module.'],
-  files: ['api/llm/conversation.py', 'api/llm/schema.py'],
+  files: ['api/infrastructure/llm/conversation.py', 'api/infrastructure/llm/schema.py'],
   src: 'ARCHITECTURE.md, "How the model is called"',
 });
 node('tools', {
-  parent: 'api', kind: 'component', name: 'Data tools', tech: 'api/tools/',
+  parent: 'api', kind: 'component', name: 'Data tools', tech: 'api/infrastructure/db/',
   summary: 'Reads the gold profile, the session customer products, and the two-product catalog.',
   desc: ['Thin readers over Postgres, always scoped to one `customer_id`. The model gets none of them as a tool.'],
-  files: ['api/tools/profile.py', 'api/tools/products.py', 'api/tools/catalog.py'],
+  files: ['api/infrastructure/db/profile.py', 'api/infrastructure/db/products.py', 'api/infrastructure/db/catalog.py'],
   src: 'ARCHITECTURE.md, "File tree", "Database"',
 });
 node('config', {
-  parent: 'api', kind: 'component', name: 'Settings and DB', tech: 'api/settings.py, api/db.py',
-  summary: 'Environment settings and the Postgres connection every other component uses.',
-  files: ['api/settings.py', 'api/db.py'],
+  parent: 'api', kind: 'component', name: 'Settings and DB', tech: 'api/infrastructure/config, api/infrastructure/db/pool.py',
+  summary: 'Environment settings and the Postgres pool every other component uses.',
+  files: ['api/infrastructure/config/settings.py', 'api/infrastructure/db/pool.py'],
   src: 'ARCHITECTURE.md, "File tree"',
 });
 
@@ -569,7 +569,7 @@ spec('routers', 'r-search', {
     '`GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20, ordered by `last_name`, `first_name`, `customer_id`. `?random=true` returns one customer with an email on file.',
     '`GET /agents/search?q=` and `?random=true` do the same over `Active` agents only, by name, employee code, or `agent_id`, ordered by `last_name`, `first_name`, `agent_id`. They return the email too, so a pick fills both login fields.',
     'With `DEMO_LOGIN` off both are 404. `GET /config` tells the web app whether they are on.',
-    'Backed by indexes on `customers.document_number` and `(last_name, first_name)`. The queries live in `api/customers.py` and `api/agents.py`.',
+    'Backed by indexes on `customers.document_number` and `(last_name, first_name)`. The queries live in `api/infrastructure/db/customers.py` and `api/infrastructure/db/agents.py`.',
   ],
   tests: ['With the demo login off, the search is not available.', 'A demo agent search lists only active agents.'],
   src: 'ARCHITECTURE.md, "Auth and screens", "HTTP contract", "Indexes"',
@@ -639,13 +639,13 @@ spec('routers', 'r-reads', {
 });
 
 spec('auth', 'a-code', {
-  name: 'One-time code', tech: 'login_codes, api/mail.py', status: 'defined',
+  name: 'One-time code', tech: 'login_codes, api/infrastructure/mail/smtp.py', status: 'defined',
   summary: '6 digits, valid 10 minutes, emailed to the address on file. The code opens the session, not the document.',
   fixed: [
     '`login_codes` holds a hash of the code (never the code), the customer or agent, the 10-minute expiry, the count of wrong tries, and when it was used.',
     'A new request replaces any unused code for the same customer or agent. The fifth wrong code spends it. A used code does not open a second session.',
     'Codes are kept per role: a customer code does not open an agent session, and an agent code does not open a customer session.',
-    'The code is not logged. The email is Spanish copy in `api/mail.py`, sent by SMTP to Mailpit only.',
+    'The code is not logged. The email is Spanish copy in `api/infrastructure/mail/smtp.py`, sent by SMTP to Mailpit only.',
     'A document number or a `customer_id` does not prove identity.',
   ],
   tests: ['Five wrong codes spend the code.'],
@@ -735,7 +735,7 @@ spec('events', 'e-dispatch', {
   src: 'ARCHITECTURE.md, "Process-native loop", "Process rules"',
 });
 spec('rules', 'ru-shape', {
-  name: 'Rule shape', tech: 'api/rules.py', status: 'partial',
+  name: 'Rule shape', tech: 'api/domain/process/rules.py', status: 'partial',
   summary: '`{id, trigger_event_name, when, actions}`, in memory, sorted by priority.',
   fixed: [
     'A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function over the event. `actions` is an ordered list of commands.',
@@ -912,7 +912,7 @@ spec('processes', 'p-end', {
   src: 'ARCHITECTURE.md, "Process-native loop", "Commands", "Agent close"',
 });
 spec('policy', 'po-decide', {
-  name: 'decide(profile, product)', tech: 'api/policy/engine.py', status: 'partial',
+  name: 'decide(profile, product)', tech: 'api/domain/policy/engine.py', status: 'partial',
   summary: 'Pure function. `product` is `credit_card` or `personal_loan`.',
   fixed: [
     'Same input, same output. Lives in git. `product` is `credit_card` or `personal_loan`.',
@@ -1037,7 +1037,7 @@ spec('templates', 't-handoff', {
 });
 
 spec('llm', 'l-schema', {
-  name: 'ConversationTurn', tech: 'api/llm/schema.py', status: 'defined',
+  name: 'ConversationTurn', tech: 'api/infrastructure/llm/schema.py', status: 'defined',
   summary: 'The one JSON shape the model returns.',
   fixed: [
     '`intent`: `product_info`, `prequalify_card`, `prequalify_loan`, `confirm_prequalify`, `decline_prequalify`, `provide_income`, `human_request`, `out_of_scope`, `clarify`, `chit_chat`.',
@@ -1047,7 +1047,7 @@ spec('llm', 'l-schema', {
   src: 'ARCHITECTURE.md, "How the model is called"',
 });
 spec('llm', 'l-call', {
-  name: 'The call', tech: 'api/llm/conversation.py', status: 'partial',
+  name: 'The call', tech: 'api/infrastructure/llm/conversation.py', status: 'partial',
   summary: 'One call, no streaming, Structured Outputs, then Pydantic validation.',
   fixed: [
     'One call, no streaming, Structured Outputs with the `ConversationTurn` JSON schema. It must also validate in Pydantic; one retry, then `model_output_invalid`.',

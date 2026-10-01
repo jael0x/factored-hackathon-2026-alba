@@ -2,7 +2,7 @@ import smtplib
 from email.message import EmailMessage
 from typing import Protocol
 
-from api.settings import settings
+from api.infrastructure.config.settings import settings
 
 LOGIN_CODE_SUBJECT = "Tu código de Alba"
 SMTP_TIMEOUT_SECONDS = 10

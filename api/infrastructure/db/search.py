@@ -1,5 +1,5 @@
 SEARCH_LIMIT = 20
 
 
-def like_escape(text: str) -> str:
+def escape_like(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

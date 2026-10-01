@@ -20,9 +20,7 @@ docker compose up --build
 
 Open http://localhost:5173/ (API health at http://localhost:8000/health). `load` downloads the four CSVs into `data/raw/` if missing, applies migrations, and builds gold. Login codes are emailed to Mailpit, a local mail catcher: read them at http://localhost:8025. Nothing is sent outside your machine. Default compose sets `DEMO_LOGIN=1`, which adds a "Demo" button to the login header; it opens a test-customer search right below it that fills the document field. Agents log in at http://localhost:5173/agent/login ("Acceso para agentes" under the customer form) with their email and employee code; there the Demo button searches active agents and fills both fields. There is no cloud deploy for the submission; optional host steps will live in `docs/ops.md`.
 
-### Web with hot reload
-
-With the stack up, `cd web && npm install && npm run dev` serves the app from source and proxies `/api` to the API on port 8000. Vite takes the next free port (5174) when the compose `web` service already holds 5173.
+`api` and `web` mount the source tree and reload when a file is saved. A Python or TypeScript edit does not need another image build. A new package in `api/requirements.txt` or `web/package.json` does: `docker compose up --build api` or `web`. The first `up --build` after this change rebuilds `web`, because that image now runs Vite instead of nginx.
 
 ### Tests
 

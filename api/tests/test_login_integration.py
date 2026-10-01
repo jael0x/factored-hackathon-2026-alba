@@ -3,8 +3,8 @@ from datetime import UTC, datetime, timedelta
 import psycopg
 import pytest
 
-from api import auth
-from api.settings import settings
+from api.domain.session.tokens import SessionClaims, issue_token
+from api.infrastructure.config.settings import settings
 from api.tests.login_harness import ALICIA, JULIANA, JUAN, NO_EMAIL, Harness, customer_login
 
 pytestmark = pytest.mark.integration
@@ -62,8 +62,8 @@ def test_a_document_number_without_a_code_does_not_open_a_session(harness: Harne
 
 
 def test_an_expired_session_is_not_renewed(harness: Harness) -> None:
-    claims = auth.SessionClaims(sub=JUAN.customer_id, role="customer")
-    token = auth.issue_token(settings.jwt_secret, claims, datetime.now(UTC) - timedelta(minutes=16))
+    claims = SessionClaims(sub=JUAN.customer_id, role="customer")
+    token = issue_token(settings.jwt_secret, claims, datetime.now(UTC) - timedelta(minutes=16))
     response = harness.http.get("/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
     assert response.json() == {"error": "unauthorized"}
@@ -74,7 +74,7 @@ def test_me_without_a_token_is_401(harness: Harness) -> None:
 
 
 def test_an_agent_token_cannot_read_a_customer_route(harness: Harness) -> None:
-    token = auth.issue_token(settings.jwt_secret, auth.SessionClaims(sub="AGT-OJ9N4FGYV9", role="agent"), datetime.now(UTC))
+    token = issue_token(settings.jwt_secret, SessionClaims(sub="AGT-OJ9N4FGYV9", role="agent"), datetime.now(UTC))
     response = harness.http.get("/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403
     assert response.json() == {"error": "forbidden"}

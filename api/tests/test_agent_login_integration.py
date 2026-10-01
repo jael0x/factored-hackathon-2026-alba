@@ -1,7 +1,7 @@
 import psycopg
 import pytest
 
-from api.settings import settings
+from api.infrastructure.config.settings import settings
 from api.tests.login_harness import (
     CESAR,
     INACTIVE,

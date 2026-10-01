@@ -7,9 +7,9 @@ from fastapi.testclient import TestClient
 
 os.environ.setdefault("JWT_SECRET", "test-only-jwt-secret-0123456789abcdef")
 
-from api.mail import get_mailer  # noqa: E402
+from api.infrastructure.config.settings import settings  # noqa: E402
+from api.infrastructure.mail.smtp import get_mailer  # noqa: E402
 from api.main import app  # noqa: E402
-from api.settings import settings  # noqa: E402
 from api.tests.login_harness import LOGIN_TEST_DB, FakeMailer, Harness, seed_people  # noqa: E402
 
 
@@ -28,5 +28,8 @@ def harness(login_database: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[Ha
     monkeypatch.setattr(settings, "demo_login", True)
     mail = FakeMailer()
     app.dependency_overrides[get_mailer] = lambda: mail
-    yield Harness(http=TestClient(app), mail=mail)
-    app.dependency_overrides.clear()
+    try:
+        with TestClient(app) as client:
+            yield Harness(http=client, mail=mail)
+    finally:
+        app.dependency_overrides.clear()

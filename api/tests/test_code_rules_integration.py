@@ -3,8 +3,8 @@ from collections.abc import Iterator
 import psycopg
 import pytest
 
-from api import auth
-from api.settings import settings
+from api.domain.session import codes as login_codes
+from api.infrastructure.config.settings import settings
 from api.tests.login_harness import CESAR, JUAN, Harness, Login, customer_login, login_of
 
 pytestmark = pytest.mark.integration
@@ -31,14 +31,14 @@ def test_a_code_older_than_ten_minutes_does_not_open_a_session(harness: Harness,
 
 
 def test_five_wrong_codes_spend_the_code(harness: Harness, login: Login, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(auth, "new_code", lambda: "481206")
+    monkeypatch.setattr(login_codes, "new_code", lambda: "481206")
     harness.request_code(login)
     assert [harness.open_session(login, "000000") for _ in range(5)] == [401] * 5
     assert harness.open_session(login, "481206") == 401
 
 
 def test_four_wrong_codes_still_allow_the_right_one(harness: Harness, login: Login, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(auth, "new_code", lambda: "481206")
+    monkeypatch.setattr(login_codes, "new_code", lambda: "481206")
     harness.request_code(login)
     assert [harness.open_session(login, "000000") for _ in range(4)] == [401] * 4
     assert harness.open_session(login, "481206") == 200
@@ -46,7 +46,7 @@ def test_four_wrong_codes_still_allow_the_right_one(harness: Harness, login: Log
 
 def test_a_new_code_replaces_the_unused_one(harness: Harness, login: Login, monkeypatch: pytest.MonkeyPatch) -> None:
     issued = codes("111111", "222222")
-    monkeypatch.setattr(auth, "new_code", lambda: next(issued))
+    monkeypatch.setattr(login_codes, "new_code", lambda: next(issued))
     harness.request_code(login)
     harness.request_code(login)
     assert harness.open_session(login, "111111") == 401

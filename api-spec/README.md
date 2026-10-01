@@ -53,7 +53,7 @@ The same import is the request body: a handler takes `CloseCaseRequest`, it does
 
 ## Frontend
 
-One client, typed by the generated schema. `baseUrl` is `/api` because the dev proxy and nginx strip that prefix before the request reaches FastAPI. Paths in the spec do not include `/api`.
+One client, typed by the generated schema. `baseUrl` is `/api` because the Vite dev proxy strips that prefix before the request reaches FastAPI. Paths in the spec do not include `/api`.
 
 ```ts
 import { api } from "./api/client";

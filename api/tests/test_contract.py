@@ -42,7 +42,8 @@ def spec_text() -> str:
 
 
 def spec_sha256() -> str:
-    return hashlib.sha256(SPEC_PATH.read_bytes()).hexdigest()
+    raw = SPEC_PATH.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def load_spec() -> dict:
