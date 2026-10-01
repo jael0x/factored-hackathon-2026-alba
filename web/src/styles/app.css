@@ -74,6 +74,7 @@ input {
 .label { font-size: 14px; line-height: 20px; font-weight: 500; }
 .caption { font-size: 13px; line-height: 18px; }
 .muted { color: var(--muted); }
+.mono { font-family: var(--font-mono); }
 
 @media (max-width: 640px) {
   .display { font-size: 36px; line-height: 40px; }
@@ -171,6 +172,11 @@ input {
 
 .login-layout .intro .notice {
   margin-top: 24px;
+}
+
+.login-form {
+  display: grid;
+  gap: 12px;
 }
 
 @media (max-width: 860px) {
@@ -285,6 +291,7 @@ input {
 .btn.secondary { background: var(--surface); color: var(--ink); border-color: var(--field-edge); }
 .btn.text { background: transparent; color: var(--ink); padding: 10px 12px; }
 .btn.centered { justify-self: center; }
+a.btn { text-decoration: none; }
 
 :focus-visible {
   outline: 2px solid var(--green);
@@ -319,6 +326,12 @@ input {
   padding: 12px 16px;
   border-radius: var(--r-row);
   background: var(--surface-2);
+}
+
+.kv > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .popover-anchor {

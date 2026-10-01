@@ -1,13 +1,18 @@
 import { useId, type ReactNode } from "react";
-import { Navigate } from "react-router";
+import { Link, Navigate } from "react-router";
 
 import { api } from "../api/client";
 import { useLoad } from "../api/useLoad";
-import { HOME_PATH, type Role } from "../routes";
+import { HOME_PATH, LOGIN_PATH, type Role } from "../routes";
 import { useSession } from "../session/session";
 import { AppBar } from "./AppBar";
 
 const loadConfig = () => api.GET("/config");
+
+const OTHER_LOGIN: Record<Role, { to: string; label: string }> = {
+  customer: { to: LOGIN_PATH.agent, label: "Acceso para agentes" },
+  agent: { to: LOGIN_PATH.customer, label: "Acceso para clientes" },
+};
 
 type LoginShellProps = {
   role: Role;
@@ -29,6 +34,7 @@ export function LoginShell({ role, title, lede, notice, panelTitle, demo, childr
   }
 
   const showDemo = config.status === "ready" && config.data.demo_login;
+  const other = OTHER_LOGIN[role];
 
   return (
     <>
@@ -49,6 +55,9 @@ export function LoginShell({ role, title, lede, notice, panelTitle, demo, childr
             </div>
             {children}
           </section>
+          <Link className="btn text centered" to={other.to}>
+            {other.label}
+          </Link>
         </div>
       </main>
     </>
