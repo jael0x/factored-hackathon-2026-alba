@@ -7,7 +7,7 @@ This file sets how Alba looks and moves on screen. It governs the `web/` app (th
 Decided with Jael:
 
 - Sep 28, 2026: glass for the conversation, a different surface for the record (Principle 1). One sans family; Georgia is dropped. This file also governs `diagrams/c4.html`. The product web ships light only for the Oct 5 demo; the C4 page keeps a dark set.
-- Sep 30, 2026 (later): agents get their own login page with the same layout, steps, and Demo popover. Each login links to the other with a centered text button under the form.
+- Sep 30, 2026 (later): consultants get their own login page with the same layout, steps, and Demo popover. Each login links to the other with a centered text button under the form.
 - Sep 30, 2026: the login is two columns (title, description, and the always-visible notice on the left; the form on the right), vertically centered. The demo search is a popover under a dashed "Demo" button in the app bar, hidden until pressed. The code step stacks its actions.
 - Sep 29, 2026: no cream anywhere. Records are solid white, and the one key record per screen is a deep indigo panel. Glass sits over a blurred color field so the effect shows. Screens fill the browser like the real app; the mock's notes live in a drawer. Buttons stay forest green, so green means both "act" and "pre-qualifies".
 
@@ -28,9 +28,9 @@ Frames were pulled from the videos locally for review. No asset from the Dribbbl
 
 ## Principles
 
-1. **Glass is the conversation; solid is the record.** What the customer types or the assistant drafts sits on frosted glass. What the policy decided, a template wrote, the file holds, or an event recorded sits on an opaque white surface: template messages, product cards, the trace, the C4 page. The one record a screen exists for (the certificate for the customer, the packet for the agent) is a deep indigo panel. The surface tells the reader whether a line is a draft or a fact. The mock says it in one line: "El texto del modelo no es el expediente."
+1. **Glass is the conversation; solid is the record.** What the customer types or the assistant drafts sits on frosted glass. What the policy decided, a template wrote, the file holds, or an event recorded sits on an opaque white surface: template messages, product cards, the trace, the C4 page. The one record a screen exists for (the certificate for the customer, the packet for the consultant) is a deep indigo panel. The surface tells the reader whether a line is a draft or a fact. The mock says it in one line: "El texto del modelo no es el expediente."
 2. **Render typed fields, never prose.** Surface, tone, and label come from `messages.author`, `outcome`, `processes.state`, `reason_code`, and the product keys. Each map from a field to a look is defined once, next to the constants. A screen never matches a Spanish sentence to pick a style.
-3. **Show steps, not thoughts.** The reference shots show the model reasoning while it works. Alba does not: the brief asks for explanations from sources, rules, and execution records, with no chain-of-thought (`PLAN.md` §2). While the client waits for the API, the thread shows the typing indicator the contract names, "escribiendo…" (`ARCHITECTURE.md`, "UI wait state"). Afterwards the certificate shows facts and the deciding rule, and the agent sees the events.
+3. **Show steps, not thoughts.** The reference shots show the model reasoning while it works. Alba does not: the brief asks for explanations from sources, rules, and execution records, with no chain-of-thought (`PLAN.md` §2). While the client waits for the API, the thread shows the typing indicator the contract names, "escribiendo…" (`ARCHITECTURE.md`, "UI wait state"). Afterwards the certificate shows facts and the deciding rule, and the consultant sees the events.
 4. **Ask only what the contract asks.** The customer can be asked three things: which product, whether to start the pre-qualification, and their monthly income (`ARCHITECTURE.md`, "What the customer can be asked"). No generated "what next" list, and no offer the system cannot keep: no limit, no rate for the new product, no account opening.
 5. **Every outcome is calm.** `NOT_PREQUALIFIED` is a result, not an error. It uses the same panel and the same motion as `PREQUALIFIED`, in a different tone. The word "simulado" is on every certificate tag.
 6. **Amounts carry their currency code.** `1,559.57 USD`, never `$1,559.57`: MXN, ARS, COP, and USD all write `$`. The amount shows in the currency the API returns.
@@ -61,7 +61,7 @@ Every product screen sits on the aurora: a cool base gradient with large blurred
 
 | Token | Value | Use |
 |---|---|---|
-| `--glass` | `rgba(255, 255, 255, 0.55)` with `backdrop-filter: blur(28px) saturate(1.5)` | Assistant and customer bubbles, composer, sheets, app bar, sidebar, the agent's thread panel |
+| `--glass` | `rgba(255, 255, 255, 0.55)` with `backdrop-filter: blur(28px) saturate(1.5)` | Assistant and customer bubbles, composer, sheets, app bar, sidebar, the consultant's thread panel |
 | `--glass-edge` | 1px `rgba(255, 255, 255, 0.65)` plus an inner top highlight `rgba(255, 255, 255, 0.8)` | Edge of every glass surface |
 | `--glass-shadow` | `0 10px 40px rgba(37, 50, 86, 0.14), 0 1px 2px rgba(37, 50, 86, 0.06)` | Glass floats |
 | `--field-edge-glass` | `#6B7286` | Composer outline |
@@ -86,7 +86,7 @@ Every product screen sits on the aurora: a cool base gradient with large blurred
 
 | Token | Value | Use |
 |---|---|---|
-| `--hero` | `linear-gradient(150deg, #253256, #374772)` | The certificate, the agent packet |
+| `--hero` | `linear-gradient(150deg, #253256, #374772)` | The certificate, the consultant packet |
 | `--hero-ink` | `#FFFFFF` | Text |
 | `--hero-muted` | `#C0C5D4` | Keys, captions |
 | `--hero-line` | `rgba(255, 255, 255, 0.16)` | Row dividers |
@@ -107,7 +107,7 @@ A tone is a text color and a border. It always comes with a text label: color al
 | slate | `#34506B` | `#9FBCD8` | `ai_active`; C4 research refs |
 | ink | `#1C1F2A` | `#FFFFFF` | `ended`; errors |
 
-Errors use ink, not stop. On an Alba screen, the stop tone means one thing: the policy or the agent said no.
+Errors use ink, not stop. On an Alba screen, the stop tone means one thing: the policy or the consultant said no.
 
 ## Type
 
@@ -120,7 +120,7 @@ One sans family for every surface, plus a mono for identifiers.
 
 `web/` serves Inter from its own build, so no page calls a third-party font host. `mocks/index.html` and `diagrams/c4.html` are single static files and use the stack as written: Inter if installed, the system face otherwise.
 
-Mono is for identifiers only: `customer_id`, rule ids, event names, state names, the policy version. It appears on agent screens, the trace, and the C4 page. Customer screens show no mono.
+Mono is for identifiers only: `customer_id`, rule ids, event names, state names, the policy version. It appears on consultant screens, the trace, and the C4 page. Customer screens show no mono.
 
 | Role | Size / line | Weight | Tracking | Where |
 |---|---|---|---|---|
@@ -160,7 +160,7 @@ Mono is for identifiers only: `customer_id`, rule ids, event names, state names,
 Screens fill the browser like the real app. There is no device frame.
 
 - **Customer** (`/login`, `/`, `/case/:id`): the aurora, a glass app bar across the top (the orb and "Alba" on the left; the customer's first name and "Salir" on the right), and one centered column. The column is 720px for chat and 1040px for the login and home grids. On `/case/:id` the composer floats at the bottom of the viewport, 680px wide, and the thread scrolls under it.
-- **Agent** (`/agent`, `/agent/case/:id`, `/agent/case/:id/trace`): the aurora, a 248px glass sidebar (the brand, "Casos en revisión" with its count, the agent's name and specialty at the bottom), and a main area up to 1200px. `/agent/case/:id` has two columns, thread 1.1fr and packet 0.9fr, with the packet sticky on the right. Below 1024px the sidebar becomes a glass top bar and the columns stack with the packet first, because the packet is what the agent decides on.
+- **Consultant** (`/consultant`, `/consultant/case/:id`, `/consultant/case/:id/trace`): the aurora, a 248px glass sidebar (the brand, "Casos en revisión" with its count, the consultant's name and specialty at the bottom), and a main area up to 1200px. `/consultant/case/:id` has two columns, thread 1.1fr and packet 0.9fr, with the packet sticky on the right. Below 1024px the sidebar becomes a glass top bar and the columns stack with the packet first, because the packet is what the consultant decides on.
 - **C4 page**: keeps its layout (canvas plus a 350px side panel, one column below 1180px) and takes its tokens from this file.
 
 ## Components
@@ -168,7 +168,7 @@ Screens fill the browser like the real app. There is no device frame.
 ### App bar and sidebar
 
 - Customer app bar: glass, 64px, sticky. The orb (24px) and "Alba" in label weight 600 on the left. On the right, the first name in a glass pill and a text button "Salir". The login shows the brand only, plus the "Demo" button when `DEMO_LOGIN=1` (see Login).
-- Agent sidebar: glass, full height. The brand at the top; one nav item, "Casos en revisión", with an ink count badge; the agent's name, specialty, and employee id at the bottom.
+- Consultant sidebar: glass, full height. The brand at the top; one nav item, "Casos en revisión", with an ink count badge; the consultant's name, specialty, and employee id at the bottom.
 
 ### Composer (`/case/:id`)
 
@@ -180,7 +180,7 @@ Screens fill the browser like the real app. There is no device frame.
 - In `human_active` the composer stays, because the customer may still write and the message is stored (`ARCHITECTURE.md`, "Process"). A white banner above it reads "Este caso lo ve una persona." No typing indicator shows, because nobody writes in the thread.
 - In `ended` the certificate sits in the thread above the composer. A new message opens a new case (`ARCHITECTURE.md`, "Process").
 
-### Messages (`/case/:id`; read-only on `/agent/case/:id`)
+### Messages (`/case/:id`; read-only on `/consultant/case/:id`)
 
 The surface follows `messages.author`:
 
@@ -211,14 +211,14 @@ The surface follows `messages.author`:
 
 ### Certificate (`/case/:id`)
 
-A certificate exists only for `PREQUALIFIED` and `NOT_PREQUALIFIED` (from the policy, or from the agent close). It is the hero: the full column width, `--r-sheet`, a 4px bar in the outcome's hero tone along the top. From top to bottom:
+A certificate exists only for `PREQUALIFIED` and `NOT_PREQUALIFIED` (from the policy, or from the consultant close). It is the hero: the full column width, `--r-sheet`, a 4px bar in the outcome's hero tone along the top. From top to bottom:
 
 1. The outcome tag: "Precalifica · simulado" or "No precalifica · simulado".
 2. The product, in title size.
 3. The template paragraph, exactly as the API returns it.
 4. "Hechos usados": key-value rows from `facts`. Income shows the local amount, the USD equivalent, and the exchange-rate date beside it (`ARCHITECTURE.md`, "Auth and screens").
 5. "Regla que decide": the `deciding_rule` row.
-6. A caption footer with `policy_version` and the dates of the facts, the way Wirely states that details are kept as of creation. When `decided_by` is `agent`, the footer adds "Revisado por una persona."
+6. A caption footer with `policy_version` and the dates of the facts, the way Wirely states that details are kept as of creation. When `decided_by` is `consultant`, the footer adds "Revisado por una persona."
 
 There is no slot for a credit limit, a rate for the new product, or a risk label. The Gen UI "Low risk" badge has no counterpart here: the risk estimate is the `credit_score` fact (`ARCHITECTURE.md`, "Risk estimate"), shown as a fact row, never as a label. The panel enters once over `--t-sheet`, with the same motion for both outcomes.
 
@@ -231,9 +231,9 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 | Kind | Look | Use |
 |---|---|---|
 | Primary | `--green` fill, white text, pill | "Enviar código", "Abrir sesión", "Volver a entrar" |
-| Decisive | `--ink` fill, white text, pill | "Confirmar" in the agent confirm dialog |
+| Decisive | `--ink` fill, white text, pill | "Confirmar" in the consultant confirm dialog |
 | Secondary | White fill, 1px `--field-edge`, ink text, pill | "Pedir otro código", "Elegir al azar", "Volver" |
-| Text | No fill, ink text, pill | "Salir", "Cerrar", "Cambiar documento", "Cambiar datos", "Acceso para agentes", "Acceso para clientes" |
+| Text | No fill, ink text, pill | "Salir", "Cerrar", "Cambiar documento", "Cambiar datos", "Acceso para asesores", "Acceso para clientes" |
 | Demo | White fill, dashed 1px `--field-edge`, ink text, pill | "Demo" in the login app bar, only with `DEMO_LOGIN=1` |
 | Secondary on hero | No fill, 1px `--hero-edge`, white text, pill | "Precalificar", "No precalificar" |
 | Send | 44px circle, `--green`, white icon | Composer |
@@ -255,16 +255,16 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 - Step 2: the document shown above, a caption "Revisa tu correo y escribe el código." ("Pedimos otro código. Revisa tu correo." after a resend), the code field with focus, a caption with the validity from `expires_in_seconds` (ten minutes), then the actions stacked: "Abrir sesión" (primary, full width), "Pedir otro código" (secondary, the same width), and "Cambiar documento" (text button, centered). Any failed code shows one line, "El código no es válido o venció."
 - The page itself shows nothing of the demo. With `DEMO_LOGIN=1` (read from `GET /config`) the app bar on `/login` carries a "Demo" button: a white pill with a dashed 1px `--field-edge` border, so nobody reads it as a bank feature. Pressing it opens the test-customer search right below it as a popover, not a modal: white, the same dashed border, `--r-card`, with the heading "Usuarios de prueba", a search field that takes focus, white result rows (full name, country, document masked to its last 4 digits; three rows show at a time and the rest scroll inside the list), "Elegir al azar", and "Cerrar". Choosing a row fills the document field and closes it; it never skips the code. Escape, a click outside, or "Cerrar" closes it too.
 - In the local demo the code arrives in Mailpit (http://localhost:8025). The screen never shows it.
-- Agents do not log in here. Under the panel, a centered text button "Acceso para agentes" leads to their own page (Agent login, below).
+- Consultants do not log in here. Under the panel, a centered text button "Acceso para asesores" leads to their own page (Consultant login, below).
 
-### Agent login (`/agent/login`)
+### Consultant login (`/consultant/login`)
 
-- The customer login's layout, steps, and motion. Display title "Entra como agente"; lede "Escribe tu correo y tu código de empleado. Te enviaremos un código de un solo uso a ese correo."
-- The notice reads "Si tus datos corresponden a un agente activo, te enviaremos un código." It never changes with the answer, so it never says whether the pair is on file or the agent is away (`ARCHITECTURE.md`, "Auth and screens").
+- The customer login's layout, steps, and motion. Display title "Entra como asesor"; lede "Escribe tu correo y tu código de empleado. Te enviaremos un código de un solo uso a ese correo."
+- The notice reads "Si tus datos corresponden a un asesor activo, te enviaremos un código." It never changes with the answer, so it never says whether the pair is on file or the consultant is away (`ARCHITECTURE.md`, "Auth and screens").
 - Step 1: "Correo" and "Código de empleado", then "Enviar código". Step 2: both values shown above in rows, then the customer login's code step; the text button reads "Cambiar datos".
-- With `DEMO_LOGIN=1` the same Demo popover, headed "Agentes de prueba". It lists only active agents; a row is the full name and "código de empleado" with the code in mono. Choosing a row fills both fields.
+- With `DEMO_LOGIN=1` the same Demo popover, headed "Asesores de prueba". It lists only active consultants; a row is the full name and "código de empleado" with the code in mono. Choosing a row fills both fields.
 - Under the panel, "Acceso para clientes" leads back to `/login`.
-- Until the queue is built, `/agent` shows the customer home's greeting with the agent's first name, the lede "Los casos en revisión aparecerán aquí.", and a caption with the specialty (when the file has one) and the employee code in mono.
+- Until the queue is built, `/consultant` shows the customer home's greeting with the consultant's first name, the lede "Los casos en revisión aparecerán aquí.", and a caption with the specialty (when the file has one) and the employee code in mono.
 
 ### Home (`/`)
 
@@ -280,22 +280,22 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 - Loading: blocks in the target surface with a 1.2s opacity pulse, static under reduced motion.
 - Error: a white card in ink, the API's reason when it sends one, and "Reintentar".
 
-### Agent queue (`/agent`)
+### Consultant queue (`/consultant`)
 
 - Title "Casos en revisión" with the count badge.
 - One white card holding the cases as table rows: customer (name and city), product, rule and reason (mono), a clay "En revisión" tag, a chevron. The whole row is the link to the case.
 - Empty state: "No hay casos en revisión."
 
-### Agent case (`/agent/case/:id`)
+### Consultant case (`/consultant/case/:id`)
 
-- Left: the thread, read-only, in a glass panel with the heading "Conversación". There is no composer, no reply box, and no text field (`ARCHITECTURE.md`, "Agent close").
-- Right: the packet as the hero, sticky, section label "Paquete". Key-value rows from `analysis.completed` (`specs/08-agent-close.feature`): Pedido, Score, Ingreso mensual, Regla, Política.
+- Left: the thread, read-only, in a glass panel with the heading "Conversación". There is no composer, no reply box, and no text field (`ARCHITECTURE.md`, "Consultant close").
+- Right: the packet as the hero, sticky, section label "Paquete". Key-value rows from `analysis.completed` (`specs/08-consultant-close.feature`): Pedido, Score, Ingreso mensual, Regla, Política.
 - Under the rows, two hero secondary buttons of the same size: "Precalificar", then "No precalificar". Neither takes focus on load and neither is tinted by outcome, so the layout does not lean toward an answer.
 - Choosing one opens a confirm dialog, the review step Wirely shows before a payment. It names the outcome, says the customer gets a message and the case closes, and offers "Volver" (secondary, focused first) and "Confirmar" (decisive).
-- On success the case leaves the queue. A second close is rejected by the API (`agent_close:{process_id}`) and the screen shows that as an error.
-- This confirm step is the agent's. The customer's consent (`PLAN.md` D8) is the `confirm_prequalify` template, answered in the thread.
+- On success the case leaves the queue. A second close is rejected by the API (`consultant_close:{process_id}`) and the screen shows that as an error.
+- This confirm step is the consultant's. The customer's consent (`PLAN.md` D8) is the `confirm_prequalify` template, answered in the thread.
 
-### Trace (`/agent/case/:id/trace`)
+### Trace (`/consultant/case/:id/trace`)
 
 - Title "Registro del caso". One white card per event, in the order the API returns them: a numbered glass marker, the event name in mono, the time, and the fields the rules match on. State changes show the state tag.
 - A dashed 1.4px `--arrow` connector joins a card to the card named by its `caused_by_event_id`, the way the thinking-mode shot joins cards. No id, no line (`AGENTS.md`, "Events, rules, commands").
@@ -311,7 +311,7 @@ The dark set is cool as well: page `#0F1218`, raised `#151922`, card `#1A1E28`, 
 `mocks/index.html` follows this file and the flows in `specs/`. Each screen fills the browser. The walkthrough chrome is dark, so it never reads as part of the bank:
 
 - A 44px bar at the top: "Recorrido", previous and next, and the current screen with its number, which opens a menu of every screen grouped as Cliente and Agente. Left and right arrow keys step through the screens.
-- "Nota" opens a drawer on the right with that screen's walkthrough note. Raw identifiers such as `ai_active` appear only in the notes and on agent screens. Escape closes it.
+- "Nota" opens a drawer on the right with that screen's walkthrough note. Raw identifiers such as `ai_active` appear only in the notes and on consultant screens. Escape closes it.
 - Template sentences that are not written yet show as a dashed placeholder naming the `template_id`.
 
 Walkthrough tokens: background `rgba(22, 25, 34, 0.88)` with blur, text `#F2F4F8`, muted `#A3A9B8`, control edges `rgba(255, 255, 255, 0.4)`.
@@ -366,7 +366,7 @@ Contrast, WCAG 2.x formula, computed Sep 29, 2026 for the values in this file. G
 
 ## Interface copy
 
-Interface labels are Spanish. They are the ones this file names; a screen not built yet takes its labels from `mocks/index.html`. The login labels in `web/src/pages/Login.tsx` and `web/src/pages/AgentLogin.tsx` follow the Login and Agent login sections above. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the agent-close message) are not in this file: they live in `api/domain/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
+Interface labels are Spanish. They are the ones this file names; a screen not built yet takes its labels from `mocks/index.html`, except that the mock's "Agente" is "asesor" in the app. The login labels in `web/src/pages/Login.tsx` and `web/src/pages/ConsultantLogin.tsx` follow the Login and Consultant login sections above. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the consultant-close message) are not in this file: they live in `api/domain/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
 
 ## Open
 
