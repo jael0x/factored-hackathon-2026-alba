@@ -4,8 +4,8 @@ from uuid import uuid4
 import jwt
 
 from api import auth
-from api.customers import _like_escape
 from api.mail import LOGIN_CODE_SUBJECT, login_code_message
+from api.search import like_escape
 
 SECRET = "unit-test-secret-0123456789abcdefghij"
 NOW = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
@@ -95,4 +95,4 @@ def test_login_code_message_names_code_and_validity() -> None:
 
 
 def test_like_escape_keeps_wildcards_literal() -> None:
-    assert _like_escape("50%_off\\") == "50\\%\\_off\\\\"
+    assert like_escape("50%_off\\") == "50\\%\\_off\\\\"

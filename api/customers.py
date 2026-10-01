@@ -3,8 +3,7 @@ from dataclasses import dataclass
 import psycopg
 
 from api.contract_models import CustomerSearchHit
-
-SEARCH_LIMIT = 20
+from api.search import SEARCH_LIMIT, like_escape
 
 
 @dataclass(frozen=True)
@@ -31,12 +30,8 @@ def find_by_id(conn: psycopg.Connection, customer_id: str) -> CustomerIdentity |
     return CustomerIdentity(*row) if row else None
 
 
-def _like_escape(text: str) -> str:
-    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
 def search(conn: psycopg.Connection, query: str) -> list[CustomerSearchHit]:
-    needle = _like_escape(query.strip())
+    needle = like_escape(query.strip())
     rows = conn.execute(
         """
         SELECT customer_id, document_number, first_name, last_name, country
