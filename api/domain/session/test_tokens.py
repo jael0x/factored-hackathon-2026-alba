@@ -4,7 +4,7 @@ from typing import get_args
 import jwt
 
 from api.contract_models import Role as WireRole
-from api.domain.session.tokens import AGENT, CUSTOMER, SESSION_TTL, Role, SessionClaims, issue_token, read_token
+from api.domain.session.tokens import CONSULTANT, CUSTOMER, SESSION_TTL, Role, SessionClaims, issue_token, read_token
 
 SECRET = "unit-test-secret-0123456789abcdefghij"
 SUBJECT = "CLI-9EDEKZ8OUNUR"
@@ -42,7 +42,7 @@ def test_token_with_an_unknown_role_is_rejected() -> None:
     assert read_token(SECRET, token) is None
 
 
-def test_an_agent_claim_is_not_a_customer_claim() -> None:
-    claims = SessionClaims(sub="AGT-OJ9N4FGYV9", role=AGENT)
+def test_a_consultant_claim_is_not_a_customer_claim() -> None:
+    claims = SessionClaims(sub="AGT-OJ9N4FGYV9", role=CONSULTANT)
     assert read_token(SECRET, issue_token(SECRET, claims, datetime.now(UTC))) == claims
     assert claims.role != CUSTOMER

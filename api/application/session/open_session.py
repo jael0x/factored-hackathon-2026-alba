@@ -1,9 +1,9 @@
 from datetime import datetime
 
-from api.application.session.ports import Agents, Customers, LoginCodes
-from api.domain.agents.login import can_receive_code, login_key
+from api.application.session.ports import Consultants, Customers, LoginCodes
+from api.domain.consultants.login import can_receive_code, login_key
 from api.domain.session import codes
-from api.domain.session.tokens import AGENT, CUSTOMER, Role, SessionClaims
+from api.domain.session.tokens import CONSULTANT, CUSTOMER, Role, SessionClaims
 
 
 def open_customer_session(
@@ -20,8 +20,8 @@ def open_customer_session(
     return SessionClaims(sub=customer.customer_id, role=CUSTOMER)
 
 
-def open_agent_session(
-    agents: Agents,
+def open_consultant_session(
+    consultants: Consultants,
     login_codes: LoginCodes,
     secret: str,
     email: str,
@@ -29,12 +29,12 @@ def open_agent_session(
     code: str,
     now: datetime,
 ) -> SessionClaims | None:
-    agent = agents.find_by_login(login_key(email, employee_code))
-    if agent is None or not can_receive_code(agent):
+    consultant = consultants.find_by_login(login_key(email, employee_code))
+    if consultant is None or not can_receive_code(consultant):
         return None
-    if not redeem_code(login_codes, secret, agent.agent_id, AGENT, code, now):
+    if not redeem_code(login_codes, secret, consultant.consultant_id, CONSULTANT, code, now):
         return None
-    return SessionClaims(sub=agent.agent_id, role=AGENT)
+    return SessionClaims(sub=consultant.consultant_id, role=CONSULTANT)
 
 
 def redeem_code(login_codes: LoginCodes, secret: str, subject_id: str, role: Role, code: str, now: datetime) -> bool:

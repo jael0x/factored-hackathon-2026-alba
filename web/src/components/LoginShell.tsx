@@ -10,8 +10,8 @@ import { AppBar } from "./AppBar";
 const loadConfig = () => api.GET("/config");
 
 const OTHER_LOGIN: Record<Role, { to: string; label: string }> = {
-  customer: { to: LOGIN_PATH.agent, label: "Acceso para agentes" },
-  agent: { to: LOGIN_PATH.customer, label: "Acceso para clientes" },
+  customer: { to: LOGIN_PATH.consultant, label: "Acceso para asesores" },
+  consultant: { to: LOGIN_PATH.customer, label: "Acceso para clientes" },
 };
 
 type LoginShellProps = {

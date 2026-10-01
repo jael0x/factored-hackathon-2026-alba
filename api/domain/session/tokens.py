@@ -6,9 +6,9 @@ import jwt
 
 SESSION_TTL = timedelta(minutes=15)
 JWT_ALGORITHM = "HS256"
-Role = Literal["customer", "agent"]
+Role = Literal["customer", "consultant"]
 CUSTOMER: Role = "customer"
-AGENT: Role = "agent"
+CONSULTANT: Role = "consultant"
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,6 @@ def read_token(secret: str, token: str) -> SessionClaims | None:
     role = payload["role"]
     if role == CUSTOMER:
         return SessionClaims(sub=str(payload["sub"]), role=CUSTOMER)
-    if role == AGENT:
-        return SessionClaims(sub=str(payload["sub"]), role=AGENT)
+    if role == CONSULTANT:
+        return SessionClaims(sub=str(payload["sub"]), role=CONSULTANT)
     return None
