@@ -20,7 +20,7 @@ The build order for `ARCHITECTURE.md`, as of Wed Sep 30, 2026. The contract wins
 Built and merged on Sep 29 (PR #1, plus the AWS CLI architecture fix): `compose.yaml` with `postgres`, the one-shot `load`, `api` with `/health` and `/ready`, a placeholder `web` behind nginx, and a `test` service. `db/migrations/001_init.sql` already creates every table the contract lists, cycle tables included.
 
 Also on Sep 29 (e0e3532), the wire contract:
-- `api-spec/openapi.yaml` holds the paths: 15 in e0e3532, 17 after `/config` and `/me` (Sep 29).
+- `api-spec/openapi.yaml` holds the paths: 15 in e0e3532, 17 after `/config` and `/me` (Sep 29), 18 after `/agent/me` (Sep 30).
 - It is generated into `api/contract_models.py` (Pydantic) and `web/src/api/schema.d.ts` (TypeScript).
 - `api/tests/test_contract.py` guards it.
 - `/health` and `/ready` already return the generated models, and the web shell calls them through `web/src/api/client.ts`.
@@ -49,7 +49,8 @@ Gaps against the contract in what is built (item M0):
 - `daily_exchange_rates.csv` has no expected row count. The contract asks for all four files, and its snapshot size is not written in the contract.
 - The load report prints rows and empty scores and incomes, but not active products by type (**Data: what is touched and what is not**).
 - No lint or type-check config exists yet (I4).
-- Customer login built on Sep 29 and refined on Sep 30 (the two-column layout, the demo popover), one C4 component at a time: the screen (W2), the routes, and the engine. A browser mock (MSW) was tried and removed on Sep 30; screens are built against the local stack. `002_login.sql` adds `customers.email` and hashed codes; `mailpit` receives every code. `api/tests/test_login_integration.py` covers the `01` customer scenarios against Postgres.
+- Customer login built on Sep 29 and refined on Sep 30 (the two-column layout, the demo popover), one C4 component at a time: the screen (W2), the routes, and the engine. A browser mock (MSW) was tried and removed on Sep 30; screens are built against the local stack. `002_login.sql` adds `customers.email` and hashed codes; `mailpit` receives every code. `api/tests/test_login_integration.py` covers the `01` scenarios against Postgres, and `api/tests/test_code_rules_integration.py` runs the code rules (expiry, five wrong tries, replacement, one use) for both roles.
+- Agent login built on Sep 30 the same way (D18): `/agent/login` and a `/agent` greeting (W8), `POST /agent/session/code`, `POST /agent/session`, and `GET /agent/me`, and the agent half of `api/auth.py` on the same code steps as the customer's. `003_agent_login.sql` adds `service_agents.email`, `agent_status`, and `specialty`. `specs/11-agent-login.feature` holds its scenarios, because `01` had reached 15; `api/tests/test_agent_login_integration.py` covers them.
 - I1, decided Sep 30: `api-spec/generate.py` appends a named alias for every string enum in `openapi.yaml` (`Role = Literal['customer', 'agent']` and 17 more) to `api/contract_models.py`. `api/auth.py` imports `Role` from there, and `test_every_spec_enum_has_a_named_alias` guards the list.
 
 ## Interfaces (do first)
@@ -101,20 +102,20 @@ Gaps against the contract in what is built (item M0):
 - [ ] **E5. Templates.** `api/policy/templates.py`, ES and PT, for `confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the policy certificate, and the two agent-path messages. The contract says these sentences are not written yet: they are written here, read by both of us, then noted in the contract. The certificate shows income in local currency with the USD equivalent and the rate date, and no limit or rate.
   - Specs: `05` certificate scenarios and "A request in Portuguese gets a Portuguese certificate"; `07` "The referral notice tells the customer a person will review".
   - Depends on E1. **Blocked** by D15 (1) for the non-`REFER` notice.
-- [ ] **E6. Auth.** `api/auth.py`. The customer half is built (Sep 29). The agent half follows D18 (decided Sep 30: `/agent/login`, email plus employee code, `Active` agents only) and is built later:
+- [x] **E6. Auth.** `api/auth.py`. The customer half was built Sep 29, the agent half Sep 30 (D18: `/agent/login`, email plus employee code, `Active` agents only):
   - 6-digit codes valid 10 minutes, stored hashed in `login_codes`, emailed by `api/mail.py` to Mailpit; a new code replaces the unused one; the fifth wrong code spends it;
-  - the same answer for every document on `POST /session/code`, and the same 401 for every failure on `POST /session`;
+  - the same answer for every document on `POST /session/code` and every pair on `POST /agent/session/code`, and the same 401 for every failure on `POST /session` and `POST /agent/session`;
   - JWT HS256 for 15 minutes with `role`, and the `get_session` dependency;
   - 401 on a missing or expired token;
   - 403 for a customer token on an agent route, and the reverse;
-  - a customer code does not open an agent session;
+  - a customer code does not open an agent session, and the reverse;
   - a missing `JWT_SECRET` stops startup and names the variable.
 
   Settles the C4 items on code hashing and wrong-attempt limits.
-  - Specs: `01` all.
+  - Specs: `01` all, `11` all.
   - Depends on I1 and I2.
-- [ ] **E7. Read routes.** Customer and agent search, and products with the session filter. The demo customer search and `GET /me` are built (Sep 29). `api/tools/profile.py`, `products.py`, `catalog.py`.
-  - Specs: `01` search scenarios; `02` all.
+- [ ] **E7. Read routes.** Customer and agent search, and products with the session filter. The demo customer and agent searches, `GET /me`, and `GET /agent/me` are built (Sep 29-30). `api/tools/profile.py`, `products.py`, `catalog.py`.
+  - Specs: `01` and `11` search scenarios; `02` all.
   - Depends on E6.
 - [ ] **E8. Case and agent routes.** `POST /messages`, `GET /case/{process_id}`, the agent queue, packet, trace, and close, exactly as in `ARCHITECTURE.md` "HTTP contract", typed with the generated models. That section already fixes the order (`created_at`, then id), the 404 and 409 cases, and the packet with null analysis fields when no `analysis.completed` exists.
   - Specs: `08` for `REFER` cases; `09` all; the HTTP side of `03` to `07`.
@@ -164,15 +165,15 @@ Every screen follows `DESIGN.md` and `mocks/index.html`, and handles loading, er
 - [ ] **W5. Agent queue and case.** The packet, two close actions, and no reply field. Specs: `08`. **Blocked** by D15 (3) for closes on non-`REFER` cases.
 - [ ] **W6. Trace.** The process's events in order, with the detail column of `09`. Specs: `09`.
 - [ ] **W7. Oracle flows in the browser.** The four oracle flows, one of them in Portuguese. Depends on E9 and W2 to W6.
-- [ ] **W8. Agent login page.** `/agent/login` (D18): email and employee code, then the emailed code; `Active` agents only. Depends on the agent half of E6.
+- [x] **W8. Agent login page.** `/agent/login` (D18): email and employee code, then the emailed code; `Active` agents only; the demo agent search and random pick; a link to and from `/login`. `/agent` greets the agent until W5 replaces it. Built Sep 30 against the real API. Specs: `11`.
 
 ## Spec work from the Sep 29 review
 
 - After each of D12 to D16 is decided: update `03`, `04`, `06`, `07`, and `08` to match, in the change that writes the decision into the contract.
 - Scenarios missing for behavior the contract already defines. Each is added in the item that builds the behavior:
   - two invalid model outputs send the case to a person with `model_output_invalid` (`07`, M3);
-  - the agent login (email and employee code, `Active` agents only, D18) goes into `01` with W8 and the agent half of E6;
-  - a customer session is refused on agent routes (`08`, E6).
+  - the agent login (email and employee code, `Active` agents only, D18): written Sep 30 as `11-agent-login.feature`, since `01` had reached 15 scenarios;
+  - a customer session is refused on agent routes: written Sep 30 in `11` against `GET /agent/me`; E8 checks the same 403 on its own routes.
 
 ## Milestones
 
