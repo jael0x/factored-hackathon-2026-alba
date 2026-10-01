@@ -112,28 +112,38 @@ def spend_code(conn: psycopg.Connection, code_id: UUID, now: datetime) -> bool:
     return row is not None
 
 
+def issue_code(
+    conn: psycopg.Connection, secret: str, subject_id: str, role: Role, email: str, now: datetime
+) -> CodeDelivery:
+    code = new_code()
+    store_code(conn, subject_id, role, hash_code(secret, subject_id, code), now)
+    return CodeDelivery(email=email, code=code)
+
+
+def redeem_code(
+    conn: psycopg.Connection, secret: str, subject_id: str, role: Role, code: str, now: datetime
+) -> bool:
+    issued = latest_code(conn, subject_id, role)
+    if issued is None or not code_is_open(issued, now):
+        return False
+    if not code_matches(secret, subject_id, issued, code):
+        record_wrong_code(conn, issued.id)
+        return False
+    return spend_code(conn, issued.id, now)
+
+
 def issue_customer_code(conn: psycopg.Connection, secret: str, document_number: str, now: datetime) -> CodeDelivery | None:
     customer = customers.find_by_document(conn, document_number)
     if customer is None or customer.email is None:
         return None
-    code = new_code()
-    store_code(conn, customer.customer_id, CUSTOMER, hash_code(secret, customer.customer_id, code), now)
-    return CodeDelivery(email=customer.email, code=code)
+    return issue_code(conn, secret, customer.customer_id, CUSTOMER, customer.email, now)
 
 
 def open_customer_session(
     conn: psycopg.Connection, secret: str, document_number: str, code: str, now: datetime
 ) -> SessionClaims | None:
     customer = customers.find_by_document(conn, document_number)
-    if customer is None:
-        return None
-    issued = latest_code(conn, customer.customer_id, CUSTOMER)
-    if issued is None or not code_is_open(issued, now):
-        return None
-    if not code_matches(secret, customer.customer_id, issued, code):
-        record_wrong_code(conn, issued.id)
-        return None
-    if not spend_code(conn, issued.id, now):
+    if customer is None or not redeem_code(conn, secret, customer.customer_id, CUSTOMER, code, now):
         return None
     return SessionClaims(sub=customer.customer_id, role=CUSTOMER)
 
