@@ -6,7 +6,7 @@ import pytest
 from api.contract_models import Role
 from api.domain.session.tokens import SessionClaims, issue_token
 from api.infrastructure.config.settings import settings
-from api.tests.login_harness import ALICIA, CESAR, GONZALEZ, JULIANA, JUAN, Harness
+from api.tests.login_harness import ALICIA, CESAR, GONZALEZ, JUAN, JULIANA, Harness
 
 pytestmark = pytest.mark.integration
 
@@ -142,7 +142,9 @@ def test_a_loan_at_zero_is_left_out_and_a_card_at_zero_is_not(harness: Harness) 
 
 
 def test_a_customer_cannot_see_another_customers_products(harness: Harness) -> None:
-    response = harness.http.get("/products", params={"customer_id": ALICIA.customer_id}, headers=bearer(JUAN.customer_id))
+    response = harness.http.get(
+        "/products", params={"customer_id": ALICIA.customer_id}, headers=bearer(JUAN.customer_id)
+    )
     assert response.status_code == 200
     assert response.json() == {"products": []}
 

@@ -6,10 +6,16 @@ import pytest
 from api.domain.products.listing import is_listed
 from api.domain.products.product import CustomerProduct
 
-MORTGAGE = CustomerProduct("PRD-W1ZJKF7U5B6C", "Préstamo Hipotecario", "LOAN-31561597", "USD", Decimal("109159.57"), "Active")
-PERSONAL_LOAN = CustomerProduct("PRD-TESTLOAN0001", "Préstamo Personal", "LOAN-20000001", "COP", Decimal("8500000.00"), "Active")
+MORTGAGE = CustomerProduct(
+    "PRD-W1ZJKF7U5B6C", "Préstamo Hipotecario", "LOAN-31561597", "USD", Decimal("109159.57"), "Active"
+)
+PERSONAL_LOAN = CustomerProduct(
+    "PRD-TESTLOAN0001", "Préstamo Personal", "LOAN-20000001", "COP", Decimal("8500000.00"), "Active"
+)
 SAVINGS = CustomerProduct("PRD-AQZ0094E1XY0", "Cuenta Ahorro", "8482915725", "USD", Decimal("1559.57"), "Active")
-CREDIT_CARD = CustomerProduct("PRD-TESTCARD0001", "Tarjeta Crédito", "4111111111115476", "ARS", Decimal("125000.00"), "Active")
+CREDIT_CARD = CustomerProduct(
+    "PRD-TESTCARD0001", "Tarjeta Crédito", "4111111111115476", "ARS", Decimal("125000.00"), "Active"
+)
 
 
 @pytest.mark.parametrize("product", [MORTGAGE, PERSONAL_LOAN, SAVINGS, CREDIT_CARD])
