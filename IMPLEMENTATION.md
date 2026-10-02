@@ -51,7 +51,8 @@ Gaps against the contract in what is built (item M0):
 - No lint or type-check config exists yet (I4).
 - Customer login built on Sep 29 and refined on Sep 30 (the two-column layout, the demo popover), one C4 component at a time: the screen (W2), the routes, and the engine. A browser mock (MSW) was tried and removed on Sep 30; screens are built against the local stack. `002_login.sql` adds `customers.email` and hashed codes; `mailpit` receives every code. `api/tests/test_login_integration.py` covers the `01` scenarios against Postgres, and `api/tests/test_code_rules_integration.py` runs the code rules (expiry, five wrong tries, replacement, one use) for both roles.
 - Agent login built on Sep 30 the same way (D18): `/agent/login` and a `/agent` greeting (W8), `POST /agent/session/code`, `POST /agent/session`, and `GET /agent/me`. On the layers of 537e417: `api/domain/agents` (the login key and the `Active` rule), the agent use cases in `api/application/session` on the same code steps as the customer's, `api/infrastructure/db/agents.py`, and `api/presentation/http/routes/agents.py`. `003_agent_login.sql` adds `service_agents.email`, `agent_status`, and `specialty`. `specs/11-agent-login.feature` holds its scenarios, because `01` had reached 15; `api/tests/test_agent_login_integration.py` covers them.
-- I1, decided Sep 30: `api-spec/generate.py` appends a named alias for every string enum in `openapi.yaml` (`Role = Literal['customer', 'agent']` and 17 more) to `api/contract_models.py`. `api/domain/session/tokens.py` defines the session `Role`, and `test_domain_role_matches_the_wire_role` fails if that set and the generated alias diverge. `test_every_spec_enum_has_a_named_alias` guards the list.
+- I1, decided Sep 30: `api-spec/generate.py` appends a named alias for every string enum in `openapi.yaml` (`Role = Literal['customer', 'agent']` and 18 more) to `api/contract_models.py`. `api/domain/session/tokens.py` defines the session `Role`, and `test_domain_role_matches_the_wire_role` fails if that set and the generated alias diverge. `test_every_spec_enum_has_a_named_alias` guards the list.
+- E1, built Sep 30: `decide(profile, product, declared_income)` in `api/domain/policy/engine.py`, thresholds and rule order in `alba-credit-v1.yaml`. D16 (2) is closed. The trace lists every evaluated rule and stops at the first terminal result. `api/domain/policy/test_engine.py` covers the branches. `api/fixtures/oracle_customers.json` stays with M1.
 
 ## Interfaces (do first)
 
@@ -72,7 +73,7 @@ Gaps against the contract in what is built (item M0):
 
 ## Engine (E)
 
-- [ ] **E1. Policy engine.** `api/domain/policy/engine.py`, `api/domain/policy/alba-credit-v1.yaml`, `Decision`. Pure. Rules in the contract's order, `rule_trace` accumulates, `facts` cite column, value, and `as_of`. Tests cover:
+- [x] **E1. Policy engine.** `api/domain/policy/engine.py`, `api/domain/policy/alba-credit-v1.yaml`, `Decision`. Pure. Rules in the contract's order, `rule_trace` accumulates, `facts` cite column, value, and `as_of`. Tests cover:
   - every branch;
   - the boundaries: scores 579, 580, 619, 620 and days past due 1, 29, 30;
   - an empty score;
@@ -82,7 +83,7 @@ Gaps against the contract in what is built (item M0):
 
   `api/fixtures/oracle_customers.json` after M1.
   - Specs: `05` status, days past due, product held, no score, and score band outlines; `06` "The income on file wins over a typed amount" and "marked as self-declared".
-  - Depends on I1. **Blocked** by D16 (2) for the signature.
+  - Depends on I1. D16 (2) closed Sep 30: `decide(profile, product, declared_income)`.
 - [ ] **E2. Events and processes.** `api/events.py`: append with the idempotency key; a repeated key writes nothing and says so; stamps `process_id` and `process_state` on `conversation.message_received`. `api/processes.py`: start, transition (only the allowed table; anything else raises and writes nothing), end.
   - Specs: `05` "A message delivered twice does not produce a second decision", "A new message after an ended case opens a new case".
   - Depends on I1.
