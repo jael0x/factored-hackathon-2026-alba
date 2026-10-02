@@ -159,7 +159,7 @@ Prefer a better name or an extracted function over a comment.
 - `events` are append-only. A new fact points at the previous one with `caused_by_event_id`. Do not hard-delete history.
 - Migrations are one-way and safe while old code might still be running. No destructive drop in the same step that introduces the replacement.
 - A migration keeps its filename once it has run anywhere: `schema_migrations` is keyed by it, and a renamed file runs again. If one must be renamed, map the new name to the old one in `FORMER_NAMES` in `pipeline/migrate.py`, with a test.
-- The schema is the contract. `NOT NULL` means the app does not hunt for nulls. A nullable column means the app handles null. Empty income stays null. Do not impute. Do not convert Mexico balances out of USD.
+- The schema is the contract. `NOT NULL` means the app does not hunt for nulls. A nullable column means the app handles null. Empty income stays null. Do not impute. The one exception is `products.current_balance`: an empty balance loads as 0 (`ARCHITECTURE.md`, "Data"). Do not convert Mexico balances out of USD.
 - If you create or replace a view, the same migration sets `security_invoker = true`. Otherwise the view runs as the owner and skips privileges.
 - Idempotency keys are derived from the gap that already exists (`process_id`, client message id, policy version, causing event id). No `Date.now()` and no random. Two runs of the same fact collide on the same key.
 - When several rows could win, the tie-break is an explicit comparator (named fields, in a fixed order). `ORDER BY … LIMIT 1` with no tie-break is not a decision. `NULL` sorts where you say it sorts, not where the engine happens to put it.
@@ -234,7 +234,7 @@ The other model does not inherit the chat. The prompt includes these five points
 
 - Decide eligibility in the prompt, in the screen, or in a client-side `if`.
 - Invent a credit limit, a rate for the new product, or a model that predicts delinquency.
-- Impute nulls, or translate `Tarjeta Crédito` while reading the CSV.
+- Impute nulls (the one exception, the balance, is in `ARCHITECTURE.md` "Data"), or translate `Tarjeta Crédito` while reading the CSV.
 - Restrict login to the four oracle customers.
 - Join two events by time proximity.
 - Swallow a load error or a bad model JSON and continue as if a decision existed.
