@@ -102,6 +102,7 @@ api/
       alba-credit-v1.yaml # rules and thresholds
       templates.py        # certificate, ES and PT
     process/
+      events.py           # event-name constants, idempotency-key builders, the actor of each event
       rules.py            # pure match over the event already written, when the cycle is built
   application/            # one file per use case. Defines the ports
     session/
@@ -249,7 +250,9 @@ Columns: `id uuid`, `event_name text`, `payload jsonb`, `customer_id text`, `pro
 
 `process_id` and `process_state` are columns. They are not payload fields. The customer does not send them.
 
-Closed names. No others are invented in v1.
+`actor` follows the event name, never the caller: `customer` for `conversation.message_received`, `consultant` for `conversation.consultant_closed`, and `system` for the other eight, which a worker command writes. No event in v1 is written with `rule`.
+
+Closed names. No others are invented in v1. They are the `EventName` enum in `api-spec/openapi.yaml`, equal to the trace discriminator; the constants live in `api/domain/process/events.py`.
 
 | `event_name` | When it is written | Minimum payload |
 |---|---|---|
@@ -278,6 +281,8 @@ Idempotency keys:
 | Transition | `transition:{process_id}:{to_state}:{caused_by_event_id}` |
 | Consultant close | `consultant_close:{process_id}` |
 | End process | `end:{process_id}` |
+
+The key in this table belongs to the action. An action that writes one event gives it that key. `process.transition` and `process.end` write two events each, so each of those events is keyed `{action key}:{event_name}`: for example `end:{process_id}:process.state_changed` and `end:{process_id}:process.ended`. The builders for every key are in `api/domain/process/events.py`.
 
 The frontend sends `client_message_id` (one uuid per send). The message key is that uuid. It does not wait for a `process_id`. Repeating the POST creates no new event and no new decision.
 
@@ -733,7 +738,7 @@ These points are left open on purpose. Implementing them on your own breaks the 
 - A separate intent router beside `ConversationTurn`.
 - Full pandera/Great Expectations suites or a policy freshness rule (R10).
 
-Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D12 to D15, D16 (1) and D16 (3) (the `ask_which_product` language check, and which commands change `processes.state`), and D17 (no route lists a customer's cases). D16 (2) is closed: `decide` takes `declared_income`. Each one that gets decided is written into this file.
+Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D12 to D15, D16 (1) and D16 (3) (the `ask_which_product` language check, and which commands change `processes.state`), and D17 (no route lists a customer's cases). D16 (2) is closed: `decide` takes `declared_income`. D19 is closed: the keys of two-event actions, the actor of each event, and where event names live. Each one that gets decided is written into this file.
 
 ## Known gaps
 
