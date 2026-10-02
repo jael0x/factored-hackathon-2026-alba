@@ -12,11 +12,12 @@ from api.application.session.issue_code import issue_consultant_code, issue_cust
 from api.application.session.open_session import open_consultant_session, open_customer_session
 from api.application.session.read_current_consultant import read_current_consultant
 from api.application.session.read_current_customer import read_current_customer
+from api.contract_models import Role
 from api.domain.consultants.identity import ConsultantHit, ConsultantIdentity
 from api.domain.customers.identity import CustomerHit, CustomerIdentity
 from api.domain.search import RejectedSearch
 from api.domain.session.codes import CodeDelivery
-from api.domain.session.tokens import CONSULTANT, CUSTOMER, Role, SessionClaims, read_token
+from api.domain.session.tokens import CONSULTANT, CUSTOMER, SessionClaims, read_token
 from api.infrastructure.config.settings import settings
 from api.infrastructure.db.consultants import PostgresConsultants
 from api.infrastructure.db.customers import PostgresCustomers

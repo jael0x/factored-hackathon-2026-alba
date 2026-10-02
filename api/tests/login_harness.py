@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 import psycopg
 from fastapi.testclient import TestClient
 
-from api.domain.session.tokens import Role
+from api.contract_models import Role
 
 LOGIN_TEST_DB = "alba_api_test"
 

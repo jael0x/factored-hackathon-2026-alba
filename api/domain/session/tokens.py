@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Literal
 
 import jwt
 
+from api.contract_models import Role
+
 SESSION_TTL = timedelta(minutes=15)
 JWT_ALGORITHM = "HS256"
-Role = Literal["customer", "consultant"]
 CUSTOMER: Role = "customer"
 CONSULTANT: Role = "consultant"
 

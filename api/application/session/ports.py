@@ -2,11 +2,11 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
+from api.contract_models import Role
 from api.domain.consultants.identity import ConsultantIdentity
 from api.domain.consultants.login import ConsultantLoginKey
 from api.domain.customers.identity import CustomerIdentity
 from api.domain.session.codes import IssuedCode
-from api.domain.session.tokens import Role
 
 
 class Customers(Protocol):

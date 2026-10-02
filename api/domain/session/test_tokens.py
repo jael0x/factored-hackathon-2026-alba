@@ -3,18 +3,14 @@ from typing import get_args
 
 import jwt
 
-from api.contract_models import Role as WireRole
-from api.domain.session.tokens import CONSULTANT, CUSTOMER, SESSION_TTL, Role, SessionClaims, issue_token, read_token
+from api.contract_models import Role
+from api.domain.session.tokens import CONSULTANT, CUSTOMER, SESSION_TTL, SessionClaims, issue_token, read_token
 
 SECRET = "unit-test-secret-0123456789abcdefghij"
 SUBJECT = "CLI-9EDEKZ8OUNUR"
 
 
-def test_domain_role_matches_the_wire_role() -> None:
-    assert set(get_args(Role)) == set(get_args(WireRole))
-
-
-def test_every_domain_role_round_trips() -> None:
+def test_every_role_round_trips() -> None:
     now = datetime.now(UTC)
     for role in get_args(Role):
         claims = SessionClaims(sub=SUBJECT, role=role)

@@ -1,10 +1,11 @@
 from datetime import datetime
 
 from api.application.session.ports import Consultants, Customers, LoginCodes
+from api.contract_models import Role
 from api.domain.consultants.login import can_receive_code, login_key
 from api.domain.session import codes
 from api.domain.session.codes import CodeDelivery
-from api.domain.session.tokens import CONSULTANT, CUSTOMER, Role
+from api.domain.session.tokens import CONSULTANT, CUSTOMER
 
 
 def issue_customer_code(
