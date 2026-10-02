@@ -711,6 +711,20 @@ components:
       type: string
       enum: [credit_prequalification]
 
+    EventName:
+      type: string
+      enum:
+        - conversation.message_received
+        - conversation.turn_classified
+        - conversation.template_sent
+        - conversation.consultant_closed
+        - conversation.thread_taken
+        - analysis.completed
+        - prequalification.decided
+        - process.started
+        - process.state_changed
+        - process.ended
+
     Config:
       type: object
       additionalProperties: false
@@ -1171,11 +1185,13 @@ components:
     TraceEventBase:
       type: object
       additionalProperties: false
-      required: [id, created_at, actor, process_id, process_state, caused_by_event_id]
+      required: [id, event_name, created_at, actor, process_id, process_state, caused_by_event_id]
       properties:
         id:
           type: string
           format: uuid
+        event_name:
+          $ref: "#/components/schemas/EventName"
         created_at:
           type: string
           format: date-time
