@@ -54,8 +54,10 @@ def open_process_key(customer_id: str, process_key: ProcessKey, triggered_by_eve
     return ActionKey(f"process:{customer_id}:{process_key}:{triggered_by_event_id}")
 
 
-def policy_key(process_id: UUID, policy_version: PolicyVersion, product: ProductKey) -> ActionKey:
-    return ActionKey(f"policy:{process_id}:{policy_version}:{product}")
+def policy_key(
+    process_id: UUID, policy_version: PolicyVersion, product: ProductKey, triggered_by_event_id: UUID
+) -> ActionKey:
+    return ActionKey(f"policy:{process_id}:{policy_version}:{product}:{triggered_by_event_id}")
 
 
 def transition_key(process_id: UUID, to_state: ProcessState, caused_by_event_id: UUID) -> ActionKey:
