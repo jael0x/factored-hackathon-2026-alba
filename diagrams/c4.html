@@ -502,7 +502,7 @@ node('processes', {
 });
 node('policy', {
   parent: 'api', kind: 'component', name: 'Policy engine', tech: 'api/domain/policy/engine.py',
-  summary: '`decide(profile, product) -> Decision`. Pure: same input, same output. Lives in git.',
+  summary: '`decide(profile, product, declared_income) -> Decision`. Pure: same input, same output. Lives in git.',
   desc: ['The only owner of eligibility. It is synthetic, because the dataset ships no credit manual, and the certificate says so. The model does not use it and cannot call it.'],
   files: ['api/domain/policy/engine.py', 'api/domain/policy/alba-credit-v1.yaml'],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"',
@@ -912,13 +912,14 @@ spec('processes', 'p-end', {
   src: 'ARCHITECTURE.md, "Process-native loop", "Commands", "Agent close"',
 });
 spec('policy', 'po-decide', {
-  name: 'decide(profile, product)', tech: 'api/domain/policy/engine.py', status: 'partial',
-  summary: 'Pure function. `product` is `credit_card` or `personal_loan`.',
+  name: 'decide(profile, product, declared_income)', tech: 'api/domain/policy/engine.py', status: 'defined',
+  summary: 'Pure function. `declared_income` is null when none was stated.',
   fixed: [
     'Same input, same output. Lives in git. `product` is `credit_card` or `personal_loan`.',
+    '`declared_income` is this run\'s stated amount, or null. Zero is an amount. The profile is not changed.',
     'A bug on Juan is a bug for every customer with those facts. No `customer_id` branch inside the policy.',
+    '`rule_trace` lists every evaluated rule and stops at the first terminal result. `passed` means the rule did not close. `self_declared` means a stated amount is this run\'s income and evaluation continues.',
   ],
-  open: [['New', 'The signature takes no declared income, yet R06 uses a stated amount as this run\'s income.']],
   tests: ['Break the function on purpose once and confirm the exact test goes red.'],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; AGENTS.md, "Tests"',
 });
@@ -946,6 +947,7 @@ spec('policy', 'po-rules', {
     'R04: no score, refer. The customer is not asked for it.',
     'R06: no income and none stated, `NEEDS_INFO`. No income and an amount stated: not terminal; the amount is this run\'s income, marked `self_declared`, the gold row stays null. Income on file: a typed number is ignored and R06 does not fire.',
     'R05: score below 580 does not pre-qualify, 580 to 619 refers, 620 or more pre-qualifies.',
+    'A prequalification trace is R01 through R05: the earlier rules are `passed`, and R05 closes on a score of 620 or more. A terminal rule stops the trace.',
   ],
   tests: [
     'Income None, score None, delinquency 30 and 29, status `Closed`, product already held.',
@@ -971,6 +973,7 @@ spec('policy', 'po-decision', {
   fixed: [
     '`outcome`, `deciding_rule`, `rule_trace`, `facts`, `policy_version = "alba-credit-v1"`.',
     'One outcome, not `is_prequalified` plus `needs_human`.',
+    '`facts` cites the closing rule. A `self_declared` income is cited ahead of it, with source `self_declared`. A typed amount is ignored when income is on file.',
   ],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; AGENTS.md, "Types"',
 });
