@@ -11,7 +11,8 @@ SCHEMA = ROOT / "web" / "src" / "api" / "schema.d.ts"
 
 
 def spec_sha256() -> str:
-    return hashlib.sha256(SPEC.read_bytes()).hexdigest()
+    raw = SPEC.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def run(cmd: list[str]) -> None:
