@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -7,7 +8,7 @@ import pytest
 from pipeline.batches import all_hashes_loaded, new_batch_id, record_batches
 from pipeline.bronze import BronzeFile, file_sha256
 from pipeline.gold import rebuild_gold
-from pipeline.silver import reload_silver
+from pipeline.silver import load_csv_table, reload_silver
 
 pytestmark = pytest.mark.integration
 
@@ -248,3 +249,14 @@ def test_orphan_product_fails_quality_check(
         conn.transaction(),
     ):
         reload_silver(conn, files)
+
+
+def test_a_csv_missing_a_column_is_rejected_before_any_row_is_copied(migrated_db: str, tmp_path: Path) -> None:
+    path = tmp_path / "customers.csv"
+    path.write_text("customer_id,full_name\nCLI-1,Ana\n", encoding="utf-8")
+    expected = "CSV customers.csv missing columns ['credit_score']. Found=['customer_id', 'full_name']"
+    with psycopg.connect(migrated_db) as conn:
+        before = conn.execute("SELECT count(*) FROM customers").fetchone()
+        with pytest.raises(SystemExit, match=f"^{re.escape(expected)}$"):
+            load_csv_table(conn, path, "customers", ("customer_id", "credit_score"))
+        assert conn.execute("SELECT count(*) FROM customers").fetchone() == before
