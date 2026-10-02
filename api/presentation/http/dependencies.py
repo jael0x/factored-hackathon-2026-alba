@@ -8,6 +8,7 @@ from psycopg_pool import ConnectionPool
 
 from api.application.consultants.search_consultants import search_consultants
 from api.application.customers.search_customers import search_customers
+from api.application.products.list_products import list_products
 from api.application.session.issue_code import issue_consultant_code, issue_customer_code
 from api.application.session.open_session import open_consultant_session, open_customer_session
 from api.application.session.read_current_consultant import read_current_consultant
@@ -15,6 +16,7 @@ from api.application.session.read_current_customer import read_current_customer
 from api.contract_models import Role
 from api.domain.consultants.identity import ConsultantHit, ConsultantIdentity
 from api.domain.customers.identity import CustomerHit, CustomerIdentity
+from api.domain.products.product import CustomerProduct
 from api.domain.search import RejectedSearch
 from api.domain.session.codes import CodeDelivery
 from api.domain.session.tokens import CONSULTANT, CUSTOMER, SessionClaims, read_token
@@ -22,6 +24,7 @@ from api.infrastructure.config.settings import settings
 from api.infrastructure.db.consultants import PostgresConsultants
 from api.infrastructure.db.customers import PostgresCustomers
 from api.infrastructure.db.login_codes import PostgresLoginCodes
+from api.infrastructure.db.products import PostgresProducts
 from api.presentation.http.errors import ApiError, forbidden, unauthorized
 
 BEARER_PREFIX = "Bearer "
@@ -41,6 +44,10 @@ class ReadCurrentCustomer(Protocol):
 
 class RunCustomerSearch(Protocol):
     def __call__(self, q: str | None, random: bool | None) -> list[CustomerHit] | RejectedSearch: ...
+
+
+class ListProducts(Protocol):
+    def __call__(self, session_customer_id: str, requested_customer_id: str | None) -> list[CustomerProduct]: ...
 
 
 class IssueConsultantCode(Protocol):
@@ -127,6 +134,17 @@ def get_run_customer_search(request: Request) -> RunCustomerSearch:
             return search_customers(PostgresCustomers(conn), q, random)
 
     return run
+
+
+def get_list_products(
+    conn: Annotated[psycopg.Connection, Depends(get_connection)],
+) -> ListProducts:
+    products = PostgresProducts(conn)
+
+    def read(session_customer_id: str, requested_customer_id: str | None) -> list[CustomerProduct]:
+        return list_products(products, session_customer_id, requested_customer_id)
+
+    return read
 
 
 def get_issue_consultant_code(
