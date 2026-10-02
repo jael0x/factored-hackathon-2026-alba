@@ -89,7 +89,7 @@ api/
   domain/                 # pure rules. No FastAPI, no psycopg, no settings
     session/
       codes.py            # one-time code: hash, 10 minutes, five wrong tries
-      tokens.py           # JWT and Role
+      tokens.py           # JWT and session claims
     customers/
       identity.py         # CustomerIdentity and the search hit
     consultants/
