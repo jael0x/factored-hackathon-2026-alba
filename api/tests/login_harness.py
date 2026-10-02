@@ -123,7 +123,9 @@ class Harness:
     def request_code(self, login: Login) -> dict[str, object]:
         response = self.http.post(login.code_path, json=login.identity)
         assert response.status_code == 200
-        return response.json()
+        body = response.json()
+        assert isinstance(body, dict)
+        return body
 
     def last_code(self) -> str:
         _, code = self.mail.sent[-1]
@@ -135,7 +137,9 @@ class Harness:
     def token(self, login: Login, code: str) -> str:
         response = self.http.post(login.session_path, json={**login.identity, "code": code})
         assert response.status_code == 200
-        return response.json()["token"]
+        token = response.json()["token"]
+        assert isinstance(token, str)
+        return token
 
 
 def seed_people(url: str) -> None:

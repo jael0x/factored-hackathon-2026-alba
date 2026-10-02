@@ -1,7 +1,7 @@
 import importlib.util
 from pathlib import Path
 from types import ModuleType
-from typing import Union, get_args, get_origin
+from typing import Any, Union, get_args, get_origin
 
 import yaml
 from fastapi.routing import APIRoute
@@ -51,7 +51,8 @@ def load_generator() -> ModuleType:
     return module
 
 
-def load_spec() -> dict:
+# The parsed OpenAPI document nests to any depth, and the tests index into it freely.
+def load_spec() -> dict[str, Any]:
     loaded = yaml.safe_load(spec_text())
     assert isinstance(loaded, dict)
     return loaded

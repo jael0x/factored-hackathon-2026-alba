@@ -14,7 +14,9 @@ LOGINS = [customer_login(JUAN.document_number), login_of(CESAR)]
 
 @pytest.fixture(params=LOGINS, ids=[login.role for login in LOGINS])
 def login(request: pytest.FixtureRequest) -> Login:
-    return request.param
+    param = request.param
+    assert isinstance(param, Login)
+    return param
 
 
 def codes(*values: str) -> Iterator[str]:
