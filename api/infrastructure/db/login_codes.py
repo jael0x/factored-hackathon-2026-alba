@@ -3,8 +3,8 @@ from uuid import UUID
 
 import psycopg
 
+from api.contract_models import Role
 from api.domain.session.codes import CODE_TTL, IssuedCode
-from api.domain.session.tokens import Role
 
 
 class PostgresLoginCodes:

@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 import psycopg
 from fastapi.testclient import TestClient
 
-from api.domain.session.tokens import Role
+from api.contract_models import Role
 
 LOGIN_TEST_DB = "alba_api_test"
 
@@ -19,13 +19,13 @@ class Customer:
 
 
 @dataclass(frozen=True)
-class Agent:
-    agent_id: str
+class Consultant:
+    consultant_id: str
     employee_code: str
     first_name: str
     last_name: str
     email: str
-    agent_status: str
+    status: str
     specialty: str | None
 
 
@@ -39,15 +39,15 @@ GONZALEZ = [
 ]
 CUSTOMERS = [JUAN, ALICIA, JULIANA, NO_EMAIL, *GONZALEZ]
 
-CESAR = Agent("AGT-OJ9N4FGYV9", "E75612", "César", "González Sánchez", "cesar.gonzalez@example.com", "Active", "Créditos")
-ON_VACATION = Agent("AGT-TESTVAC001", "E20001", "Marta", "Ríos Vega", "marta.rios@example.com", "Vacation", "Cobranza")
-ON_LEAVE = Agent("AGT-TESTLEV001", "E20002", "Pablo", "Núñez Ortiz", "pablo.nunez@example.com", "Leave", None)
-INACTIVE = Agent("AGT-TESTINA001", "E20003", "Lucía", "Herrera Cruz", "lucia.herrera@example.com", "Inactive", "Ventas")
-SHARED_CODE_DIEGO = Agent("AGT-TESTSCA001", "E30001", "Diego", "Medina Paz", "diego.medina@example.com", "Active", "Fraudes")
-SHARED_CODE_SOFIA = Agent("AGT-TESTSCB001", "E30001", "Sofía", "Medina Lara", "sofia.medina@example.com", "Active", None)
-SHARED_EMAIL_ANDRES = Agent("AGT-TESTSEA001", "E40001", "Andrés", "Silva Mora", "equipo.silva@example.com", "Active", "Retención")
-SHARED_EMAIL_VALERIA = Agent("AGT-TESTSEB001", "E40002", "Valeria", "Silva Mora", "equipo.silva@example.com", "Active", "Ventas")
-AGENTS = [
+CESAR = Consultant("AGT-OJ9N4FGYV9", "E75612", "César", "González Sánchez", "cesar.gonzalez@example.com", "Active", "Créditos")
+ON_VACATION = Consultant("AGT-TESTVAC001", "E20001", "Marta", "Ríos Vega", "marta.rios@example.com", "Vacation", "Cobranza")
+ON_LEAVE = Consultant("AGT-TESTLEV001", "E20002", "Pablo", "Núñez Ortiz", "pablo.nunez@example.com", "Leave", None)
+INACTIVE = Consultant("AGT-TESTINA001", "E20003", "Lucía", "Herrera Cruz", "lucia.herrera@example.com", "Inactive", "Ventas")
+SHARED_CODE_DIEGO = Consultant("AGT-TESTSCA001", "E30001", "Diego", "Medina Paz", "diego.medina@example.com", "Active", "Fraudes")
+SHARED_CODE_SOFIA = Consultant("AGT-TESTSCB001", "E30001", "Sofía", "Medina Lara", "sofia.medina@example.com", "Active", None)
+SHARED_EMAIL_ANDRES = Consultant("AGT-TESTSEA001", "E40001", "Andrés", "Silva Mora", "equipo.silva@example.com", "Active", "Retención")
+SHARED_EMAIL_VALERIA = Consultant("AGT-TESTSEB001", "E40002", "Valeria", "Silva Mora", "equipo.silva@example.com", "Active", "Ventas")
+CONSULTANTS = [
     CESAR,
     ON_VACATION,
     ON_LEAVE,
@@ -71,12 +71,12 @@ def customer_login(document_number: str) -> Login:
     return Login("customer", "/session/code", "/session", {"document_number": document_number})
 
 
-def agent_login(email: str, employee_code: str) -> Login:
-    return Login("agent", "/agent/session/code", "/agent/session", {"email": email, "employee_code": employee_code})
+def consultant_login(email: str, employee_code: str) -> Login:
+    return Login("consultant", "/consultant/session/code", "/consultant/session", {"email": email, "employee_code": employee_code})
 
 
-def login_of(agent: Agent) -> Login:
-    return agent_login(agent.email, agent.employee_code)
+def login_of(consultant: Consultant) -> Login:
+    return consultant_login(consultant.email, consultant.employee_code)
 
 
 @dataclass
@@ -128,7 +128,7 @@ def seed_people(url: str) -> None:
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
             [
-                (a.agent_id, a.employee_code, a.first_name, a.last_name, a.email, a.agent_status, a.specialty)
-                for a in AGENTS
+                (c.consultant_id, c.employee_code, c.first_name, c.last_name, c.email, c.status, c.specialty)
+                for c in CONSULTANTS
             ],
         )

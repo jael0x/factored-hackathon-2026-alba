@@ -268,18 +268,18 @@ node('customer', {
   src: 'ARCHITECTURE.md, "What gets built", "Oracle fixtures", "What the customer can be asked"',
 });
 
-node('agent', {
-  parent: 'context', kind: 'person', name: 'Credit agent', tech: 'bank staff',
+node('consultant', {
+  parent: 'context', kind: 'person', name: 'Credit consultant', tech: 'bank staff',
   summary: 'Any of the 1,200 rows of `service_agents.csv`. Closes handed-off cases as pre-qualified or not.',
   desc: [
     'Sees only processes in `human_active`. Reads the handoff packet and the trace. Does not chat: the only action is to close the case with `PREQUALIFIED` or `NOT_PREQUALIFIED`, and a template tells the customer.',
-    'The mock uses César González Sánchez (`AGT-OJ9N4FGYV9`, employee `E75612`, specialty Créditos, Senior, morning shift). He is not the only agent.',
+    'The mock uses César González Sánchez (`AGT-OJ9N4FGYV9`, employee `E75612`, specialty Créditos, Senior, morning shift). He is not the only consultant.',
   ],
   fixed: [
     'Juan, Juliana, and Mariana never reach the queue. Alicia does.',
-    'No reply box and no text field. The close is `POST /agent/case/:id/close`.',
+    'No reply box and no text field. The close is `POST /consultant/case/:id/close`.',
   ],
-  src: 'ARCHITECTURE.md, "Oracle fixtures", "Agent close", "Auth and screens"',
+  src: 'ARCHITECTURE.md, "Oracle fixtures", "Consultant close", "Auth and screens"',
 });
 
 node('alba', {
@@ -330,7 +330,7 @@ node('s3', {
 node('web', {
   parent: 'alba', kind: 'container', name: 'web', tech: 'TypeScript, React, Vite',
   noun: 'pages',
-  summary: 'One app for customers and agents. Renders what the API returns.',
+  summary: 'One app for customers and consultants. Renders what the API returns.',
   desc: [
     'One app with six pages. It renders products, messages, the certificate, and the process state as the API returns them. It does not compute the policy, convert currency, or write certificate prose.',
     'The `web` service proxies to the API.',
@@ -429,10 +429,10 @@ node('eval', {
 
 view('context', {
   cols: 3, minCol: 200, inside: [],
-  place: [['customer', 0, 0], ['agent', 2, 0], ['alba', 1, 1], ['openai', 0, 2], ['s3', 2, 2]],
+  place: [['customer', 0, 0], ['consultant', 2, 0], ['alba', 1, 1], ['openai', 0, 2], ['s3', 2, 2]],
   rels: [
     ['customer', 'alba', 'Logs in with a document number and an emailed code, asks about a card or a loan, reads the certificate', 'HTTPS'],
-    ['agent', 'alba', 'Reads the packet, closes as pre-qualified or not', 'HTTPS'],
+    ['consultant', 'alba', 'Reads the packet, closes as pre-qualified or not', 'HTTPS'],
     ['alba', 'openai', 'Classifies the message, drafts a clarification', 'HTTPS, Structured Outputs'],
     ['alba', 's3', 'Copies four CSVs when missing', 'aws s3 cp, read-only'],
   ],
@@ -441,14 +441,14 @@ view('context', {
 view('alba', {
   cols: 5, minCol: 150,
   place: [
-    ['customer', 1, 0], ['agent', 2, 0],
+    ['customer', 1, 0], ['consultant', 2, 0],
     ['web', 1, 1, 2], ['eval', 3, 1],
     ['openai', 0, 2], ['api', 1, 2, 2], ['load', 3, 2], ['s3', 4, 2],
     ['mailpit', 0, 3], ['postgres', 1, 3, 2], ['raw', 3, 3],
   ],
   rels: [
     ['customer', 'web', 'Uses', 'HTTPS'],
-    ['agent', 'web', 'Uses', 'HTTPS'],
+    ['consultant', 'web', 'Uses', 'HTTPS'],
     ['web', 'api', 'Calls', 'JSON over HTTP'],
     ['api', 'openai', 'One call per conversation.generate', 'HTTPS'],
     ['api', 'postgres', 'Events, commands, processes, gold', 'SQL'],
@@ -460,16 +460,16 @@ view('alba', {
 });
 node('routers', {
   parent: 'api', kind: 'component', name: 'HTTP routers', tech: 'api/presentation/http/routes/',
-  summary: 'Login, search, the customer message, the agent close, and the reads behind each page.',
-  desc: ['FastAPI app and routers. A customer message or an agent close appends an event; what happens next is a rule and a command, not an `if` in the handler. Every query filters by the id on the JWT.'],
+  summary: 'Login, search, the customer message, the consultant close, and the reads behind each page.',
+  desc: ['FastAPI app and routers. A customer message or a consultant close appends an event; what happens next is a rule and a command, not an `if` in the handler. Every query filters by the id on the JWT.'],
   files: ['api/main.py', 'api/presentation/http/routes/'],
-  src: 'ARCHITECTURE.md, "Auth and screens", "Agent close"; AGENTS.md, "Owners in this system"',
+  src: 'ARCHITECTURE.md, "Auth and screens", "Consultant close"; AGENTS.md, "Owners in this system"',
 });
 node('auth', {
   parent: 'api', kind: 'component', name: 'Auth', tech: 'api/domain/session',
   summary: 'One-time code, own JWT (HS256, 15 min), and the `get_session` dependency.',
-  desc: ['Issues and checks the one-time code and the JWT. `get_session` hands every handler the `customer_id` or `agent_id` from the token, never from the request body or the chat.'],
-  files: ['api/domain/session/codes.py', 'api/domain/session/tokens.py', 'api/domain/agents/login.py', 'api/application/session/issue_code.py', 'api/application/session/open_session.py', 'api/presentation/http/dependencies.py'],
+  desc: ['Issues and checks the one-time code and the JWT. `get_session` hands every handler the `customer_id` or `consultant_id` from the token, never from the request body or the chat.'],
+  files: ['api/domain/session/codes.py', 'api/domain/session/tokens.py', 'api/domain/consultants/login.py', 'api/application/session/issue_code.py', 'api/application/session/open_session.py', 'api/presentation/http/dependencies.py'],
   src: 'ARCHITECTURE.md, "Auth and screens"',
 });
 node('events', {
@@ -567,11 +567,11 @@ spec('routers', 'r-search', {
   summary: 'Only with `DEMO_LOGIN=1`. Fills the login form; never opens a session.',
   fixed: [
     '`GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20, ordered by `last_name`, `first_name`, `customer_id`. `?random=true` returns one customer with an email on file.',
-    '`GET /agents/search?q=` and `?random=true` do the same over `Active` agents only, by name, employee code, or `agent_id`, ordered by `last_name`, `first_name`, `agent_id`. They return the email too, so a pick fills both login fields.',
+    '`GET /consultants/search?q=` and `?random=true` do the same over `Active` consultants only, by name, employee code, or `consultant_id`, ordered by `last_name`, `first_name`, `consultant_id`. They return the email too, so a pick fills both login fields.',
     'With `DEMO_LOGIN` off both are 404. `GET /config` tells the web app whether they are on.',
-    'Backed by indexes on `customers.document_number` and `(last_name, first_name)`. The queries live in `api/infrastructure/db/customers.py` and `api/infrastructure/db/agents.py`.',
+    'Backed by indexes on `customers.document_number` and `(last_name, first_name)`. The queries live in `api/infrastructure/db/customers.py` and `api/infrastructure/db/consultants.py`.',
   ],
-  tests: ['With the demo login off, the search is not available.', 'A demo agent search lists only active agents.'],
+  tests: ['With the demo login off, the search is not available.', 'A demo consultant search lists only active consultants.'],
   src: 'ARCHITECTURE.md, "Auth and screens", "HTTP contract", "Indexes"',
 });
 spec('routers', 'r-login', {
@@ -586,16 +586,16 @@ spec('routers', 'r-login', {
   tests: ['A code entered with another customer\'s document number does not open a session.'],
   src: 'ARCHITECTURE.md, "Auth and screens", "HTTP contract"; PLAN.md §4.3',
 });
-spec('routers', 'r-agent-session', {
-  name: 'POST /agent/session/code, POST /agent/session', tech: 'agent login', status: 'defined',
+spec('routers', 'r-consultant-session', {
+  name: 'POST /consultant/session/code, POST /consultant/session', tech: 'consultant login', status: 'defined',
   summary: 'Email plus employee code, then the 6-digit code emailed to that address, then a 15-minute JWT. Built Sep 30 (D18).',
   fixed: [
-    'The agent sends email and employee code, trimmed and matched without case. The pair is unique for all 1,200 agents; neither field is unique alone.',
+    'The consultant sends email and employee code, trimmed and matched without case. The pair is unique for all 1,200 consultants; neither field is unique alone.',
     'Only `agent_status = Active` (1,090) gets a code. The answer is `{expires_in_seconds: 600}` for every pair and status. Same code rules as the customer login.',
-    '`POST /agent/session` takes the email, the employee code, and the code; the pair must still be `Active`. Claims: `sub` = `agent_id`, `role` = `agent`. Every failure is the same 401.',
-    '`GET /agent/me` returns the name, employee code, and specialty (null for 476 agents) for the agent screens.',
+    '`POST /consultant/session` takes the email, the employee code, and the code; the pair must still be `Active`. Claims: `sub` = `consultant_id`, `role` = `consultant`. Every failure is the same 401.',
+    '`GET /consultant/me` returns the name, employee code, and specialty (null for 476 consultants) for the consultant screens.',
   ],
-  tests: ['On a shared employee code the email decides who gets the code.', 'A customer code does not open an agent session.'],
+  tests: ['On a shared employee code the email decides who gets the code.', 'A customer code does not open a consultant session.'],
   src: 'ARCHITECTURE.md, "Auth and screens", "HTTP contract"; PLAN.md D18',
 });
 spec('routers', 'r-customer-msg', {
@@ -610,26 +610,26 @@ spec('routers', 'r-customer-msg', {
   tests: ['A second POST with the same `client_message_id` creates no event.'],
   src: 'ARCHITECTURE.md, "Events", "HTTP contract"',
 });
-spec('routers', 'r-agent-close', {
-  name: 'POST /agent/case/:id/close', tech: 'agent close', status: 'partial',
-  summary: 'The agent only action: `PREQUALIFIED` or `NOT_PREQUALIFIED`. No text.',
+spec('routers', 'r-consultant-close', {
+  name: 'POST /consultant/case/:id/close', tech: 'consultant close', status: 'partial',
+  summary: 'The consultant only action: `PREQUALIFIED` or `NOT_PREQUALIFIED`. No text.',
   fixed: [
     'Body: `outcome`, `PREQUALIFIED` or `NOT_PREQUALIFIED`. Any other body is rejected. There is no text field.',
-    'Writes `conversation.agent_closed` with `outcome`, `agent_id`, and `language` copied from the process.',
-    'Key `agent_close:{process_id}`. The same case cannot be closed twice.',
-    'The agent does not send messages and does not chat.',
+    'Writes `conversation.consultant_closed` with `outcome`, `consultant_id`, and `language` copied from the process.',
+    'Key `consultant_close:{process_id}`. The same case cannot be closed twice.',
+    'The consultant does not send messages and does not chat.',
   ],
   open: [['New', 'A case handed off before a product was named (a first-message human request, out of scope, unsupported language) has `product` null, so a close would render a certificate for no product.']],
-  src: 'ARCHITECTURE.md, "Agent close"',
+  src: 'ARCHITECTURE.md, "Consultant close"',
 });
 spec('routers', 'r-reads', {
   name: 'Read endpoints', tech: 'api-spec/openapi.yaml', status: 'partial',
   summary: 'Products, thread, certificate, queue, handoff packet, trace.',
   fixed: [
-    '`GET /me`, `GET /agent/me`, `GET /products`, `GET /case/{process_id}`, `GET /agent/queue`, `GET /agent/case/{process_id}`, `GET /agent/case/{process_id}/trace`. Shapes are in `api-spec/openapi.yaml`.',
+    '`GET /me`, `GET /consultant/me`, `GET /products`, `GET /case/{process_id}`, `GET /consultant/queue`, `GET /consultant/case/{process_id}`, `GET /consultant/case/{process_id}/trace`. Shapes are in `api-spec/openapi.yaml`.',
     'The filter `customer_id = jwt.sub` is in every customer query. A `customer_id` query that is not the token sub returns an empty product list.',
     'The customer API does not list `customer_credit_profile`. The certificate has no score, no limit, and no rate.',
-    'The agent queue shows processes in `human_active` only. The trace shows the process `events` in order, plus the opening message via `caused_by_event_id`.',
+    'The consultant queue shows processes in `human_active` only. The trace shows the process `events` in order, plus the opening message via `caused_by_event_id`.',
   ],
   open: [
     ['New', 'The brief asks for "open questions" in the handoff; `PLAN.md` §2 notes that field is not in the contract.'],
@@ -642,9 +642,9 @@ spec('auth', 'a-code', {
   name: 'One-time code', tech: 'login_codes, api/infrastructure/mail/smtp.py', status: 'defined',
   summary: '6 digits, valid 10 minutes, emailed to the address on file. The code opens the session, not the document.',
   fixed: [
-    '`login_codes` holds a hash of the code (never the code), the customer or agent, the 10-minute expiry, the count of wrong tries, and when it was used.',
-    'A new request replaces any unused code for the same customer or agent. The fifth wrong code spends it. A used code does not open a second session.',
-    'Codes are kept per role: a customer code does not open an agent session, and an agent code does not open a customer session.',
+    '`login_codes` holds a hash of the code (never the code), the customer or consultant, the 10-minute expiry, the count of wrong tries, and when it was used.',
+    'A new request replaces any unused code for the same customer or consultant. The fifth wrong code spends it. A used code does not open a second session.',
+    'Codes are kept per role: a customer code does not open a consultant session, and a consultant code does not open a customer session.',
     'The code is not logged. The email is Spanish copy in `api/infrastructure/mail/smtp.py`, sent by SMTP to Mailpit only.',
     'A document number or a `customer_id` does not prove identity.',
   ],
@@ -656,7 +656,7 @@ spec('auth', 'a-jwt', {
   summary: 'Own token, 15 minutes. 401 when expired, no silent renewal.',
   fixed: [
     'Own JWT, HS256, 15 minutes, issued by this API with `JWT_SECRET`.',
-    'Claims: `sub` (`customer_id` or `agent_id`), `role` (`customer` or `agent`), `exp`.',
+    'Claims: `sub` (`customer_id` or `consultant_id`), `role` (`customer` or `consultant`), `exp`.',
     'Expired JWT: 401. The customer sees that the session ended. Not renewed during the case being shown.',
   ],
   src: 'ARCHITECTURE.md, "Closed stack", "Auth and screens"',
@@ -667,7 +667,7 @@ spec('auth', 'a-session', {
   fixed: [
     'The `customer_id` of every query comes from the JWT. Never from chat text or a model argument.',
     'Another customer\'s rows are the JWT filter: a query for another id returns no rows.',
-    'Customer routes (`/me`, `/products`, `/messages`, `/case/{process_id}`) require `role = customer`. Agent routes (`/agent/me`, `/agent/queue`, `/agent/case/{process_id}` and its trace and close) require `role = agent`. The other role is 403.',
+    'Customer routes (`/me`, `/products`, `/messages`, `/case/{process_id}`) require `role = customer`. Consultant routes (`/consultant/me`, `/consultant/queue`, `/consultant/case/{process_id}` and its trace and close) require `role = consultant`. The other role is 403.',
   ],
   tests: ['Juan\'s session does not return Alicia\'s products.'],
   src: 'ARCHITECTURE.md, "Contract for implementers", "HTTP contract"',
@@ -677,7 +677,7 @@ spec('events', 'e-table', {
   name: 'events table', tech: 'db/migrations/001_init.sql', status: 'defined',
   summary: 'Append-only facts with actor, cause, process columns, and a unique key.',
   fixed: [
-    'Columns: `id uuid`, `event_name`, `payload jsonb`, `customer_id`, `process_id uuid`, `process_state`, `actor` (`customer`, `agent`, `system`, `rule`), `caused_by_event_id`, `caused_by_command_id`, `idempotency_key` unique, `created_at`.',
+    'Columns: `id uuid`, `event_name`, `payload jsonb`, `customer_id`, `process_id uuid`, `process_state`, `actor` (`customer`, `consultant`, `system`, `rule`), `caused_by_event_id`, `caused_by_command_id`, `idempotency_key` unique, `created_at`.',
     '`process_id` and `process_state` are columns, not payload fields.',
     'Append-only. No `UPDATE` of `payload`. Index on `(process_id, created_at)`.',
   ],
@@ -697,7 +697,7 @@ spec('events', 'e-names', {
   name: 'Event names', tech: 'closed set of 10', status: 'defined',
   summary: 'Conversation, analysis, decision, and process events. No others in v1.',
   fixed: [
-    '`conversation.message_received`, `conversation.turn_classified`, `conversation.template_sent`, `conversation.agent_closed`, `conversation.thread_taken`.',
+    '`conversation.message_received`, `conversation.turn_classified`, `conversation.template_sent`, `conversation.consultant_closed`, `conversation.thread_taken`.',
     '`analysis.completed`, `prequalification.decided`, `process.started`, `process.state_changed`, `process.ended`.',
     'Defined once as constants. Call sites never repeat the literal.',
   ],
@@ -708,7 +708,7 @@ spec('events', 'e-payloads', {
   summary: 'Each event carries every fact a downstream rule needs, `language` included.',
   fixed: [
     'Turn: `intent`, `product`, `language`, `declared_income_amount`, `declared_income_currency`, `reply_text`, `reply_ok`, `reason_code`.',
-    '`analysis.completed` adds `language` to the policy fields. `prequalification.decided` carries `decided_by` (`policy` or `agent`).',
+    '`analysis.completed` adds `language` to the policy fields. `prequalification.decided` carries `decided_by` (`policy` or `consultant`).',
     '`rule_trace` is a list of `{rule_id, input, result}`. `facts` cite name, value, source column, and `as_of`.',
   ],
   src: 'ARCHITECTURE.md, "Events"',
@@ -718,7 +718,7 @@ spec('events', 'e-idem', {
   summary: 'Every action has a key derived from facts, never from a clock.',
   fixed: [
     'Message `msg:{client_message_id}`. Turn `turn:{triggered_by_event_id}`. Template `template:{template_id}:{triggered_by_event_id}`. Open process `process:{customer_id}:credit_prequalification:{triggered_by_event_id}`.',
-    'Run policy `policy:{process_id}:alba-credit-v1:{product}`. Transition `transition:{process_id}:{to_state}:{caused_by_event_id}`. Agent close `agent_close:{process_id}`. End `end:{process_id}`.',
+    'Run policy `policy:{process_id}:alba-credit-v1:{product}`. Transition `transition:{process_id}:{to_state}:{caused_by_event_id}`. Consultant close `consultant_close:{process_id}`. End `end:{process_id}`.',
   ],
   open: [['New', 'The run-policy key has no triggering event in it. Juliana\'s second run, after she states her income, repeats the key of her first `NEEDS_INFO` run for the same process and product, so it would be dropped.']],
   tests: ['A second message with the same key creates no event and no decision.'],
@@ -788,12 +788,12 @@ spec('rules', 'ru-analysis', {
 });
 spec('rules', 'ru-end', {
   name: 'On a decision or a close', tech: '2 rules', status: 'defined',
-  summary: 'End after the policy certificate, or render and end after the agent close.',
+  summary: 'End after the policy certificate, or render and end after the consultant close.',
   fixed: [
     '`end_after_decision`: `prequalification.decided` with `decided_by == "policy"`, then `process.end`.',
-    '`close_on_agent_decision`: `conversation.agent_closed`, then `decision.render` with `decided_by = agent`, then `process.end`. The policy is not run again.',
+    '`close_on_consultant_decision`: `conversation.consultant_closed`, then `decision.render` with `decided_by = consultant`, then `process.end`. The policy is not run again.',
   ],
-  src: 'ARCHITECTURE.md, "Process rules", "Agent close"',
+  src: 'ARCHITECTURE.md, "Process rules", "Consultant close"',
 });
 spec('rules', 'ru-purity', {
   name: 'Pure match', tech: 'no customer reads', status: 'defined',
@@ -876,7 +876,7 @@ spec('processes', 'p-states', {
     'In `ai_active` the assistant clarifies, asks for consent, asks for income, decides, or hands off.',
     '`ai_active` to `ai_active`: clarification or `NEEDS_INFO`. `ai_active` to `ended`: `prequalified` or `not_prequalified`.',
     '`ai_active` to `human_active`: policy `REFER`, request for a human, tool failure, unsupported language.',
-    '`human_active`: nobody talks in the thread. The customer may write; the message is stored. The agent closes with `prequalified` or `not_prequalified`.',
+    '`human_active`: nobody talks in the thread. The customer may write; the message is stored. The consultant closes with `prequalified` or `not_prequalified`.',
     '`ended` is not reopened. Another message opens a new process.',
   ],
   open: [['New', 'The `ai_active` to `human_active` triggers omit `out_of_scope`, `reply_forbidden`, and `model_output_invalid`, which `hand_off_scope` and `hand_off_reply` also cause.']],
@@ -903,13 +903,13 @@ spec('processes', 'p-reasons', {
 });
 spec('processes', 'p-end', {
   name: 'Ending', tech: 'process.end', status: 'partial',
-  summary: 'Both end events, with the same reason, from the policy or the agent.',
+  summary: 'Both end events, with the same reason, from the policy or the consultant.',
   fixed: [
     '`process.end` writes `process.state_changed` and `process.ended`, both with the same `end_reason`.',
-    'From the agent, the reason is `prequalified` or `not_prequalified`, the same choice. There is no `referred_closed`.',
+    'From the consultant, the reason is `prequalified` or `not_prequalified`, the same choice. There is no `referred_closed`.',
   ],
   open: [['New', '`process.end` sets `state = ended`, yet "Process-native loop" says only `process.transition` changes `processes.state`.']],
-  src: 'ARCHITECTURE.md, "Process-native loop", "Commands", "Agent close"',
+  src: 'ARCHITECTURE.md, "Process-native loop", "Commands", "Consultant close"',
 });
 spec('policy', 'po-decide', {
   name: 'decide(profile, product)', tech: 'api/domain/policy/engine.py', status: 'partial',
@@ -961,7 +961,7 @@ spec('policy', 'po-asks', {
     'Whether to start this pre-qualification, once the product is known (`confirm_prequalify`, D8). Once per product request: a decline keeps the case open, and a later request asks again.',
     'Monthly income, when a consented run returned `NEEDS_INFO`, read in the country\'s currency. Stating it does not ask for consent again.',
     'Never asked: score, days past due, status, or whether they hold the product. A null score is `REFER` with no question.',
-    'After those asks the engine runs. `REFER` goes to the agent; there is no further question.',
+    'After those asks the engine runs. `REFER` goes to the consultant; there is no further question.',
   ],
   src: 'ARCHITECTURE.md, "What the customer can be asked"',
 });
@@ -1006,15 +1006,15 @@ spec('templates', 't-locales', {
 });
 spec('templates', 't-cert', {
   name: 'Certificate', tech: 'prequalification.decided', status: 'partial',
-  summary: 'The `constancia`, from the policy or from the agent close.',
+  summary: 'The `constancia`, from the policy or from the consultant close.',
   fixed: [
-    'Written to `prequalification.decided` with `locale`, `template_id`, `outcome`, `body`, `decided_by` (`policy` or `agent`).',
+    'Written to `prequalification.decided` with `locale`, `template_id`, `outcome`, `body`, `decided_by` (`policy` or `consultant`).',
     'Income in local currency, with the USD equivalent and the exchange-rate date beside it. No limit amount, no rate.',
-    'On the agent path the row in `messages` has `author = template`. The model does not draft it.',
+    'On the consultant path the row in `messages` has `author = template`. The model does not draft it.',
     'Only templates emit `precalifica`, `no precalifica`, `pré-qualificado`, `não pré-qualifica`.',
   ],
-  open: [['Copy', 'The certificate sentences in both locales, the agent-path message, and the line that says the policy is synthetic.']],
-  src: 'ARCHITECTURE.md, "Events", "Agent close", "Auth and screens"',
+  open: [['Copy', 'The certificate sentences in both locales, the consultant-path message, and the line that says the policy is synthetic.']],
+  src: 'ARCHITECTURE.md, "Events", "Consultant close", "Auth and screens"',
 });
 spec('templates', 't-notices', {
   name: 'Notices', tech: 'conversation.template_sent', status: 'partial',
@@ -1136,8 +1136,8 @@ spec('config', 'c-db', {
   src: 'AGENTS.md, "Database"',
 });
 node('pg-login', {
-  parent: 'web', kind: 'component', name: 'Login', tech: 'Login.tsx, AgentLogin.tsx',
-  summary: '`/login` for customers: document number, then the emailed code. `/agent/login` for agents: email and employee code, then the emailed code (D18). Each links to the other.',
+  parent: 'web', kind: 'component', name: 'Login', tech: 'Login.tsx, ConsultantLogin.tsx',
+  summary: '`/login` for customers: document number, then the emailed code. `/consultant/login` for consultants: email and employee code, then the emailed code (D18). Each links to the other.',
   src: 'ARCHITECTURE.md, "Auth and screens"',
 });
 node('pg-home', {
@@ -1151,36 +1151,36 @@ node('pg-case', {
   src: 'ARCHITECTURE.md, "Auth and screens"',
 });
 node('pg-queue', {
-  parent: 'web', kind: 'component', name: 'Agent queue', tech: 'AgentQueue.tsx',
-  summary: '`/agent`. Processes in `human_active`, nothing else.',
+  parent: 'web', kind: 'component', name: 'Consultant queue', tech: 'ConsultantQueue.tsx',
+  summary: '`/consultant`. Processes in `human_active`, nothing else.',
   src: 'ARCHITECTURE.md, "Auth and screens"',
 });
-node('pg-agentcase', {
-  parent: 'web', kind: 'component', name: 'Agent case', tech: 'AgentCase.tsx',
-  summary: '`/agent/case/:id`. The handoff packet and two close actions. No reply box.',
-  src: 'ARCHITECTURE.md, "Auth and screens", "Agent close"',
+node('pg-consultantcase', {
+  parent: 'web', kind: 'component', name: 'Consultant case', tech: 'ConsultantCase.tsx',
+  summary: '`/consultant/case/:id`. The handoff packet and two close actions. No reply box.',
+  src: 'ARCHITECTURE.md, "Auth and screens", "Consultant close"',
 });
 node('pg-trace', {
   parent: 'web', kind: 'component', name: 'Trace', tech: 'Trace.tsx',
-  summary: '`/agent/case/:id/trace`. The process events, in order.',
+  summary: '`/consultant/case/:id/trace`. The process events, in order.',
   src: 'ARCHITECTURE.md, "Auth and screens"',
 });
 
 view('web', {
   cols: 6, minCol: 140,
   place: [
-    ['customer', 0, 0, 2], ['agent', 3, 0, 3],
-    ['pg-home', 0, 1], ['pg-case', 1, 1], ['pg-login', 2, 1], ['pg-queue', 3, 1], ['pg-agentcase', 4, 1], ['pg-trace', 5, 1],
+    ['customer', 0, 0, 2], ['consultant', 3, 0, 3],
+    ['pg-home', 0, 1], ['pg-case', 1, 1], ['pg-login', 2, 1], ['pg-queue', 3, 1], ['pg-consultantcase', 4, 1], ['pg-trace', 5, 1],
     ['api', 0, 2, 6],
   ],
   rels: [
     ['customer', 'pg-home', ''], ['customer', 'pg-case', ''], ['customer', 'pg-login', ''],
-    ['agent', 'pg-login', ''], ['agent', 'pg-queue', ''], ['agent', 'pg-agentcase', ''], ['agent', 'pg-trace', ''],
+    ['consultant', 'pg-login', ''], ['consultant', 'pg-queue', ''], ['consultant', 'pg-consultantcase', ''], ['consultant', 'pg-trace', ''],
     ['pg-home', 'api', 'products'],
     ['pg-case', 'api', 'messages, certificate'],
     ['pg-login', 'api', 'search, code, JWT'],
     ['pg-queue', 'api', 'queue'],
-    ['pg-agentcase', 'api', 'packet, close'],
+    ['pg-consultantcase', 'api', 'packet, close'],
     ['pg-trace', 'api', 'events'],
   ],
 });
@@ -1196,17 +1196,17 @@ spec('pg-login', 'lg-customer', {
   ],
   src: 'ARCHITECTURE.md, "Auth and screens", "Docker"; PLAN.md §4.3',
 });
-spec('pg-login', 'lg-agent', {
-  name: 'Agent login', tech: '/agent/login', status: 'defined',
-  summary: 'Its own page: email and employee code, then the emailed code. Active agents only. Built Sep 30.',
+spec('pg-login', 'lg-consultant', {
+  name: 'Consultant login', tech: '/consultant/login', status: 'defined',
+  summary: 'Its own page: email and employee code, then the emailed code. Active consultants only. Built Sep 30.',
   fixed: [
-    'Agents log in on `/agent/login`, linked from the customer page as "Acceso para agentes", and land on `/agent`.',
-    'Only the 1,090 `Active` agents get a code; the screen says the same thing to everyone.',
-    'With `DEMO_LOGIN=1` the Demo popover searches active agents and fills both fields. It does not skip the code.',
-    'Until the queue is built, `/agent` greets the agent with the name, specialty, and employee code from `GET /agent/me`.',
+    'Consultants log in on `/consultant/login`, linked from the customer page as "Acceso para asesores", and land on `/consultant`.',
+    'Only the 1,090 `Active` consultants get a code; the screen says the same thing to everyone.',
+    'With `DEMO_LOGIN=1` the Demo popover searches active consultants and fills both fields. It does not skip the code.',
+    'Until the queue is built, `/consultant` greets the consultant with the name, specialty, and employee code from `GET /consultant/me`.',
   ],
-  tests: ['A demo random pick fills in an active agent.'],
-  src: 'ARCHITECTURE.md, "Auth and screens"; DESIGN.md, "Agent login"; PLAN.md D18',
+  tests: ['A demo random pick fills in an active consultant.'],
+  src: 'ARCHITECTURE.md, "Auth and screens"; DESIGN.md, "Consultant login"; PLAN.md D18',
 });
 
 spec('pg-home', 'hm-products', {
@@ -1222,11 +1222,11 @@ spec('pg-home', 'hm-products', {
 
 spec('pg-case', 'cs-thread', {
   name: 'Thread', tech: 'messages', status: 'partial',
-  summary: 'Customer, assistant, and template messages. No agent messages.',
+  summary: 'Customer, assistant, and template messages. No consultant messages.',
   fixed: [
     '`messages` rows with `author` `customer`, `assistant`, or `template`.',
     'Each send carries a new `client_message_id`.',
-    'After the handoff the customer can still write; nobody replies until the agent closes and the template message arrives.',
+    'After the handoff the customer can still write; nobody replies until the consultant closes and the template message arrives.',
     'While the page waits for the API after a send, it shows a typing indicator ("escribiendo…"). No fixed sleep is added.',
     'The `POST /messages` response is the `Case` after the worker finishes that cycle, so the page does not poll.',
   ],
@@ -1237,7 +1237,7 @@ spec('pg-case', 'cs-cert', {
   name: 'Certificate', tech: 'prequalification.decided', status: 'defined',
   summary: 'Shown when the decision event exists. Rendered by the API, not the client.',
   fixed: [
-    'Shown if `prequalification.decided` exists, from the policy or the agent close. The page renders its `body`; it does not build certificate prose.',
+    'Shown if `prequalification.decided` exists, from the policy or the consultant close. The page renders its `body`; it does not build certificate prose.',
     'A customer whose process ended `prequalified` or `not_prequalified` sees the certificate and never the queue.',
   ],
   src: 'ARCHITECTURE.md, "Auth and screens"; AGENTS.md, "Data fetching and UI"',
@@ -1260,7 +1260,7 @@ spec('pg-queue', 'aq-list', {
   src: 'ARCHITECTURE.md, "Auth and screens"; AGENTS.md, "Database"',
 });
 
-spec('pg-agentcase', 'ac-packet', {
+spec('pg-consultantcase', 'ac-packet', {
   name: 'Handoff packet', tech: 'analysis.completed', status: 'partial',
   summary: 'Request, score, income, deciding rule, policy version.',
   fixed: [
@@ -1270,15 +1270,15 @@ spec('pg-agentcase', 'ac-packet', {
   open: [['New', 'A handoff that is not a policy `REFER` (human request, out of scope, unsupported language, tool or reply failure) has no `analysis.completed`, so there is no packet, and a close there has no policy result behind it.']],
   src: 'ARCHITECTURE.md, "Auth and screens", "The other three flows"',
 });
-spec('pg-agentcase', 'ac-close', {
-  name: 'Close actions', tech: 'POST /agent/case/:id/close', status: 'defined',
+spec('pg-consultantcase', 'ac-close', {
+  name: 'Close actions', tech: 'POST /consultant/case/:id/close', status: 'defined',
   summary: 'Two buttons: pre-qualify or do not. No reply box.',
   fixed: [
     'The only actions are `PREQUALIFIED` and `NOT_PREQUALIFIED`. No text field, no comment.',
-    'The close writes `conversation.agent_closed`; a template tells the customer and the process ends.',
+    'The close writes `conversation.consultant_closed`; a template tells the customer and the process ends.',
     'Which outcome César picks for Alicia is not fixed by the contract.',
   ],
-  src: 'ARCHITECTURE.md, "Agent close", "The other three flows"',
+  src: 'ARCHITECTURE.md, "Consultant close", "The other three flows"',
 });
 
 spec('pg-trace', 'tr-events', {
@@ -1476,7 +1476,7 @@ spec('ld-gold', 'gd-derive', {
 node('db-auth', {
   parent: 'postgres', kind: 'tables', name: 'Sessions', tech: 'login_codes',
   summary: 'One-time codes, stored hashed, valid 10 minutes.',
-  fixed: ['A hash of the 6-digit code, the customer or agent it belongs to, the 10-minute expiry, the count of wrong tries, and when it was used (`002_login.sql`).'],
+  fixed: ['A hash of the 6-digit code, the customer or consultant it belongs to, the 10-minute expiry, the count of wrong tries, and when it was used (`002_login.sql`).'],
   src: 'ARCHITECTURE.md, "Cycle"; db/migrations/002_login.sql',
 });
 node('db-process', {
@@ -1494,14 +1494,14 @@ node('db-conv', {
   summary: 'What the customer sees, and every model request and response.',
   fixed: [
     '`messages`: `id`, `process_id`, `author` (`customer`, `assistant`, `template`), `body`, `event_id`.',
-    '`conversation.show_reply` writes `assistant` rows. The agent-path `decision.render` writes a `template` row.',
+    '`conversation.show_reply` writes `assistant` rows. The consultant-path `decision.render` writes a `template` row.',
     '`llm_turns`: request, raw response, parsed JSON, model id, token usage, latency.',
   ],
   open: [
     ['New', 'Who writes the customer\'s own `messages` row, and whether `template.send` and the policy-path `decision.render` write one too.'],
     ['New', 'How long messages and stored prompts are kept. Retention is not written (`PLAN.md` §2).'],
   ],
-  src: 'ARCHITECTURE.md, "Commands", "Agent close", "Cycle"',
+  src: 'ARCHITECTURE.md, "Commands", "Consultant close", "Cycle"',
 });
 node('db-gold', {
   parent: 'postgres', kind: 'tables', name: 'Gold', tech: 'customer_credit_profile',
@@ -1511,8 +1511,8 @@ node('db-gold', {
 });
 node('db-read', {
   parent: 'postgres', kind: 'tables', name: 'Read tables', tech: 'silver',
-  summary: 'Customers, products, exchange rates, agents. Listed columns only.',
-  fixed: ['Filled by `load`. Read by search, the home screen, and agent login. `match_rules` never reads them.'],
+  summary: 'Customers, products, exchange rates, `service_agents`. Listed columns only.',
+  fixed: ['Filled by `load`. Read by search, the home screen, and consultant login. `match_rules` never reads them.'],
   src: 'ARCHITECTURE.md, "Read tables", "Process-native loop"',
 });
 node('db-lineage', {
@@ -1568,7 +1568,7 @@ node('f-fx', {
 });
 node('f-agents', {
   parent: 'raw', kind: 'file', name: 'service_agents.csv', tech: '1,200 rows',
-  summary: 'The agents who can log in.',
+  summary: 'The consultants who can log in.',
   fixed: ['1,200 rows, 0 duplicate `agent_id`. The (email, `employee_code`) pair is unique. `agent_status`: Active 1,090, Vacation 62, Leave 29, Inactive 19.'],
   src: 'ARCHITECTURE.md, "Data: what is touched and what is not"',
 });

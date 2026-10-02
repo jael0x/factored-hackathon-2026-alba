@@ -1,4 +1,4 @@
-Feature: Handoff to an agent
+Feature: Handoff to a consultant
   As a bank customer
   I want borderline or unusual requests to reach a person
   So that the assistant never guesses on my behalf

@@ -1,5 +1,5 @@
 Feature: Case trace
-  As a credit agent
+  As a credit consultant
   I want to read every recorded step of a case in order
   So that I can see why the system did what it did
 

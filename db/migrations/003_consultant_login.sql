@@ -1,6 +1,6 @@
--- Agents log in with their email and employee code, and only Active agents get a code (ARCHITECTURE.md, "Auth and screens").
+-- Consultants log in with their email and employee code, and only Active consultants get a code (ARCHITECTURE.md, "Auth and screens").
 
--- Rows loaded before this migration have no email or status, and every agent in the file has both.
+-- Rows loaded before this migration have no email or status, and every consultant in the file has both.
 -- Clearing the old rows lets the new columns be NOT NULL, and clearing load_batches below makes load copy them again in the same run.
 DELETE FROM service_agents;
 

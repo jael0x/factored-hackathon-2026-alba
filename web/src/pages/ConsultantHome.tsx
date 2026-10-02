@@ -8,16 +8,16 @@ import { ErrorCard } from "../components/ErrorCard";
 import { LOGIN_PATH } from "../routes";
 import { signOut } from "../session/session";
 
-const loadCurrentAgent = () => api.GET("/agent/me");
+const loadCurrentConsultant = () => api.GET("/consultant/me");
 
-export function AgentHome() {
+export function ConsultantHome() {
   const navigate = useNavigate();
   const [attempt, setAttempt] = useState(0);
-  const me = useLoad(loadCurrentAgent, attempt);
+  const me = useLoad(loadCurrentConsultant, attempt);
 
   const leave = () => {
     signOut();
-    navigate(LOGIN_PATH.agent, { replace: true });
+    navigate(LOGIN_PATH.consultant, { replace: true });
   };
 
   return (

@@ -11,27 +11,27 @@ import { fullName } from "../format";
 import { HOME_PATH } from "../routes";
 import { codeExpiry, sessionAnswer } from "../session/login";
 
-type AgentHit = components["schemas"]["AgentSearchHit"];
+type ConsultantHit = components["schemas"]["ConsultantSearchHit"];
 
-type AgentIdentity = { email: string; employeeCode: string };
+type ConsultantIdentity = { email: string; employeeCode: string };
 
-type Sent = CodeSent & AgentIdentity;
+type Sent = CodeSent & ConsultantIdentity;
 
-const agentDemo: DemoSource<AgentHit> = {
-  heading: "Agentes de prueba",
+const consultantDemo: DemoSource<ConsultantHit> = {
+  heading: "Asesores de prueba",
   help: "Solo en el demo. Elegir a alguien llena su correo y su código de empleado y cierra este panel; el código igual llega por correo.",
-  queryLabel: "Nombre, código de empleado o número de agente",
+  queryLabel: "Nombre, código de empleado o número de asesor",
   search: async (q) => {
-    const { data } = await api.GET("/agents/search", { params: { query: { q } } }).catch(() => ({ data: undefined }));
-    return data ? data.agents : null;
+    const { data } = await api.GET("/consultants/search", { params: { query: { q } } }).catch(() => ({ data: undefined }));
+    return data ? data.consultants : null;
   },
   pickRandom: async () => {
     const { data } = await api
-      .GET("/agents/search", { params: { query: { random: true } } })
+      .GET("/consultants/search", { params: { query: { random: true } } })
       .catch(() => ({ data: undefined }));
-    return data?.agents[0] ?? null;
+    return data?.consultants[0] ?? null;
   },
-  key: (hit) => hit.agent_id,
+  key: (hit) => hit.consultant_id,
   render: (hit) => (
     <>
       <span className="name">{fullName(hit)}</span>
@@ -43,21 +43,21 @@ const agentDemo: DemoSource<AgentHit> = {
   ),
 };
 
-const requestCode = ({ email, employeeCode }: AgentIdentity) =>
-  codeExpiry(api.POST("/agent/session/code", { body: { email, employee_code: employeeCode } }));
+const requestCode = ({ email, employeeCode }: ConsultantIdentity) =>
+  codeExpiry(api.POST("/consultant/session/code", { body: { email, employee_code: employeeCode } }));
 
-const openSession = ({ email, employeeCode }: AgentIdentity, code: string) =>
-  sessionAnswer(api.POST("/agent/session", { body: { email, employee_code: employeeCode, code } }));
+const openSession = ({ email, employeeCode }: ConsultantIdentity, code: string) =>
+  sessionAnswer(api.POST("/consultant/session", { body: { email, employee_code: employeeCode, code } }));
 
-export function AgentLogin() {
+export function ConsultantLogin() {
   const emailId = useId();
   const employeeCodeId = useId();
   const [email, setEmail] = useState("");
   const [employeeCode, setEmployeeCode] = useState("");
   const [sent, setSent] = useState<Sent | null>(null);
-  const typed: AgentIdentity = { email: email.trim(), employeeCode: employeeCode.trim() };
+  const typed: ConsultantIdentity = { email: email.trim(), employeeCode: employeeCode.trim() };
 
-  const pick = (hit: AgentHit) => {
+  const pick = (hit: ConsultantHit) => {
     setEmail(hit.email);
     setEmployeeCode(hit.employee_code);
     setSent(null);
@@ -65,14 +65,14 @@ export function AgentLogin() {
 
   return (
     <LoginShell
-      role="agent"
-      title="Entra como agente"
+      role="consultant"
+      title="Entra como asesor"
       lede="Escribe tu correo y tu código de empleado. Te enviaremos un código de un solo uso a ese correo."
-      notice="Si tus datos corresponden a un agente activo, te enviaremos un código."
+      notice="Si tus datos corresponden a un asesor activo, te enviaremos un código."
       panelTitle={sent ? "Tu código" : "Tus datos"}
       demo={
         <DemoSearchPopover
-          source={agentDemo}
+          source={consultantDemo}
           isSelected={(hit) => hit.email === email && hit.employee_code === employeeCode}
           onPick={pick}
         />
@@ -86,7 +86,7 @@ export function AgentLogin() {
           ]}
           sent={sent}
           changeLabel="Cambiar datos"
-          home={HOME_PATH.agent}
+          home={HOME_PATH.consultant}
           requestCode={() => requestCode(sent)}
           openSession={(code) => openSession(sent, code)}
           onResent={(next) => setSent({ ...sent, ...next })}

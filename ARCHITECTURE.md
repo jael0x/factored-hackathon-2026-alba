@@ -57,7 +57,9 @@ Stored in `api/fixtures/oracle_customers.json`. Values read from the file on Sep
 
 - Credit card ••••5476: balance 111,079.25 ARS, limit 12,196,884.68 ARS, rate 21.08%, 180 days past due, Active.
 
-**César González Sánchez** (agent) · `AGT-OJ9N4FGYV9` · employee `E75612` · specialty Créditos · Senior · morning shift · CSAT 4.23 · Spanish. The mock uses him. He is not the only agent.
+**César González Sánchez** (consultant) · `AGT-OJ9N4FGYV9` · employee `E75612` · specialty Créditos · Senior · morning shift · CSAT 4.23 · Spanish. The mock uses him. He is not the only consultant.
+
+A consultant is a bank employee who reviews the cases the assistant hands off. The dataset calls them service agents, and `db/` and `pipeline/` keep that name: the table and file `service_agents`, the columns `agent_id` and `agent_status`, and the `AGT-` ids. The API, the web app, the wire contract, events, rules, and docs say consultant; the screens say "asesor". The word agent is left for the AI agent (`AGENTS.md`, "Consultants and service agents").
 
 ## Closed stack
 
@@ -69,7 +71,7 @@ Stored in `api/fixtures/oracle_customers.json`. Values read from the file on Sep
 | Frontend | TypeScript, React, Vite. One app |
 | Database | PostgreSQL 16 as a service of the same `docker compose` stack. No managed database. The schema lives in `db/migrations/` |
 | How it runs | `docker compose up` applies the schema, downloads the missing CSVs, and builds the profile. Nobody runs SQL by hand. Reviewers (and anyone else) run that stack locally and open the app in the browser. There is no cloud deploy for the submission. `docs/ops.md` will list optional steps if a host is used later |
-| Auth | Customers: document number plus a one-time code emailed to the address on file. Agents: email and employee code plus the same kind of code. Mailpit receives every code in the compose stack. Then an own JWT, HS256, 15 minutes, issued by this API |
+| Auth | Customers: document number plus a one-time code emailed to the address on file. Consultants: email and employee code plus the same kind of code. Mailpit receives every code in the compose stack. Then an own JWT, HS256, 15 minutes, issued by this API |
 | Pipeline | Python, in the `load` container. Reads local CSVs. DuckDB only if the aggregate needs it; the result lands in Postgres |
 | LLM | OpenAI API, model `gpt-6-luna` (GPT-6 Luna). The adapter `api/infrastructure/llm/conversation.py` makes one call with Structured Outputs (the `ConversationTurn` JSON schema) and returns `ConversationTurn`. The policy does not use this adapter |
 | Tests | pytest in the API. Vitest only if the client has logic; business logic does not live in the client |
@@ -87,11 +89,11 @@ api/
   domain/                 # pure rules. No FastAPI, no psycopg, no settings
     session/
       codes.py            # one-time code: hash, 10 minutes, five wrong tries
-      tokens.py           # JWT and Role
+      tokens.py           # JWT and session claims
     customers/
       identity.py         # CustomerIdentity and the search hit
-    agents/
-      identity.py         # AgentIdentity and the search hit
+    consultants/
+      identity.py         # ConsultantIdentity and the search hit
       login.py            # the login key (trimmed, case ignored) and who can receive a code (Active)
     search.py             # exactly one search criterion, for both demo searches
     policy/               # credit rules, when that component is built
@@ -106,11 +108,11 @@ api/
       issue_code.py
       open_session.py
       read_current_customer.py
-      read_current_agent.py
+      read_current_consultant.py
     customers/
       search_customers.py
-    agents/
-      search_agents.py
+    consultants/
+      search_consultants.py
     processes.py          # start, transition, end, when that component is built
   infrastructure/
     config/settings.py    # env, including DB_POOL_MIN and DB_POOL_MAX
@@ -118,7 +120,7 @@ api/
       pool.py             # connection pool, opened in the process lifespan
       login_codes.py      # SQL for login_codes
       customers.py        # SQL for customers
-      agents.py           # SQL for service_agents
+      consultants.py      # SQL for service_agents
       search.py           # the demo search limit and LIKE escaping, shared by both searches
       events.py           # append to events, when that component is built
       profile.py          # gold by customer_id, when that read is built
@@ -132,30 +134,30 @@ api/
     http/
       errors.py           # {error: ...} bodies for 401, 403, 404, 422
       dependencies.py     # wires a request to a use case. get_session lives here
-      routes/             # session (/session and /agent/session), customers (/me and /customers), agents (/agent/me and /agents), config, health
+      routes/             # session (/session and /consultant/session), customers (/me and /customers), consultants (/consultant/me and /consultants), config, health
     worker/               # takes commands, when that loop is built
   fixtures/
     oracle_customers.json # the four profiles and César
 web/
-  src/api/client.ts           # openapi-fetch client, typed by schema.d.ts; adds the bearer token, ends the session on 401
-  src/session/session.ts      # the session in sessionStorage; never renewed
-  src/styles/tokens.css       # DESIGN.md tokens
-  src/api/schema.d.ts         # generated from api-spec/openapi.yaml
-  src/pages/Login.tsx         # customer login; shares LoginShell, IdentityForm, CodeStep with the agent login
-  src/pages/AgentLogin.tsx    # email and employee code, then the code
+  src/api/client.ts             # openapi-fetch client, typed by schema.d.ts; adds the bearer token, ends the session on 401
+  src/session/session.ts        # the session in sessionStorage; never renewed
+  src/styles/tokens.css         # DESIGN.md tokens
+  src/api/schema.d.ts           # generated from api-spec/openapi.yaml
+  src/pages/Login.tsx           # customer login; shares LoginShell, IdentityForm, CodeStep with the consultant login
+  src/pages/ConsultantLogin.tsx # email and employee code, then the code
   src/pages/Home.tsx
-  src/pages/AgentHome.tsx     # greeting from GET /agent/me until the queue is built
-  src/pages/Case.tsx          # customer: chat, plus the certificate if it exists
-  src/pages/AgentQueue.tsx
-  src/pages/AgentCase.tsx     # handoff packet and the two close actions
-  src/pages/Trace.tsx         # the process's events table
+  src/pages/ConsultantHome.tsx  # greeting from GET /consultant/me until the queue is built
+  src/pages/Case.tsx            # customer: chat, plus the certificate if it exists
+  src/pages/ConsultantQueue.tsx
+  src/pages/ConsultantCase.tsx  # handoff packet and the two close actions
+  src/pages/Trace.tsx           # the process's events table
 pipeline/
   bronze.py
   silver.py
   gold.py
 db/migrations/001_init.sql
 db/migrations/002_login.sql
-db/migrations/003_agent_login.sql
+db/migrations/003_consultant_login.sql
 eval/                       # comes later; does not block the flow
 compose.yaml
 docker/api.Dockerfile
@@ -201,7 +203,7 @@ States. There are no others.
 | State | Who talks | What can happen |
 |---|---|---|
 | `ai_active` | the assistant, if a rule enqueues `conversation.generate` | clarify, ask for consent to run pre-qualification, ask for income, decide, hand off to a person |
-| `human_active` | nobody in the thread | the customer may write and the message is stored; the model is not called. The agent does not reply. The only action is to close with prequalified or not |
+| `human_active` | nobody in the thread | the customer may write and the message is stored; the model is not called. The consultant does not reply. The only action is to close with prequalified or not |
 | `ended` | nobody | the certificate exists. A new message opens another process |
 
 Allowed transitions. Any other is an error and is not written.
@@ -212,7 +214,7 @@ Allowed transitions. Any other is an error and is not written.
 | `ai_active` | `ended` | `prequalified` | policy `PREQUALIFIED` |
 | `ai_active` | `ended` | `not_prequalified` | policy `NOT_PREQUALIFIED` |
 | `ai_active` | `human_active` | none | policy `REFER`, request for a human, tool failure, unsupported language |
-| `human_active` | `ended` | `prequalified` or `not_prequalified` | the agent closes with that choice |
+| `human_active` | `ended` | `prequalified` or `not_prequalified` | the consultant closes with that choice |
 | `ended` | none | none | not reopened. Another message creates a new process |
 
 `reason_code` is a closed list: `customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`. No others. The policy rule that fired stays on `deciding_rule` (R05, R06, and the rest). `policy_refer` is the one code for every policy `REFER`.
@@ -223,22 +225,22 @@ The process row also holds `product` (`credit_card` | `personal_loan` | null) an
 
 A customer has at most one process with `state <> 'ended'`. A partial unique index guarantees it.
 
-### Agent close
+### Consultant close
 
-The agent does not send messages, does not chat, and does not leave a comment that becomes an outcome. On a case in `human_active` the only action is `POST /agent/case/:id/close`. The body is `outcome`: `PREQUALIFIED` or `NOT_PREQUALIFIED`. Any other body is rejected. There is no text field.
+The consultant does not send messages, does not chat, and does not leave a comment that becomes an outcome. On a case in `human_active` the only action is `POST /consultant/case/:id/close`. The body is `outcome`: `PREQUALIFIED` or `NOT_PREQUALIFIED`. Any other body is rejected. There is no text field.
 
-That POST writes `conversation.agent_closed`, with `outcome`, `agent_id`, and `language` copied from the process. The rule `close_on_agent_decision` then enqueues two commands, in this order, before another event is taken:
+That POST writes `conversation.consultant_closed`, with `outcome`, `consultant_id`, and `language` copied from the process. The rule `close_on_consultant_decision` then enqueues two commands, in this order, before another event is taken:
 
-1. `decision.render`. An automatic message to the customer for that outcome. The wording is not written in this contract yet. The model does not draft it. The row in `messages` has `author = template`. The event is `prequalification.decided` with `decided_by = agent`.
+1. `decision.render`. An automatic message to the customer for that outcome. The wording is not written in this contract yet. The model does not draft it. The row in `messages` has `author = template`. The event is `prequalification.decided` with `decided_by = consultant`.
 2. `process.end`. `end_reason` is `prequalified` or `not_prequalified`, the same choice. The policy engine is not run again.
 
-The same case cannot be closed twice. The event key is `agent_close:{process_id}`.
+The same case cannot be closed twice. The event key is `consultant_close:{process_id}`.
 
 ## Events
 
 Table `events`. Append-only. No `UPDATE` of `payload`.
 
-Columns: `id uuid`, `event_name text`, `payload jsonb`, `customer_id text`, `process_id uuid`, `process_state text`, `actor text` (`customer` | `agent` | `system` | `rule`), `caused_by_event_id uuid`, `caused_by_command_id uuid`, `idempotency_key text unique`, `created_at timestamptz`.
+Columns: `id uuid`, `event_name text`, `payload jsonb`, `customer_id text`, `process_id uuid`, `process_state text`, `actor text` (`customer` | `consultant` | `system` | `rule`), `caused_by_event_id uuid`, `caused_by_command_id uuid`, `idempotency_key text unique`, `created_at timestamptz`.
 
 `process_id` and `process_state` are columns. They are not payload fields. The customer does not send them.
 
@@ -249,7 +251,7 @@ Closed names. No others are invented in v1.
 | `conversation.message_received` | `POST /messages` | `text`, `client_message_id` |
 | `conversation.turn_classified` | `conversation.generate` finished | `intent`, `product`, `language`, `declared_income_amount`, `declared_income_currency`, `reply_text`, `reply_ok`, `reason_code` |
 | `conversation.template_sent` | a non-terminal template was sent | `locale`, `template_id`, `body` |
-| `conversation.agent_closed` | the agent closes the case | `outcome`, `agent_id`, `language` |
+| `conversation.consultant_closed` | the consultant closes the case | `outcome`, `consultant_id`, `language` |
 | `conversation.thread_taken` | the transition to `human_active` | `reason_code`, `from_state`, `to_state` |
 | `analysis.completed` | `policy.run` finished | `policy_version`, `product`, `outcome`, `deciding_rule`, `rule_trace`, `facts`, `language` |
 | `prequalification.decided` | the certificate template was rendered | `locale`, `template_id`, `outcome`, `body`, `decided_by` |
@@ -269,7 +271,7 @@ Idempotency keys:
 | Open process | `process:{customer_id}:credit_prequalification:{triggered_by_event_id}` |
 | Run policy | `policy:{process_id}:alba-credit-v1:{product}` |
 | Transition | `transition:{process_id}:{to_state}:{caused_by_event_id}` |
-| Agent close | `agent_close:{process_id}` |
+| Consultant close | `consultant_close:{process_id}` |
 | End process | `end:{process_id}` |
 
 The frontend sends `client_message_id` (one uuid per send). The message key is that uuid. It does not wait for a `process_id`. Repeating the POST creates no new event and no new decision.
@@ -313,7 +315,7 @@ A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function o
 | `take_thread` | `analysis.completed` | `payload.outcome == "REFER"` | `process.transition` to `human_active`, `reason_code = policy_refer`; that command writes `conversation.thread_taken` |
 | `render_decision` | `analysis.completed` | `outcome` is `PREQUALIFIED` or `NOT_PREQUALIFIED` | `decision.render`, with `decided_by = policy` |
 | `end_after_decision` | `prequalification.decided` | `payload.decided_by == "policy"` | `process.end` |
-| `close_on_agent_decision` | `conversation.agent_closed` | `outcome` is `PREQUALIFIED` or `NOT_PREQUALIFIED` | `decision.render` with `decided_by = agent`, then `process.end` |
+| `close_on_consultant_decision` | `conversation.consultant_closed` | `outcome` is `PREQUALIFIED` or `NOT_PREQUALIFIED` | `decision.render` with `decided_by = consultant`, then `process.end` |
 
 `generate_while_ai` does not run if the `process_state` column is `human_active`. The prompt is not the brake.
 
@@ -334,7 +336,7 @@ The worker takes `pending` rows with `FOR UPDATE SKIP LOCKED`, increments `attem
 | `conversation.show_reply` | inserts `messages` with `author = assistant` and the turn's `reply_text` | call the model |
 | `template.send` | writes `conversation.template_sent`. `template_id` is `needs_income`, `refer_notice`, `which_product`, or `confirm_prequalify`. Locale comes from the triggering event's `language` | call the model, end the process. The sentences are not written in this contract yet |
 | `policy.run` | reads the profile by the event's `customer_id`, runs the engine, writes `analysis.completed`, and copies `language` from the triggering turn | write the certificate |
-| `decision.render` | reads `language` from the triggering event, picks the ES or PT template, writes `prequalification.decided` | call the model. The agent-path sentences are not written in this contract yet |
+| `decision.render` | reads `language` from the triggering event, picks the ES or PT template, writes `prequalification.decided` | call the model. The consultant-path sentences are not written in this contract yet |
 
 Order inside `policy.run`: read profile → engine → insert the event. Whether the engine returns `PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, or `NEEDS_INFO`, the worker interprets nothing more. The rules above react to the new event.
 
@@ -391,7 +393,7 @@ The customer is not asked for `credit_score`, `days_past_due`, `customer_status`
 
 Consent is once per product request on the process. A `confirm_prequalify` is what first enqueues `policy.run`. A later `provide_income` on the same process does not ask again. `decline_prequalify` leaves the process `ai_active`; a later `prequalify_card` or `prequalify_loan` asks for consent again.
 
-Once those asks are done for this case, the engine runs. `PREQUALIFIED` and `NOT_PREQUALIFIED` end it. `REFER` goes to the agent. There is no further question.
+Once those asks are done for this case, the engine runs. `PREQUALIFIED` and `NOT_PREQUALIFIED` end it. `REFER` goes to the consultant. There is no further question.
 
 No other bank action exists in this demo. There is no money movement and no account change. The only action that requires confirmation is starting the (simulated) pre-qualification.
 
@@ -475,29 +477,29 @@ The email is Spanish copy written in `api/infrastructure/mail/smtp.py`: the code
 
 Email is the channel, not the identifier. 24,203 addresses are shared by 2 to 31 customers, 79,930 rows in all, Juliana's and Mariana's among them (`PLAN.md` §4.3). `document_number` is unique. The 2,984 customers with no email (2.0%) cannot log in: their request gets the same answer and no code. That one answer tells anyone who gets no code to register an email at a branch (`DESIGN.md`, "Login"); it does not single them out. That is a stated limitation.
 
-Demo helpers. With `DEMO_LOGIN=1`, `GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20, ordered by `last_name`, `first_name`, `customer_id`, and `GET /customers/search?random=true` returns one customer with an email on file, at random. The login screen uses them only to fill the document field; the code still goes by mail. `GET /agents/search?q=` and `GET /agents/search?random=true` do the same over `Active` agents only, by name, employee code, or `agent_id`, ordered by `last_name`, `first_name`, `agent_id`. They also return the email, so a pick fills both fields of the agent login; the code still goes by mail. With `DEMO_LOGIN` off those routes are 404. `GET /config` tells the web app whether the helpers are on. The local compose stack sets `DEMO_LOGIN=1`.
+Demo helpers. With `DEMO_LOGIN=1`, `GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20, ordered by `last_name`, `first_name`, `customer_id`, and `GET /customers/search?random=true` returns one customer with an email on file, at random. The login screen uses them only to fill the document field; the code still goes by mail. `GET /consultants/search?q=` and `GET /consultants/search?random=true` do the same over `Active` consultants only, by name, employee code, or `consultant_id`, ordered by `last_name`, `first_name`, `consultant_id`. They also return the email, so a pick fills both fields of the consultant login; the code still goes by mail. With `DEMO_LOGIN` off those routes are 404. `GET /config` tells the web app whether the helpers are on. The local compose stack sets `DEMO_LOGIN=1`.
 
-Agents log in on their own page, `/agent/login` (`PLAN.md` D18, decided and built Sep 30), and land on `/agent`. The agent types their email and employee code. Neither is unique alone (13 employee codes and 12 emails are each shared by two agents), but the pair is unique for all 1,200, also with case ignored. The API trims both fields and compares the email in lower case and the employee code in upper case. A unique index on that pair keeps it unique.
+Consultants log in on their own page, `/consultant/login` (`PLAN.md` D18, decided and built Sep 30), and land on `/consultant`. The consultant types their email and employee code. Neither is unique alone (13 employee codes and 12 emails are each shared by two consultants), but the pair is unique for all 1,200, also with case ignored. The API trims both fields and compares the email in lower case and the employee code in upper case. A unique index on that pair keeps it unique.
 
-- `POST /agent/session/code` takes `email` and `employee_code`. When the pair matches an agent whose `agent_status` is `Active` (1,090 of 1,200), the API emails a 6-digit code to that address with the customer code's rules: 10 minutes, latest code only, five wrong tries, one use, stored hashed. The answer is `{expires_in_seconds: 600}` for every pair and every status, so an agent on `Vacation`, `Leave`, or `Inactive` gets no code and no hint.
-- `POST /agent/session` takes `email`, `employee_code`, and `code`. The pair must still match an `Active` agent. Every failure is the same 401. Claims: `sub` = `agent_id`, `role` = `agent`, `exp` 15 minutes. A customer code does not open an agent session, and an agent code does not open a customer session.
-- `GET /agent/me` gives the agent screens the name, `employee_code`, and `specialty`, which is null for the 476 agents the file gives none.
+- `POST /consultant/session/code` takes `email` and `employee_code`. When the pair matches a consultant whose `agent_status` is `Active` (1,090 of 1,200), the API emails a 6-digit code to that address with the customer code's rules: 10 minutes, latest code only, five wrong tries, one use, stored hashed. The answer is `{expires_in_seconds: 600}` for every pair and every status, so a consultant on `Vacation`, `Leave`, or `Inactive` gets no code and no hint.
+- `POST /consultant/session` takes `email`, `employee_code`, and `code`. The pair must still match an `Active` consultant. Every failure is the same 401. Claims: `sub` = `consultant_id`, `role` = `consultant`, `exp` 15 minutes. A customer code does not open a consultant session, and a consultant code does not open a customer session.
+- `GET /consultant/me` gives the consultant screens the name, `employee_code`, and `specialty`, which is null for the 476 consultants the file gives none.
 
-The agent's email is the same Spanish message as the customer's. Each login page links to the other: "Acceso para agentes" on `/login`, "Acceso para clientes" on `/agent/login`. One browser tab holds one session; logging in on the other page replaces it.
+The consultant's email is the same Spanish message as the customer's. Each login page links to the other: "Acceso para asesores" on `/login`, "Acceso para clientes" on `/consultant/login`. One browser tab holds one session; logging in on the other page replaces it.
 
 Expired JWT: 401. The customer sees that the session ended. It is not silently renewed during the case being shown.
 
 | Frontend route | Who | What it renders |
 |---|---|---|
 | `/login` | customer | document number, then the code from the email. The demo helpers when `DEMO_LOGIN=1` |
-| `/agent/login` | agent | email and employee code, then the code from the email. The demo helpers when `DEMO_LOGIN=1` |
+| `/consultant/login` | consultant | email and employee code, then the code from the email. The demo helpers when `DEMO_LOGIN=1` |
 | `/` | customer | their products, in the row's currency |
 | `/case/:id` | customer | thread, plus the certificate if `prequalification.decided` exists |
-| `/agent` | agent | processes in `human_active` |
-| `/agent/case/:id` | agent | the handoff packet read from `analysis.completed`, and two actions: prequalify or do not. No reply box |
-| `/agent/case/:id/trace` | agent | the process's `events`, in order |
+| `/consultant` | consultant | processes in `human_active` |
+| `/consultant/case/:id` | consultant | the handoff packet read from `analysis.completed`, and two actions: prequalify or do not. No reply box |
+| `/consultant/case/:id/trace` | consultant | the process's `events`, in order |
 
-A customer whose process is `ended` with `prequalified` or `not_prequalified` sees the certificate. They do not see the queue. The agent does not see `ended` processes in the queue. Juan does not appear in César's queue. Neither does Mariana. Alicia does.
+A customer whose process is `ended` with `prequalified` or `not_prequalified` sees the certificate. They do not see the queue. The consultant does not see `ended` processes in the queue. Juan does not appear in César's queue. Neither does Mariana. Alicia does.
 
 Currency on the home screen: the row's `products.currency` column. For customers in Mexico the file stores those balances in USD. They are not converted to MXN for display. On the certificate, income is shown in local currency with the USD equivalent and the exchange-rate date beside it. Alicia in COP. Mariana in ARS.
 
@@ -515,20 +517,20 @@ Regenerate after every edit to `openapi.yaml`. `api/tests/test_contract.py` fail
 | `GET /customers/search?q=` or `?random=true` | public, only with `DEMO_LOGIN=1` | | up to 20 `{customer_id, document_number, first_name, last_name, country}`; one for `random`. 404 when off |
 | `POST /session/code` | public | `{document_number}` | `{expires_in_seconds: 600}`, the same for every document |
 | `POST /session` | public | `{document_number, code}` | `{token, sub, role}`. 401 for any failure |
-| `GET /agents/search?q=` or `?random=true` | public, only with `DEMO_LOGIN=1` | | up to 20 `Active` agents `{agent_id, employee_code, first_name, last_name, email}`; one for `random`. 404 when off |
-| `POST /agent/session/code` | public | `{email, employee_code}` | `{expires_in_seconds: 600}`, the same for every pair and status |
-| `POST /agent/session` | public | `{email, employee_code, code}` | `{token, sub, role}`. 401 for any failure |
+| `GET /consultants/search?q=` or `?random=true` | public, only with `DEMO_LOGIN=1` | | up to 20 `Active` consultants `{consultant_id, employee_code, first_name, last_name, email}`; one for `random`. 404 when off |
+| `POST /consultant/session/code` | public | `{email, employee_code}` | `{expires_in_seconds: 600}`, the same for every pair and status |
+| `POST /consultant/session` | public | `{email, employee_code, code}` | `{token, sub, role}`. 401 for any failure |
 | `GET /me` | customer | | `{customer_id, first_name, last_name}` of the token's customer. The login responses never carry a name |
-| `GET /agent/me` | agent | | `{agent_id, employee_code, first_name, last_name, specialty}` of the token's agent. `specialty` may be null |
+| `GET /consultant/me` | consultant | | `{consultant_id, employee_code, first_name, last_name, specialty}` of the token's consultant. `specialty` may be null |
 | `GET /products` | customer | optional `customer_id` query | that customer's products, or `[]` if the query id is not the token `sub` |
 | `POST /messages` | customer | `{text, client_message_id}` | the `Case` after the worker finishes that cycle's commands |
 | `GET /case/{process_id}` | customer | | `Case` for the token's customer. Another customer's id is 404 |
-| `GET /agent/queue` | agent | | processes in `human_active` |
-| `GET /agent/case/{process_id}` | agent | | handoff packet. 404 unless the process is `human_active` |
-| `GET /agent/case/{process_id}/trace` | agent | | events, discriminated on `event_name` |
-| `POST /agent/case/{process_id}/close` | agent | `{outcome}` | ended process. 409 if it was already ended |
+| `GET /consultant/queue` | consultant | | processes in `human_active` |
+| `GET /consultant/case/{process_id}` | consultant | | handoff packet. 404 unless the process is `human_active` |
+| `GET /consultant/case/{process_id}/trace` | consultant | | events, discriminated on `event_name` |
+| `POST /consultant/case/{process_id}/close` | consultant | `{outcome}` | ended process. 409 if it was already ended |
 
-A customer token on an agent route is 403. An agent token on a customer route is 403. Expired or missing token is 401. A body that is not in the schema is 422 `invalid_body`.
+A customer token on a consultant route is 403. A consultant token on a customer route is 403. Expired or missing token is 401. A body that is not in the schema is 422 `invalid_body`.
 
 `GET /products` returns `product_id`, `product_type` (the dataset literal), `product_number`, `currency`, `current_balance`, `product_status`, ordered by `product_id`. It does not return `days_past_due`, `credit_limit`, or `interest_rate`.
 
@@ -538,19 +540,19 @@ A customer token on an agent route is 403. An agent token on a customer route is
 
 `Case.certificate` is null until `prequalification.decided` exists. It carries `locale`, `outcome`, `body`, `product`, and the income fields copied from `analysis.completed` facts named `income_local`, `income_currency`, and `income_usd`. `as_of` is the `as_of` of the `income_local` fact. A missing fact is null. The certificate has no credit limit and no rate. It does not include the score or the deciding rule.
 
-The agent queue is ordered by `processes.created_at`, then process id. Each item carries the customer name, `product`, `reason_code` from `conversation.thread_taken`, and `language`.
+The consultant queue is ordered by `processes.created_at`, then process id. Each item carries the customer name, `product`, `reason_code` from `conversation.thread_taken`, and `language`.
 
 The packet copies `product`, `credit_score`, the income fields, `deciding_rule`, `policy_version`, and `outcome` from `analysis.completed`. Those fields are null when that event does not exist. `reason_code` comes from `conversation.thread_taken`.
 
 The trace includes events with this `process_id`, plus that one opening message by `caused_by_event_id`. Order is `created_at`, then event `id`. `rule_trace.input` is an open object (`dict[str, Any]` in the generated model): the engine records the condition snapshot, and no matcher branches on it.
 
-`POST /agent/case/{process_id}/close` accepts only `PREQUALIFIED` or `NOT_PREQUALIFIED`. A text field is rejected. A process that is not `human_active` is 404, except one already `ended`, which is 409 and does not append a second `conversation.agent_closed`.
+`POST /consultant/case/{process_id}/close` accepts only `PREQUALIFIED` or `NOT_PREQUALIFIED`. A text field is rejected. A process that is not `human_active` is 404, except one already `ended`, which is 409 and does not append a second `conversation.consultant_closed`.
 
 ## Database
 
 PostgreSQL 16. `load` is the only process that reads S3. The API and `policy.run` read Postgres.
 
-`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_agent_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
+`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
 
 ### Read tables
 
@@ -577,7 +579,7 @@ The customer API does not list this table. `policy.run` reads one row, the one f
 - `processes` also holds `product` and `language`, null until a turn sets them
 - `messages`: `id`, `process_id`, `author` (`customer` | `assistant` | `template`), `body`, `event_id`
 - `llm_turns`: `id`, `process_id`, `command_id`, `request jsonb`, `raw_response text`, `parsed jsonb`, `parse_ok bool`, `model text`, `input_tokens int`, `output_tokens int`, `latency_ms int`, `created_at`
-- `login_codes`: a hash of the 6-digit code, the customer or agent it belongs to, the 10-minute expiry, the count of wrong tries, and when it was used
+- `login_codes`: a hash of the 6-digit code, the customer or consultant it belongs to, the 10-minute expiry, the count of wrong tries, and when it was used
 - `load_batches`: `path`, `bytes`, `sha256` of each file on disk
 
 ### Indexes
@@ -680,7 +682,7 @@ If at step 7 he writes "no", the intent is `decline_prequalify`. The policy is n
 
 Juliana, `CLI-MD60UR8PNJDI`, score 714, income null, account `2,528.58 USD`. She asks for a card. After she confirms pre-qualification, R06 returns `NEEDS_INFO`. `template.send` writes `conversation.template_sent` (`needs_income`). She stays `ai_active`. The message asks for her monthly income. The sentences are not written in this contract yet. If she answers with an amount, that amount is this run's income, marked `self_declared`, and the gold row stays null. The process already holds `credit_card`, so `run_policy_income` runs the policy with that product (no second consent). Score 714 continues to R05 and the result is `PREQUALIFIED`. She does not go to César.
 
-Alicia, `CLI-440CO5FZIY6A`, score 615, income 4,707,334.28 COP (1,167 USD), no card. After she confirms, R05 `REFER`. `template.send` writes `conversation.template_sent` (`refer_notice`): a person will review. The notice does not include the score and does not say whether she pre-qualifies. The sentences are not written in this contract yet. Then `conversation.thread_taken` with `reason_code = policy_refer`. César sees the packet: request, score, income, rule R05, policy `alba-credit-v1`. He does not answer in the thread. His only action is to close with `PREQUALIFIED` or `NOT_PREQUALIFIED`. That writes `conversation.agent_closed`, then the automatic message and `process.end`. Which of the two he picks for Alicia is not fixed here. A message from Alicia while the case is still `human_active` is stored and does not call the model.
+Alicia, `CLI-440CO5FZIY6A`, score 615, income 4,707,334.28 COP (1,167 USD), no card. After she confirms, R05 `REFER`. `template.send` writes `conversation.template_sent` (`refer_notice`): a person will review. The notice does not include the score and does not say whether she pre-qualifies. The sentences are not written in this contract yet. Then `conversation.thread_taken` with `reason_code = policy_refer`. César sees the packet: request, score, income, rule R05, policy `alba-credit-v1`. He does not answer in the thread. His only action is to close with `PREQUALIFIED` or `NOT_PREQUALIFIED`. That writes `conversation.consultant_closed`, then the automatic message and `process.end`. Which of the two he picks for Alicia is not fixed here. A message from Alicia while the case is still `human_active` is stored and does not call the model.
 
 Mariana, `CLI-ZGOY1V6ZC46J`, active card ending in 5476, `days_past_due` 180, balance 111,079.25 ARS, score 515. After she confirms, R02 wins before R05. Certificate: does not pre-qualify. Process `ended`. She does not enter the queue.
 
@@ -715,19 +717,19 @@ Found in a review on Sep 28, 2026. Each one is closed. The decision is in the se
 
 The open-process key includes the triggering event id, so a later message after `ended` can open another case. The same send cannot open two.
 
-12. **The agent closes with a credit outcome and does not chat.** `POST /agent/case/:id/close` writes `conversation.agent_closed` with `PREQUALIFIED` or `NOT_PREQUALIFIED`. The rule enqueues the automatic message and `process.end`. There is no reply and no `referred_closed`. See **Agent close**, the transition table, and `/agent/case/:id`.
-13. **`process.end` writes both events.** `process.state_changed` and `process.ended` carry the same `end_reason`. From the agent, that reason is `prequalified` or `not_prequalified`. See the `process.end` command.
+12. **The consultant closes with a credit outcome and does not chat.** `POST /consultant/case/:id/close` writes `conversation.consultant_closed` with `PREQUALIFIED` or `NOT_PREQUALIFIED`. The rule enqueues the automatic message and `process.end`. There is no reply and no `referred_closed`. See **Consultant close**, the transition table, and `/consultant/case/:id`.
+13. **`process.end` writes both events.** `process.state_changed` and `process.ended` carry the same `end_reason`. From the consultant, that reason is `prequalified` or `not_prequalified`. See the `process.end` command.
 9. **The file is the income when it has one.** A typed amount is ignored if `income_local` is present. If it is null, the typed amount is this run's income, marked `self_declared`, and evaluation continues. It is not by itself `REFER`. See R06 and **What the customer can be asked**.
 11. **Another customer's rows are the JWT filter.** The transition table does not list an attempt to see another customer. No intent detects it. A query for another customer's id returns no rows.
 5. **`NEEDS_INFO` is a template event.** `template.send` writes `conversation.template_sent` with `template_id = needs_income`. The case stays `ai_active`. `prequalification.decided` is not used. The sentences are not in this contract yet. See `render_needs_info` and Juliana's flow.
 6. **The `REFER` notice is a template event.** `template.send` writes `conversation.template_sent` with `template_id = refer_notice`, then the case moves to `human_active` with `reason_code = policy_refer`. The notice does not include the score and does not say whether the customer pre-qualifies. The sentences are not in this contract yet. See `render_refer_notice` and Alicia's flow.
-7. **`language` travels on the event.** The turn carries it. `policy.run` copies it onto `analysis.completed`. `decision.render` and `template.send` read it from the triggering event. The process stores it, and the agent close copies it onto `conversation.agent_closed`. Nothing reads `llm_turns` for the locale.
+7. **`language` travels on the event.** The turn carries it. `policy.run` copies it onto `analysis.completed`. `decision.render` and `template.send` read it from the triggering event. The process stores it, and the consultant close copies it onto `conversation.consultant_closed`. Nothing reads `llm_turns` for the locale.
 8. **`provide_income` carries the product on the turn.** A turn that names a product stores it on the process. A later `provide_income` copies that stored product onto the turn when the model sends none. If it is still null, `ask_which_product` sends `which_product` and the policy waits.
 10. **`reason_code` is a closed list.** `customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`. The policy rule stays on `deciding_rule`. See the list under **Process**.
 4. **The first turn takes the process this cycle just opened.** The first message is always the customer's, and its `process_id` column stays null. `process.start` runs first. `conversation.generate` then writes `conversation.turn_classified` with that process id. There is one open process per customer. The message row is not updated, and the message is not copied. See **Events**, the `conversation.generate` command, and Juan's flow step 5.
 
 ## What we take from Sxxxxx, and what we don't
 
-We take the shape of the cycle and the state names `ai_active` and `human_active`. The customer's message is an event, `conversation.message_received`, and it is not the case. The case is the process. A new thread is born `ai_active`: the API stamps that column when it inserts the event, and the model rule matches that stamp, including on the first message. The message key is the send id, not `process_id`. The agent takes the thread through an event, and from that event on the model rule no longer matches. The agent does not write in the thread. Closing is `conversation.agent_closed`, and the customer-facing sentence is a template. The certificate and the packet are rebuilt by reading events, not the model's free text.
+We take the shape of the cycle and the state names `ai_active` and `human_active`. The customer's message is an event, `conversation.message_received`, and it is not the case. The case is the process. A new thread is born `ai_active`: the API stamps that column when it inserts the event, and the model rule matches that stamp, including on the first message. The message key is the send id, not `process_id`. The consultant takes the thread through an event, and from that event on the model rule no longer matches. The consultant does not write in the thread. Closing is `conversation.consultant_closed`, and the customer-facing sentence is a template. The certificate and the packet are rebuilt by reading events, not the model's free text.
 
 We do not take the recruiting process catalog, the `interactions` table, the SQL trigger that stamps the mode, per-organization rules, the Sxxxxx SQL dispatcher, or the analyzer that scores forms. The analyzer of this demo is `api/domain/policy/engine.py`. This API stamps `process_state` when it inserts the event.
