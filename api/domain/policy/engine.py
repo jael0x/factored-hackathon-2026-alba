@@ -1,13 +1,23 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import get_args
+from types import MappingProxyType
+from typing import Literal, TypeVar, get_args
 
 import yaml
 
-from api.contract_models import IncomeCurrency, Outcome, PolicyVersion, ProductKey, RuleId, RuleTraceResult
+from api.contract_models import (
+    IncomeCurrency,
+    Outcome,
+    PolicyVersion,
+    ProductKey,
+    RuleId,
+    RuleTraceResult,
+)
+
+CustomerStatus = Literal["Active", "Suspended", "Inactive", "Closed"]
 
 R01: RuleId = "R01"
 R02: RuleId = "R02"
@@ -42,14 +52,35 @@ SOURCE_INCOME = "customer_credit_profile.income_local"
 SOURCE_PRODUCTS = "products"
 SOURCE_SELF_DECLARED = "self_declared"
 
+CUSTOMER_STATUSES: frozenset[CustomerStatus] = frozenset(get_args(CustomerStatus))
+RULE_IDS: frozenset[RuleId] = frozenset(get_args(RuleId))
+POLICY_VERSIONS: frozenset[PolicyVersion] = frozenset(get_args(PolicyVersion))
+
 POLICY_PATH = Path(__file__).with_name("alba-credit-v1.yaml")
 
 TraceValue = Decimal | int | str | bool | None
+Member = TypeVar("Member", bound=str)
+
+
+def parse_member(value: object, members: frozenset[Member], label: str) -> Member:
+    for member in members:
+        if value == member:
+            return member
+    raise ValueError(f"{label} {value!r} is outside the policy")
+
+
+def parse_customer_status(value: object) -> CustomerStatus:
+    return parse_member(value, CUSTOMER_STATUSES, CUSTOMER_STATUS)
+
+
+def require_adjacent(low_max: int, next_min: int, label: str) -> None:
+    if low_max + 1 != next_min:
+        raise ValueError(f"{label} bands leave a gap between {low_max} and {next_min}")
 
 
 @dataclass(frozen=True)
 class CreditProfile:
-    customer_status: str
+    customer_status: CustomerStatus
     credit_score: int | None
     income_local: Decimal | None
     income_currency: IncomeCurrency | None
@@ -58,6 +89,9 @@ class CreditProfile:
     has_active_card: bool
     has_active_personal_loan: bool
     as_of: date
+
+    def __post_init__(self) -> None:
+        parse_customer_status(self.customer_status)
 
 
 @dataclass(frozen=True)
@@ -90,6 +124,18 @@ class ScoreBands:
     refer_max: int
     prequalified_min: int
 
+    def __post_init__(self) -> None:
+        if self.refer_min > self.refer_max:
+            raise ValueError("score refer_min is above refer_max")
+        require_adjacent(self.refer_max, self.prequalified_min, "score")
+
+    def result_for(self, score: int) -> RuleTraceResult:
+        if score < self.refer_min:
+            return NOT_PREQUALIFIED
+        if score <= self.refer_max:
+            return REFER
+        return PREQUALIFIED
+
 
 @dataclass(frozen=True)
 class DelinquencyBands:
@@ -97,12 +143,31 @@ class DelinquencyBands:
     refer_max: int
     fail_min: int
 
+    def __post_init__(self) -> None:
+        if self.refer_min > self.refer_max:
+            raise ValueError("delinquency refer_min is above refer_max")
+        require_adjacent(self.refer_max, self.fail_min, "delinquency")
+
 
 @dataclass(frozen=True)
 class StatusRules:
-    refer: frozenset[str]
-    not_prequalified: frozenset[str]
-    passed: frozenset[str]
+    refer: frozenset[CustomerStatus]
+    not_prequalified: frozenset[CustomerStatus]
+    passed: frozenset[CustomerStatus]
+
+    def __post_init__(self) -> None:
+        listed = [status for group in (self.refer, self.not_prequalified, self.passed) for status in group]
+        if len(listed) != len(set(listed)):
+            raise ValueError("customer_status listed twice")
+        if set(listed) != CUSTOMER_STATUSES:
+            raise ValueError(f"customer_status must map every status: {sorted(CUSTOMER_STATUSES)}")
+
+    def result_for(self, status: CustomerStatus) -> RuleTraceResult:
+        if status in self.refer:
+            return REFER
+        if status in self.not_prequalified:
+            return NOT_PREQUALIFIED
+        return PASSED
 
 
 @dataclass(frozen=True)
@@ -112,6 +177,9 @@ class PolicySpec:
     status: StatusRules
     score: ScoreBands
     delinquency: DelinquencyBands
+
+    def __post_init__(self) -> None:
+        require_rule_order(self.rules)
 
 
 @dataclass(frozen=True)
@@ -124,16 +192,34 @@ class RuleEvaluation:
 RuleApply = Callable[[CreditProfile, ProductKey, Decimal | None, PolicySpec], RuleEvaluation]
 
 
-def declared_amount(value: object) -> Decimal | None:
+def holds_card(profile: CreditProfile) -> bool:
+    return profile.has_active_card
+
+
+def holds_personal_loan(profile: CreditProfile) -> bool:
+    return profile.has_active_personal_loan
+
+
+HOLDS_BY_PRODUCT: Mapping[ProductKey, Callable[[CreditProfile], bool]] = MappingProxyType(
+    {CREDIT_CARD: holds_card, PERSONAL_LOAN: holds_personal_loan}
+)
+
+
+def parse_product(value: object) -> ProductKey:
+    return parse_member(value, frozenset(HOLDS_BY_PRODUCT), "product")
+
+
+def parse_declared_income(value: object) -> Decimal | None:
     if value is None:
         return None
     if type(value) is not Decimal:
-        raise ValueError("declared_income must be Decimal or None")
+        raise TypeError("declared_income must be Decimal or None")
     return value
 
 
-def known_statuses(status: StatusRules) -> frozenset[str]:
-    return status.refer | status.not_prequalified | status.passed
+def require_declared_currency(profile: CreditProfile, declared_income: Decimal | None) -> None:
+    if declared_income is not None and profile.income_currency is None:
+        raise ValueError("declared income requires income_currency")
 
 
 def is_terminal(result: RuleTraceResult) -> bool:
@@ -145,14 +231,6 @@ def terminal_step(steps: Sequence[TraceStep]) -> TraceStep:
         if is_terminal(step.result):
             return step
     raise ValueError("policy produced no terminal rule")
-
-
-def holds_product(profile: CreditProfile, product: ProductKey) -> bool:
-    if product == CREDIT_CARD:
-        return profile.has_active_card
-    if product == PERSONAL_LOAN:
-        return profile.has_active_personal_loan
-    raise ValueError(f"unknown product {product!r}")
 
 
 def outcome_of(result: RuleTraceResult) -> Outcome:
@@ -167,7 +245,7 @@ def outcome_of(result: RuleTraceResult) -> Outcome:
     raise ValueError(f"result {result!r} is not terminal")
 
 
-def _step(rule_id: RuleId, result: RuleTraceResult, fields: dict[str, TraceValue]) -> TraceStep:
+def _step(rule_id: RuleId, result: RuleTraceResult, fields: Mapping[str, TraceValue]) -> TraceStep:
     return TraceStep(rule_id=rule_id, input=dict(fields), result=result)
 
 
@@ -182,20 +260,10 @@ def apply_r01(
     spec: PolicySpec,
 ) -> RuleEvaluation:
     status = profile.customer_status
-    fields = {CUSTOMER_STATUS: status}
-    if status in spec.status.refer:
-        return RuleEvaluation(
-            _step(R01, REFER, fields),
-            deciding_fact=_fact(CUSTOMER_STATUS, status, SOURCE_STATUS, profile.as_of),
-        )
-    if status in spec.status.not_prequalified:
-        return RuleEvaluation(
-            _step(R01, NOT_PREQUALIFIED, fields),
-            deciding_fact=_fact(CUSTOMER_STATUS, status, SOURCE_STATUS, profile.as_of),
-        )
-    if status in spec.status.passed:
-        return RuleEvaluation(_step(R01, PASSED, fields))
-    raise ValueError(f"customer_status {status!r} is outside the policy")
+    step = _step(R01, spec.status.result_for(status), {CUSTOMER_STATUS: status})
+    if step.result == PASSED:
+        return RuleEvaluation(step)
+    return RuleEvaluation(step, deciding_fact=_fact(CUSTOMER_STATUS, status, SOURCE_STATUS, profile.as_of))
 
 
 def apply_r02(
@@ -236,7 +304,7 @@ def apply_r09(
     _declared_income: Decimal | None,
     _spec: PolicySpec,
 ) -> RuleEvaluation:
-    held = holds_product(profile, product)
+    held = HOLDS_BY_PRODUCT[product](profile)
     fields = {HOLDS_PRODUCT: held}
     if held:
         return RuleEvaluation(
@@ -294,28 +362,39 @@ def apply_r05(
 ) -> RuleEvaluation:
     score = profile.credit_score
     if score is None:
-        raise ValueError("R05 requires a credit_score")
-    if score < spec.score.refer_min:
-        result: RuleTraceResult = NOT_PREQUALIFIED
-    elif score <= spec.score.refer_max:
-        result = REFER
-    else:
-        result = PREQUALIFIED
+        raise ValueError("R05 requires a credit_score; R04 closes on an empty one first")
     return RuleEvaluation(
-        _step(R05, result, {CREDIT_SCORE: score}),
+        _step(R05, spec.score.result_for(score), {CREDIT_SCORE: score}),
         deciding_fact=_fact(CREDIT_SCORE, score, SOURCE_SCORE, profile.as_of),
     )
 
 
-RULES: dict[RuleId, RuleApply] = {
-    R01: apply_r01,
-    R02: apply_r02,
-    R03: apply_r03,
-    R09: apply_r09,
-    R04: apply_r04,
-    R06: apply_r06,
-    R05: apply_r05,
-}
+RULES: Mapping[RuleId, RuleApply] = MappingProxyType(
+    {
+        R01: apply_r01,
+        R02: apply_r02,
+        R03: apply_r03,
+        R09: apply_r09,
+        R04: apply_r04,
+        R06: apply_r06,
+        R05: apply_r05,
+    }
+)
+
+RUNS_AFTER: Mapping[RuleId, RuleId] = MappingProxyType({R05: R04})
+
+
+def require_rule_order(rules: tuple[RuleId, ...]) -> None:
+    if len(rules) != len(set(rules)):
+        raise ValueError("rules lists a rule twice")
+    if set(rules) != RULE_IDS:
+        raise ValueError(f"rules must list every rule: {sorted(RULE_IDS)}")
+    unimplemented = RULE_IDS - set(RULES)
+    if unimplemented:
+        raise ValueError(f"no implementation for {sorted(unimplemented)}")
+    for rule_id, earlier in RUNS_AFTER.items():
+        if rules.index(earlier) > rules.index(rule_id):
+            raise ValueError(f"{earlier} must run before {rule_id}")
 
 
 def evaluate(
@@ -333,45 +412,37 @@ def evaluate(
     return tuple(found)
 
 
-def decide(profile: CreditProfile, product: ProductKey, declared_income: Decimal | None) -> Decision:
-    amount = declared_amount(declared_income)
-    require_product(product)
-    require_known_status(profile, _POLICY)
-    require_declared_currency(profile, amount)
-    evaluations = evaluate(profile, product, amount, _POLICY)
+def decision_from(evaluations: tuple[RuleEvaluation, ...], spec: PolicySpec) -> Decision:
     winner = terminal_step(tuple(evaluation.step for evaluation in evaluations))
-    declared_fact = next(
-        (evaluation.declared_income_fact for evaluation in evaluations if evaluation.declared_income_fact is not None),
-        None,
-    )
     closing = next(evaluation.deciding_fact for evaluation in evaluations if evaluation.step.rule_id == winner.rule_id)
     if closing is None:
         raise ValueError(f"{winner.rule_id} closed without a fact")
-    facts = (declared_fact, closing) if declared_fact is not None else (closing,)
+    declared = tuple(
+        evaluation.declared_income_fact for evaluation in evaluations if evaluation.declared_income_fact is not None
+    )
     return Decision(
         outcome=outcome_of(winner.result),
         deciding_rule=winner.rule_id,
         rule_trace=tuple(evaluation.step for evaluation in evaluations),
-        facts=facts,
-        policy_version=_POLICY.version,
+        facts=(*declared, closing),
+        policy_version=spec.version,
     )
 
 
-def require_product(product: ProductKey) -> None:
-    for known in get_args(ProductKey):
-        if product == known:
-            return
-    raise ValueError(f"unknown product {product!r}")
+def decide_under(
+    profile: CreditProfile,
+    product: ProductKey,
+    declared_income: Decimal | None,
+    spec: PolicySpec,
+) -> Decision:
+    product_key = parse_product(product)
+    amount = parse_declared_income(declared_income)
+    require_declared_currency(profile, amount)
+    return decision_from(evaluate(profile, product_key, amount, spec), spec)
 
 
-def require_known_status(profile: CreditProfile, spec: PolicySpec) -> None:
-    if profile.customer_status not in known_statuses(spec.status):
-        raise ValueError(f"customer_status {profile.customer_status!r} is outside the policy")
-
-
-def require_declared_currency(profile: CreditProfile, declared_income: Decimal | None) -> None:
-    if declared_income is not None and profile.income_currency is None:
-        raise ValueError("declared income requires income_currency")
+def decide(profile: CreditProfile, product: ProductKey, declared_income: Decimal | None) -> Decision:
+    return decide_under(profile, product, declared_income, ALBA_CREDIT_V1)
 
 
 def load_policy(path: Path = POLICY_PATH) -> PolicySpec:
@@ -381,13 +452,9 @@ def load_policy(path: Path = POLICY_PATH) -> PolicySpec:
         frozenset({"policy_version", "rules", "customer_status", "score", "delinquency"}),
         "policy",
     )
-    rules = require_rules(document["rules"])
-    missing = [rule_id for rule_id in rules if rule_id not in RULES]
-    if missing:
-        raise ValueError(f"no implementation for {missing}")
     return PolicySpec(
-        version=parse_version(document["policy_version"]),
-        rules=rules,
+        version=parse_member(document["policy_version"], POLICY_VERSIONS, "policy_version"),
+        rules=parse_rules(document["rules"]),
         status=parse_status(document["customer_status"]),
         score=parse_score(document["score"]),
         delinquency=parse_delinquency(document["delinquency"]),
@@ -396,11 +463,11 @@ def load_policy(path: Path = POLICY_PATH) -> PolicySpec:
 
 def require_mapping(value: object, label: str) -> dict[str, object]:
     if not isinstance(value, dict):
-        raise ValueError(f"{label} must be a mapping")
+        raise TypeError(f"{label} must be a mapping")
     parsed: dict[str, object] = {}
     for key, item in value.items():
         if type(key) is not str:
-            raise ValueError(f"{label} keys must be strings")
+            raise TypeError(f"{label} keys must be strings")
         parsed[key] = item
     return parsed
 
@@ -412,96 +479,55 @@ def require_keys(mapping: dict[str, object], keys: frozenset[str], label: str) -
 
 def require_int(value: object, label: str) -> int:
     if type(value) is not int:
-        raise ValueError(f"{label} must be an integer")
+        raise TypeError(f"{label} must be an integer")
     return value
 
 
-def require_next(low_max: int, next_min: int, label: str) -> None:
-    if low_max + 1 != next_min:
-        raise ValueError(f"{label} bands leave a gap between {low_max} and {next_min}")
-
-
-def require_strings(value: object, label: str) -> frozenset[str]:
+def require_list(value: object, label: str) -> list[object]:
     if not isinstance(value, list) or not value:
-        raise ValueError(f"{label} must be a list of strings")
-    parsed: list[str] = []
-    for item in value:
-        if type(item) is not str:
-            raise ValueError(f"{label} must be a list of strings")
-        parsed.append(item)
+        raise ValueError(f"{label} must be a non-empty list")
+    return list(value)
+
+
+def parse_rules(value: object) -> tuple[RuleId, ...]:
+    return tuple(parse_member(item, RULE_IDS, "rule") for item in require_list(value, "rules"))
+
+
+def parse_statuses(value: object, label: str) -> frozenset[CustomerStatus]:
+    parsed = [parse_member(item, CUSTOMER_STATUSES, label) for item in require_list(value, label)]
+    if len(parsed) != len(set(parsed)):
+        raise ValueError(f"{label} listed twice")
     return frozenset(parsed)
 
 
-def require_disjoint(groups: tuple[frozenset[str], ...], label: str) -> None:
-    seen: set[str] = set()
-    for group in groups:
-        overlap = seen & group
-        if overlap:
-            raise ValueError(f"{label} listed twice: {sorted(overlap)}")
-        seen.update(group)
-
-
-def parse_version(value: object) -> PolicyVersion:
-    for version in get_args(PolicyVersion):
-        if value == version:
-            return version
-    raise ValueError(f"policy_version {value!r} is outside the policy")
-
-
-def parse_rule_id(value: object) -> RuleId:
-    for rule_id in get_args(RuleId):
-        if value == rule_id:
-            return rule_id
-    raise ValueError(f"unknown rule {value!r}")
-
-
-def require_rules(value: object) -> tuple[RuleId, ...]:
-    if not isinstance(value, list) or not value:
-        raise ValueError("rules must be a list")
-    parsed = tuple(parse_rule_id(item) for item in value)
-    if len(parsed) != len(set(parsed)):
-        raise ValueError("rules lists a rule twice")
-    return parsed
-
-
 def parse_status(value: object) -> StatusRules:
-    mapping = require_mapping(value, "customer_status")
-    require_keys(mapping, frozenset({"refer", "not_prequalified", "passed"}), "customer_status")
-    status = StatusRules(
-        refer=require_strings(mapping["refer"], "customer_status.refer"),
-        not_prequalified=require_strings(mapping["not_prequalified"], "customer_status.not_prequalified"),
-        passed=require_strings(mapping["passed"], "customer_status.passed"),
+    mapping = require_mapping(value, CUSTOMER_STATUS)
+    require_keys(mapping, frozenset({"refer", "not_prequalified", "passed"}), CUSTOMER_STATUS)
+    return StatusRules(
+        refer=parse_statuses(mapping["refer"], "customer_status.refer"),
+        not_prequalified=parse_statuses(mapping["not_prequalified"], "customer_status.not_prequalified"),
+        passed=parse_statuses(mapping["passed"], "customer_status.passed"),
     )
-    require_disjoint((status.refer, status.not_prequalified, status.passed), "customer_status")
-    return status
 
 
 def parse_score(value: object) -> ScoreBands:
     mapping = require_mapping(value, "score")
     require_keys(mapping, frozenset({"refer_min", "refer_max", "prequalified_min"}), "score")
-    bands = ScoreBands(
+    return ScoreBands(
         refer_min=require_int(mapping["refer_min"], "score.refer_min"),
         refer_max=require_int(mapping["refer_max"], "score.refer_max"),
         prequalified_min=require_int(mapping["prequalified_min"], "score.prequalified_min"),
     )
-    if bands.refer_min > bands.refer_max:
-        raise ValueError("score refer_min is above refer_max")
-    require_next(bands.refer_max, bands.prequalified_min, "score")
-    return bands
 
 
 def parse_delinquency(value: object) -> DelinquencyBands:
     mapping = require_mapping(value, "delinquency")
     require_keys(mapping, frozenset({"refer_min", "refer_max", "fail_min"}), "delinquency")
-    bands = DelinquencyBands(
+    return DelinquencyBands(
         refer_min=require_int(mapping["refer_min"], "delinquency.refer_min"),
         refer_max=require_int(mapping["refer_max"], "delinquency.refer_max"),
         fail_min=require_int(mapping["fail_min"], "delinquency.fail_min"),
     )
-    if bands.refer_min > bands.refer_max:
-        raise ValueError("delinquency refer_min is above refer_max")
-    require_next(bands.refer_max, bands.fail_min, "delinquency")
-    return bands
 
 
-_POLICY = load_policy()
+ALBA_CREDIT_V1 = load_policy()
