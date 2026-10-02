@@ -3,9 +3,11 @@ import hmac
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Final
 from uuid import UUID
 
-CODE_TTL = timedelta(seconds=600)
+CODE_TTL_SECONDS: Final = 600
+CODE_TTL = timedelta(seconds=CODE_TTL_SECONDS)
 MAX_WRONG_CODES = 5
 CODE_DIGITS = 6
 

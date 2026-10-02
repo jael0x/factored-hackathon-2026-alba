@@ -5,7 +5,7 @@ import pytest
 
 from api.domain.session.tokens import SessionClaims, issue_token
 from api.infrastructure.config.settings import settings
-from api.tests.login_harness import ALICIA, JULIANA, JUAN, NO_EMAIL, Harness, customer_login
+from api.tests.login_harness import ALICIA, JUAN, JULIANA, NO_EMAIL, Harness, customer_login
 
 pytestmark = pytest.mark.integration
 
@@ -39,7 +39,9 @@ def test_the_answer_does_not_reveal_whether_a_code_was_sent(harness: Harness, do
 
 def test_a_code_with_its_document_number_opens_a_session(harness: Harness) -> None:
     harness.request_code(customer_login(JUAN.document_number))
-    response = harness.http.post("/session", json={"document_number": JUAN.document_number, "code": harness.last_code()})
+    response = harness.http.post(
+        "/session", json={"document_number": JUAN.document_number, "code": harness.last_code()}
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["sub"] == JUAN.customer_id
@@ -80,7 +82,9 @@ def test_a_consultant_token_cannot_read_a_customer_route(harness: Harness) -> No
     assert response.json() == {"error": "forbidden"}
 
 
-@pytest.mark.parametrize(("query", "customer_id"), [("Juliana Castro", JULIANA.customer_id), ("CLI-440CO5FZIY6A", ALICIA.customer_id)])
+@pytest.mark.parametrize(
+    ("query", "customer_id"), [("Juliana Castro", JULIANA.customer_id), ("CLI-440CO5FZIY6A", ALICIA.customer_id)]
+)
 def test_with_the_demo_login_on_a_visitor_finds_a_customer(harness: Harness, query: str, customer_id: str) -> None:
     response = harness.http.get("/customers/search", params={"q": query})
     assert response.status_code == 200
@@ -95,7 +99,10 @@ def test_a_demo_search_lists_at_most_20_customers_in_name_order(harness: Harness
 
 
 def test_a_demo_random_pick_is_a_customer_with_an_email(harness: Harness) -> None:
-    picked = {harness.http.get("/customers/search", params={"random": "true"}).json()["customers"][0]["customer_id"] for _ in range(30)}
+    picked = {
+        harness.http.get("/customers/search", params={"random": "true"}).json()["customers"][0]["customer_id"]
+        for _ in range(30)
+    }
     assert NO_EMAIL.customer_id not in picked
 
 
@@ -104,7 +111,9 @@ def test_a_demo_search_needs_exactly_one_of_q_or_random(harness: Harness) -> Non
     assert harness.http.get("/customers/search", params={"q": "Juan", "random": "true"}).status_code == 422
 
 
-def test_with_the_demo_login_off_customers_cannot_be_searched(harness: Harness, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_with_the_demo_login_off_customers_cannot_be_searched(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(settings, "demo_login", False)
     response = harness.http.get("/customers/search", params={"q": "Juliana Castro"})
     assert response.status_code == 404

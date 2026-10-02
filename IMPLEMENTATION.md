@@ -69,7 +69,7 @@ Gaps against the contract in what is built (item M0):
   - **Updates (settled):** `POST /messages` returns the `Case` after the worker finishes that cycle's commands, so the page does not poll.
   - **Still open:** no route lists a customer's processes. After a reload or a new login, the client cannot find an open case or an issued certificate unless it kept the `process_id` from a `POST /messages` response.
 - [ ] **I3. `ConversationTurn` and turn fixtures.** `api/infrastructure/llm/schema.py` in the contract's shape, plus one JSON turn per step of the four oracle flows and the spec examples. Engine tests inject them. Depends on I1.
-- [ ] **I4. Tooling.** ruff and mypy for Python, `tsc --noEmit` for the web app, all run by the `test` service. `README.md` names the one command. `web` already has `npm run typecheck` (Sep 29); nothing runs it in the `test` service yet.
+- [ ] **I4. Tooling.** ruff and mypy for Python, `tsc --noEmit` for the web app, all run by the `test` service. `README.md` names the one command. Since Oct 1 `scripts/check.sh` runs ruff, mypy strict, and pytest with coverage floors in the `test` service, and CI runs it plus `tsc` (`ARCHITECTURE.md`, "Quality gate"). Still open: `tsc` in the `test` service, whose image has no Node.
 
 ## Engine (E)
 

@@ -14,7 +14,9 @@ LOGINS = [customer_login(JUAN.document_number), login_of(CESAR)]
 
 @pytest.fixture(params=LOGINS, ids=[login.role for login in LOGINS])
 def login(request: pytest.FixtureRequest) -> Login:
-    return request.param
+    param = request.param
+    assert isinstance(param, Login)
+    return param
 
 
 def codes(*values: str) -> Iterator[str]:
@@ -37,7 +39,9 @@ def test_five_wrong_codes_spend_the_code(harness: Harness, login: Login, monkeyp
     assert harness.open_session(login, "481206") == 401
 
 
-def test_four_wrong_codes_still_allow_the_right_one(harness: Harness, login: Login, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_four_wrong_codes_still_allow_the_right_one(
+    harness: Harness, login: Login, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(login_codes, "new_code", lambda: "481206")
     harness.request_code(login)
     assert [harness.open_session(login, "000000") for _ in range(4)] == [401] * 4

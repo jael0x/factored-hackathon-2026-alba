@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+import psycopg
+
 from pipeline.db import connect
 
 FORMER_NAMES = {"003_consultant_login.sql": "003_agent_login.sql"}
@@ -10,7 +12,7 @@ def migrations_dir() -> Path:
     return Path(os.environ.get("MIGRATIONS_DIR", "db/migrations"))
 
 
-def run_sql_script(conn, script: str) -> None:
+def run_sql_script(conn: psycopg.Connection, script: str) -> None:
     statements = [part.strip() for part in script.split(";") if part.strip()]
     for statement in statements:
         conn.execute(statement)
@@ -57,7 +59,7 @@ def names_of(filename: str) -> list[str]:
     return [filename] if former is None else [filename, former]
 
 
-def applied_names(conn, filename: str) -> set[str]:
+def applied_names(conn: psycopg.Connection, filename: str) -> set[str]:
     rows = conn.execute(
         "SELECT filename FROM schema_migrations WHERE filename = ANY(%s)",
         (names_of(filename),),

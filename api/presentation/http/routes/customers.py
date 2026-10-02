@@ -28,7 +28,9 @@ def read_me(
     customer = read_customer(session.sub)
     if customer is None:
         raise unauthorized()
-    return CurrentCustomer(customer_id=customer.customer_id, first_name=customer.first_name, last_name=customer.last_name)
+    return CurrentCustomer(
+        customer_id=customer.customer_id, first_name=customer.first_name, last_name=customer.last_name
+    )
 
 
 @search.get("/search", response_model=CustomerSearchResults)

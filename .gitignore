@@ -19,3 +19,5 @@ venv/
 
 node_modules/
 dist/
+.coverage
+coverage.xml
