@@ -4,13 +4,25 @@ from types import MappingProxyType
 from typing import get_args
 from uuid import UUID
 
-from api.contract_models import EndReason, ProcessKey, ProcessState
+from api.contract_models import EndReason, ProcessKey, ProcessState, ReasonCode
 from api.domain.closed_sets import parse_member
 
 AI_ACTIVE: ProcessState = "ai_active"
 HUMAN_ACTIVE: ProcessState = "human_active"
 ENDED: ProcessState = "ended"
 PROCESS_STATES: frozenset[ProcessState] = frozenset(get_args(ProcessState))
+
+PREQUALIFIED_END: EndReason = "prequalified"
+NOT_PREQUALIFIED_END: EndReason = "not_prequalified"
+
+CUSTOMER_REQUESTED_HUMAN: ReasonCode = "customer_requested_human"
+OUT_OF_SCOPE: ReasonCode = "out_of_scope"
+LANGUAGE_UNSUPPORTED: ReasonCode = "language_unsupported"
+MODEL_OUTPUT_INVALID: ReasonCode = "model_output_invalid"
+TOOL_FAILED: ReasonCode = "tool_failed"
+POLICY_REFER: ReasonCode = "policy_refer"
+REPLY_FORBIDDEN: ReasonCode = "reply_forbidden"
+REASON_CODES: frozenset[ReasonCode] = frozenset(get_args(ReasonCode))
 
 CREDIT_PREQUALIFICATION: ProcessKey = "credit_prequalification"
 
