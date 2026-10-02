@@ -481,9 +481,10 @@ node('events', {
 });
 node('rules', {
   parent: 'api', kind: 'component', name: 'Process rules', tech: 'api/domain/process/rules.py',
-  summary: 'An in-memory catalog of 19 rules. A pure match over the event just written; the output is commands.',
+  summary: 'An in-memory catalog of 21 rules. A pure match over the event just written; the output is commands. Built Oct 2.',
   desc: ['A list in code. No `rules` table in v1 and no per-organization override. Each rule appears once; a copy would fire twice. The rules, not the worker, choose what follows a classified turn.'],
-  files: ['api/domain/process/rules.py'],
+  files: ['api/domain/process/rules.py', 'api/domain/process/stored_events.py', 'api/domain/process/commands.py'],
+  tests: ['api/domain/process/test_rules.py: every classified turn matches exactly one rule, each rule fires and does not fire, the four oracle flows.'],
   src: 'ARCHITECTURE.md, "Process rules"',
 });
 node('worker', {
@@ -739,13 +740,13 @@ spec('events', 'e-dispatch', {
   src: 'ARCHITECTURE.md, "Process-native loop", "Process rules"',
 });
 spec('rules', 'ru-shape', {
-  name: 'Rule shape', tech: 'api/domain/process/rules.py', status: 'partial',
-  summary: '`{id, trigger_event_name, when, actions}`, in memory, sorted by priority.',
+  name: 'Rule shape', tech: 'api/domain/process/rules.py', status: 'defined',
+  summary: '`{id, trigger_event_name, when, actions}`, in memory, in table order.',
   fixed: [
     'A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function over the event. `actions` is an ordered list of commands.',
-    'An in-memory list sorted by ascending `priority`. Commands from one event run in the order of the rule table.',
+    'In memory, in the order of the rule table; that order is the priority, and there is no priority field. Commands from one event run in that order.',
+    'A rule reads the typed record from `api/domain/process/stored_events.py`, which refuses a payload or a stamp the contract does not allow.',
   ],
-  open: [['New', 'The list is sorted by `priority`, but the rule shape has no `priority` field. The table order is the only order given.']],
   src: 'ARCHITECTURE.md, "Process rules"',
 });
 spec('rules', 'ru-message', {
@@ -764,7 +765,7 @@ spec('rules', 'ru-turn', {
   name: 'On a classified turn', tech: '12 rules', status: 'defined',
   summary: 'Ask for consent, run the policy, ask which product, hand off, or show the reply.',
   fixed: [
-    '`ask_confirm_prequalify`: `prequalify_card` or `prequalify_loan`, then `template.send` for `confirm_prequalify`. The product is stored; the policy is not called.',
+    '`ask_confirm_prequalify`: `prequalify_card` or `prequalify_loan`, then `template.send` for `confirm_prequalify`. `conversation.generate` already stored the product; the policy is not called.',
     '`run_policy`: `confirm_prequalify` with a product, then `policy.run` with the turn\'s declared amount, null when none. `decline_prequalify`: then `conversation.show_reply`; the case stays `ai_active`.',
     '`run_policy_income`: `provide_income` with a product and `income_requested`, then `policy.run` with the declared amount. It does not ask for consent again.',
     '`ask_consent_for_income`: `provide_income` with a product and not `income_requested`, then `template.send` for `confirm_prequalify`; the amount is not used (D14).',
@@ -822,7 +823,10 @@ spec('worker', 'w-loop', {
 spec('worker', 'w-table', {
   name: 'commands table', tech: 'db/migrations/001_init.sql', status: 'defined',
   summary: 'Queued work with its causing event, emitting rule, and status.',
-  fixed: ['Columns: `id`, `command_name`, `payload jsonb`, `triggered_by_event_id`, `emitted_by_rule_id`, `idempotency_key` unique, `status` (`pending`, `done`, `failed`), `attempt_count`, `last_error`, `created_at`.'],
+  fixed: [
+    'Columns: `id`, `command_name`, `payload jsonb`, `triggered_by_event_id`, `emitted_by_rule_id`, `idempotency_key` unique, `status` (`pending`, `done`, `failed`), `attempt_count`, `last_error`, `created_at`.',
+    'Key `command:{emitted_by_rule_id}:{command_name}:{triggered_by_event_id}`. No rule emits a command twice, so matching an event again enqueues nothing new.',
+  ],
   src: 'ARCHITECTURE.md, "Commands"',
 });
 spec('worker', 'w-generate', {
