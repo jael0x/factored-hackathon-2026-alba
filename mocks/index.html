@@ -367,7 +367,7 @@
         <section class="panel glass">
           <div class="panel-head">
             <h2 class="heading">Buscar</h2>
-            <div class="seg" role="group" aria-label="Tipo de sesión"><button aria-pressed="true">Cliente</button><button aria-pressed="false">Agente</button></div>
+            <div class="seg" role="group" aria-label="Tipo de sesión"><button aria-pressed="true">Cliente</button><button aria-pressed="false">Asesor</button></div>
           </div>
           <label class="field-label" for="q">Nombre, documento o número de cliente</label>
           <div class="field-wrap"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="M20 20l-4.5-4.5" /></svg><input class="field" id="q" value="Juan Alberto" /></div>
@@ -398,7 +398,7 @@
       <p>Cualquier fila de <code>customers.csv</code> puede entrar (150,000). Estos cuatro son el oráculo de pruebas, no una lista cerrada. La búsqueda devuelve hasta 20 resultados; "Elegir al azar" usa <code>random=true</code>.</p>
       <p>Un nombre, un documento o un <code>customer_id</code> sin código no abren sesión. El código vence a los 10 minutos.</p>
       <p>El buzón de prueba existe porque no hay SMS (<code>DEMO_INBOX=1</code>). El borde punteado lo marca como parte del demo.</p>
-      <p>"Agente" busca en <code>service_agents</code>: "César González" encuentra a César González Sánchez, E75612.</p>
+      <p>"Asesor" busca en <code>service_agents</code>: "César González" encuentra a César González Sánchez, E75612.</p>
     </div>
   </section>
 
@@ -619,9 +619,9 @@
     </div>
   </section>
 
-  <section class="stage agent" data-stage="cola" data-title="Cola" data-group="Agente">
+  <section class="stage consultant" data-stage="cola" data-title="Cola" data-group="Asesor">
     <div class="shell">
-      <nav class="sidebar glass" aria-label="Agente">
+      <nav class="sidebar glass" aria-label="Asesor">
         <span class="brand"><span class="orb lg"></span>Alba</span>
         <button class="nav-item on"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13l2-7h12l2 7" /><path d="M4 13v5h16v-5" /><path d="M4 13h5l1 2h4l1-2h5" /></svg><span class="grow">Casos en revisión</span><span class="count">1</span></button>
         <div class="profile"><div class="label">César González Sánchez</div><div class="caption">Créditos · Senior · E75612</div></div>
@@ -651,9 +651,9 @@
     </div>
   </section>
 
-  <section class="stage agent" data-stage="expediente" data-title="Expediente" data-group="Agente">
+  <section class="stage consultant" data-stage="expediente" data-title="Expediente" data-group="Asesor">
     <div class="shell">
-      <nav class="sidebar glass" aria-label="Agente">
+      <nav class="sidebar glass" aria-label="Asesor">
         <span class="brand"><span class="orb lg"></span>Alba</span>
         <button class="nav-item on" data-screen="cola"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13l2-7h12l2 7" /><path d="M4 13v5h16v-5" /><path d="M4 13h5l1 2h4l1-2h5" /></svg><span class="grow">Casos en revisión</span><span class="count">1</span></button>
         <div class="profile"><div class="label">César González Sánchez</div><div class="caption">Créditos · Senior · E75612</div></div>
@@ -710,14 +710,14 @@
     </dialog>
     <div class="note-src" hidden>
       <p>César no escribe en el hilo: no hay caja de respuesta ni campo de texto. Sus únicas acciones son precalificar o no; los dos botones pesan lo mismo y ninguno toma el foco.</p>
-      <p>Confirmar escribe <code>conversation.agent_closed</code>. Una plantilla avisa a Alicia (texto por escribir) y el proceso termina. La política no vuelve a correr. Un segundo cierre se rechaza (<code>agent_close:{process_id}</code>).</p>
+      <p>Confirmar escribe <code>conversation.consultant_closed</code>. Una plantilla avisa a Alicia (texto por escribir) y el proceso termina. La política no vuelve a correr. Un segundo cierre se rechaza (<code>consultant_close:{process_id}</code>).</p>
       <p>Qué elige César para Alicia no está fijado.</p>
     </div>
   </section>
 
-  <section class="stage agent" data-stage="registro" data-title="Registro" data-group="Agente">
+  <section class="stage consultant" data-stage="registro" data-title="Registro" data-group="Asesor">
     <div class="shell">
-      <nav class="sidebar glass" aria-label="Agente">
+      <nav class="sidebar glass" aria-label="Asesor">
         <span class="brand"><span class="orb lg"></span>Alba</span>
         <button class="nav-item on" data-screen="cola"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13l2-7h12l2 7" /><path d="M4 13v5h16v-5" /><path d="M4 13h5l1 2h4l1-2h5" /></svg><span class="grow">Casos en revisión</span><span class="count">1</span></button>
         <div class="profile"><div class="label">César González Sánchez</div><div class="caption">Créditos · Senior · E75612</div></div>
