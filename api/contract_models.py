@@ -99,22 +99,22 @@ class CustomerSearchResults(BaseModel):
     customers: Annotated[List[CustomerSearchHit], Field(max_length=20)]
 
 
-class AgentSearchHit(BaseModel):
+class ConsultantSearchHit(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    agent_id: str
+    consultant_id: str
     employee_code: str
     first_name: str
     last_name: str
     email: str
 
 
-class AgentSearchResults(BaseModel):
+class ConsultantSearchResults(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    agents: Annotated[List[AgentSearchHit], Field(max_length=20)]
+    consultants: Annotated[List[ConsultantSearchHit], Field(max_length=20)]
 
 
 class RequestCustomerCode(BaseModel):
@@ -144,7 +144,7 @@ class OpenCustomerSessionRequest(BaseModel):
     code: Annotated[str, Field(pattern='^[0-9]{6}$')]
 
 
-class RequestAgentCode(BaseModel):
+class RequestConsultantCode(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -152,7 +152,7 @@ class RequestAgentCode(BaseModel):
     employee_code: Annotated[str, Field(min_length=1)]
 
 
-class OpenAgentSessionRequest(BaseModel):
+class OpenConsultantSessionRequest(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -169,10 +169,10 @@ class Session(BaseModel):
     sub: Annotated[
         str,
         Field(
-            description='customer_id or agent_id, the same value as the token sub claim.'
+            description='customer_id or consultant_id, the same value as the token sub claim.'
         ),
     ]
-    role: Literal['customer', 'agent']
+    role: Literal['customer', 'consultant']
 
 
 class CurrentCustomer(BaseModel):
@@ -184,11 +184,11 @@ class CurrentCustomer(BaseModel):
     last_name: str
 
 
-class CurrentAgent(BaseModel):
+class CurrentConsultant(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    agent_id: str
+    consultant_id: str
     employee_code: str
     first_name: str
     last_name: str
@@ -273,7 +273,7 @@ class Case(BaseModel):
     certificate: Annotated[Optional[Certificate], Field(...)]
 
 
-class AgentQueueItem(BaseModel):
+class ConsultantQueueItem(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -294,14 +294,14 @@ class AgentQueueItem(BaseModel):
     language: Annotated[Optional[Literal['es', 'pt']], Field(...)]
 
 
-class AgentQueue(BaseModel):
+class ConsultantQueue(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    cases: List[AgentQueueItem]
+    cases: List[ConsultantQueueItem]
 
 
-class AgentCase(BaseModel):
+class ConsultantCase(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -342,7 +342,7 @@ class CloseCaseRequest(BaseModel):
     outcome: Literal['PREQUALIFIED', 'NOT_PREQUALIFIED']
 
 
-class AgentCloseResult(BaseModel):
+class ConsultantCloseResult(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -391,7 +391,7 @@ class TraceEventBase(BaseModel):
     )
     id: UUID
     created_at: AwareDatetime
-    actor: Literal['customer', 'agent', 'system', 'rule']
+    actor: Literal['customer', 'consultant', 'system', 'rule']
     process_id: Annotated[Optional[UUID], Field(...)] = None
     process_state: Literal['ai_active', 'human_active', 'ended']
     caused_by_event_id: Annotated[Optional[UUID], Field(...)] = None
@@ -450,10 +450,10 @@ class TraceTemplateSent(TraceEventBase):
     body: str
 
 
-class TraceAgentClosed(TraceEventBase):
-    event_name: Literal['conversation.agent_closed']
+class TraceConsultantClosed(TraceEventBase):
+    event_name: Literal['conversation.consultant_closed']
     outcome: Literal['PREQUALIFIED', 'NOT_PREQUALIFIED']
-    agent_id: str
+    consultant_id: str
     language: Annotated[Optional[Literal['es', 'pt']], Field(...)]
 
 
@@ -488,7 +488,7 @@ class TracePrequalificationDecided(TraceEventBase):
     locale: Literal['es', 'pt']
     outcome: Literal['PREQUALIFIED', 'NOT_PREQUALIFIED']
     body: str
-    decided_by: Literal['policy', 'agent']
+    decided_by: Literal['policy', 'consultant']
 
 
 class TraceProcessStarted(TraceEventBase):
@@ -522,7 +522,7 @@ class CaseTrace(BaseModel):
             TraceMessageReceived,
             TraceTurnClassified,
             TraceTemplateSent,
-            TraceAgentClosed,
+            TraceConsultantClosed,
             TraceThreadTaken,
             TraceAnalysisCompleted,
             TracePrequalificationDecided,
@@ -533,7 +533,7 @@ class CaseTrace(BaseModel):
     ]
 
 
-Role = Literal['customer', 'agent']
+Role = Literal['customer', 'consultant']
 ProcessState = Literal['ai_active', 'human_active', 'ended']
 EndReason = Literal['prequalified', 'not_prequalified']
 ProductKey = Literal['credit_card', 'personal_loan']
@@ -545,10 +545,10 @@ IncomeCurrency = Literal['MXN', 'COP', 'ARS']
 ReasonCode = Literal['customer_requested_human', 'out_of_scope', 'language_unsupported', 'model_output_invalid', 'tool_failed', 'policy_refer', 'reply_forbidden']
 Intent = Literal['product_info', 'prequalify_card', 'prequalify_loan', 'confirm_prequalify', 'decline_prequalify', 'provide_income', 'human_request', 'out_of_scope', 'clarify', 'chit_chat']
 TemplateId = Literal['needs_income', 'refer_notice', 'which_product', 'confirm_prequalify']
-DecidedBy = Literal['policy', 'agent']
+DecidedBy = Literal['policy', 'consultant']
 RuleId = Literal['R01', 'R02', 'R03', 'R04', 'R05', 'R06', 'R09']
 RuleTraceResult = Literal['passed', 'self_declared', 'PREQUALIFIED', 'NOT_PREQUALIFIED', 'REFER', 'NEEDS_INFO']
-Actor = Literal['customer', 'agent', 'system', 'rule']
+Actor = Literal['customer', 'consultant', 'system', 'rule']
 MessageAuthor = Literal['customer', 'assistant', 'template']
 PolicyVersion = Literal['alba-credit-v1']
 ProcessKey = Literal['credit_prequalification']

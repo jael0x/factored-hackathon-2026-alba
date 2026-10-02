@@ -117,7 +117,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/agents/search": {
+    "/consultants/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -125,10 +125,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Demo helper. Search the active agents, or pick one at random.
-         * @description Only with DEMO_LOGIN=1; not found otherwise. It fills the agent login form and never opens a session. Send q or random=true, not both and not neither. Only agents whose agent_status is Active are listed, because only they can receive a code. With q, at most 20 rows matching name, employee code, or agent_id, ordered by last_name, first_name, agent_id ascending. With random=true, one active agent.
+         * Demo helper. Search the active consultants, or pick one at random.
+         * @description Only with DEMO_LOGIN=1; not found otherwise. It fills the consultant login form and never opens a session. Send q or random=true, not both and not neither. Only consultants whose service_agents.agent_status is Active are listed, because only they can receive a code. With q, at most 20 rows matching name, employee code, or consultant_id, ordered by last_name, first_name, consultant_id ascending. With random=true, one active consultant.
          */
-        get: operations["searchAgents"];
+        get: operations["searchConsultants"];
         put?: never;
         post?: never;
         delete?: never;
@@ -137,7 +137,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/agent/session/code": {
+    "/consultant/session/code": {
         parameters: {
             query?: never;
             header?: never;
@@ -147,17 +147,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Email a 6-digit code to the active agent with this email and employee code.
-         * @description Spaces around either field are ignored, the email is compared in lower case, and the employee code in upper case. When the pair matches an agent whose agent_status is Active, a code valid for 10 minutes is stored as a hash and emailed to that address. A new request replaces any unused code for the same agent. The response is the same for every pair and every status. It never carries the code, the address, or the name.
+         * Email a 6-digit code to the active consultant with this email and employee code.
+         * @description Spaces around either field are ignored, the email is compared in lower case, and the employee code in upper case. When the pair matches a consultant whose service_agents.agent_status is Active, a code valid for 10 minutes is stored as a hash and emailed to that address. A new request replaces any unused code for the same consultant. The response is the same for every pair and every status. It never carries the code, the address, or the name.
          */
-        post: operations["requestAgentCode"];
+        post: operations["requestConsultantCode"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/agent/session": {
+    "/consultant/session": {
         parameters: {
             query?: never;
             header?: never;
@@ -168,9 +168,9 @@ export interface paths {
         put?: never;
         /**
          * Exchange an email, an employee code, and the emailed code for a JWT.
-         * @description Claims inside the token are sub = agent_id, role = agent, exp 15 minutes. The pair is matched as on the code request and must still belong to an active agent. The code must be the latest unused one for that agent, under 10 minutes old, with fewer than 5 wrong tries. The fifth wrong code spends it. A used code does not open a second session. A customer code does not open an agent session. Every failure is the same unauthorized answer.
+         * @description Claims inside the token are sub = consultant_id, role = consultant, exp 15 minutes. The pair is matched as on the code request and must still belong to an active consultant. The code must be the latest unused one for that consultant, under 10 minutes old, with fewer than 5 wrong tries. The fifth wrong code spends it. A used code does not open a second session. A customer code does not open a consultant session. Every failure is the same unauthorized answer.
          */
-        post: operations["openAgentSession"];
+        post: operations["openConsultantSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -206,7 +206,7 @@ export interface paths {
         };
         /**
          * Products of the customer in the JWT, in the currency stored on the row.
-         * @description Requires role customer. An agent token is forbidden. customer_id is optional. If it is absent, or equal to the token sub, the response is that customer's products. If it is any other id, the response is an empty list. Balances are not converted. Order is product_id ascending. days_past_due, credit_limit, and interest_rate are not on this response.
+         * @description Requires role customer. A consultant token is forbidden. customer_id is optional. If it is absent, or equal to the token sub, the response is that customer's products. If it is any other id, the response is an empty list. Balances are not converted. Order is product_id ascending. days_past_due, credit_limit, and interest_rate are not on this response.
          */
         get: operations["listProducts"];
         put?: never;
@@ -257,7 +257,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/agent/me": {
+    "/consultant/me": {
         parameters: {
             query?: never;
             header?: never;
@@ -265,10 +265,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The session agent's id, employee code, name, and specialty.
-         * @description Requires role agent. agent_id is the token sub. specialty is null when the file has none. The agent screens read the name from here; the login responses never carry it.
+         * The session consultant's id, employee code, name, and specialty.
+         * @description Requires role consultant. consultant_id is the token sub. specialty is null when the file has none. The consultant screens read the name from here; the login responses never carry it.
          */
-        get: operations["getCurrentAgent"];
+        get: operations["getCurrentConsultant"];
         put?: never;
         post?: never;
         delete?: never;
@@ -277,7 +277,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/agent/queue": {
+    "/consultant/queue": {
         parameters: {
             query?: never;
             header?: never;
@@ -286,9 +286,9 @@ export interface paths {
         };
         /**
          * Processes in human_active.
-         * @description Requires role agent. Ended and ai_active processes are not listed. Order is processes.created_at ascending, then process id ascending.
+         * @description Requires role consultant. Ended and ai_active processes are not listed. Order is processes.created_at ascending, then process id ascending.
          */
-        get: operations["listAgentQueue"];
+        get: operations["listConsultantQueue"];
         put?: never;
         post?: never;
         delete?: never;
@@ -297,7 +297,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/agent/case/{process_id}": {
+    "/consultant/case/{process_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -306,9 +306,9 @@ export interface paths {
         };
         /**
          * Handoff packet for a process in human_active.
-         * @description Requires role agent. A process that is not human_active is not found. Packet fields that come from analysis.completed are null when that event does not exist (a handoff before the policy ran). There is no text field and no reply body.
+         * @description Requires role consultant. A process that is not human_active is not found. Packet fields that come from analysis.completed are null when that event does not exist (a handoff before the policy ran). There is no text field and no reply body.
          */
-        get: operations["getAgentCase"];
+        get: operations["getConsultantCase"];
         put?: never;
         post?: never;
         delete?: never;
@@ -317,7 +317,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/agent/case/{process_id}/trace": {
+    "/consultant/case/{process_id}/trace": {
         parameters: {
             query?: never;
             header?: never;
@@ -326,9 +326,9 @@ export interface paths {
         };
         /**
          * The process events, in the order they were recorded.
-         * @description Requires role agent. Included events are those whose process_id is this process, plus the single event referenced by process.started.caused_by_event_id when that opening message has a null process_id. If that caused_by_event_id is null, the opening message is not attached by time. Order is created_at ascending, then event id ascending.
+         * @description Requires role consultant. Included events are those whose process_id is this process, plus the single event referenced by process.started.caused_by_event_id when that opening message has a null process_id. If that caused_by_event_id is null, the opening message is not attached by time. Order is created_at ascending, then event id ascending.
          */
-        get: operations["getAgentCaseTrace"];
+        get: operations["getConsultantCaseTrace"];
         put?: never;
         post?: never;
         delete?: never;
@@ -337,7 +337,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/agent/case/{process_id}/close": {
+    "/consultant/case/{process_id}/close": {
         parameters: {
             query?: never;
             header?: never;
@@ -348,9 +348,9 @@ export interface paths {
         put?: never;
         /**
          * Close a human_active case as pre-qualified or not.
-         * @description Requires role agent. outcome is PREQUALIFIED or NOT_PREQUALIFIED. Any other outcome, or a text field, is invalid_body. There is no reply. The handler appends conversation.agent_closed. It does not run the policy. A second close of the same process is already_closed and does not append another event. A process that is not human_active is not found, except a process already ended, which is already_closed.
+         * @description Requires role consultant. outcome is PREQUALIFIED or NOT_PREQUALIFIED. Any other outcome, or a text field, is invalid_body. There is no reply. The handler appends conversation.consultant_closed. It does not run the policy. A second close of the same process is already_closed and does not append another event. A process that is not human_active is not found, except a process already ended, which is already_closed.
          */
-        post: operations["closeAgentCase"];
+        post: operations["closeConsultantCase"];
         delete?: never;
         options?: never;
         head?: never;
@@ -396,7 +396,7 @@ export interface components {
             error: "invalid_body";
         };
         /** @enum {string} */
-        Role: "customer" | "agent";
+        Role: "customer" | "consultant";
         /** @enum {string} */
         ProcessState: "ai_active" | "human_active" | "ended";
         /** @enum {string} */
@@ -420,13 +420,13 @@ export interface components {
         /** @enum {string} */
         TemplateId: "needs_income" | "refer_notice" | "which_product" | "confirm_prequalify";
         /** @enum {string} */
-        DecidedBy: "policy" | "agent";
+        DecidedBy: "policy" | "consultant";
         /** @enum {string} */
         RuleId: "R01" | "R02" | "R03" | "R04" | "R05" | "R06" | "R09";
         /** @enum {string} */
         RuleTraceResult: "passed" | "self_declared" | "PREQUALIFIED" | "NOT_PREQUALIFIED" | "REFER" | "NEEDS_INFO";
         /** @enum {string} */
-        Actor: "customer" | "agent" | "system" | "rule";
+        Actor: "customer" | "consultant" | "system" | "rule";
         /** @enum {string} */
         MessageAuthor: "customer" | "assistant" | "template";
         /** @enum {string} */
@@ -446,15 +446,15 @@ export interface components {
         CustomerSearchResults: {
             customers: components["schemas"]["CustomerSearchHit"][];
         };
-        AgentSearchHit: {
-            agent_id: string;
+        ConsultantSearchHit: {
+            consultant_id: string;
             employee_code: string;
             first_name: string;
             last_name: string;
             email: string;
         };
-        AgentSearchResults: {
-            agents: components["schemas"]["AgentSearchHit"][];
+        ConsultantSearchResults: {
+            consultants: components["schemas"]["ConsultantSearchHit"][];
         };
         RequestCustomerCode: {
             document_number: string;
@@ -470,18 +470,18 @@ export interface components {
             document_number: string;
             code: string;
         };
-        RequestAgentCode: {
+        RequestConsultantCode: {
             email: string;
             employee_code: string;
         };
-        OpenAgentSessionRequest: {
+        OpenConsultantSessionRequest: {
             email: string;
             employee_code: string;
             code: string;
         };
         Session: {
             token: string;
-            /** @description customer_id or agent_id, the same value as the token sub claim. */
+            /** @description customer_id or consultant_id, the same value as the token sub claim. */
             sub: string;
             role: components["schemas"]["Role"];
         };
@@ -490,8 +490,8 @@ export interface components {
             first_name: string;
             last_name: string;
         };
-        CurrentAgent: {
-            agent_id: string;
+        CurrentConsultant: {
+            consultant_id: string;
             employee_code: string;
             first_name: string;
             last_name: string;
@@ -549,7 +549,7 @@ export interface components {
             messages: components["schemas"]["ThreadMessage"][];
             certificate: components["schemas"]["Certificate"] | null;
         };
-        AgentQueueItem: {
+        ConsultantQueueItem: {
             /** Format: uuid */
             process_id: string;
             customer_id: string;
@@ -559,11 +559,11 @@ export interface components {
             reason_code: components["schemas"]["ReasonCode"];
             language: components["schemas"]["TemplateLocale"] | null;
         };
-        AgentQueue: {
-            cases: components["schemas"]["AgentQueueItem"][];
+        ConsultantQueue: {
+            cases: components["schemas"]["ConsultantQueueItem"][];
         };
         /** @description The handoff packet. product, credit_score, the income fields, deciding_rule, policy_version, and outcome are copied from analysis.completed. They are null when that event does not exist. reason_code is copied from conversation.thread_taken. */
-        AgentCase: {
+        ConsultantCase: {
             /** Format: uuid */
             process_id: string;
             /** @enum {string} */
@@ -585,7 +585,7 @@ export interface components {
         CloseCaseRequest: {
             outcome: components["schemas"]["CloseOutcome"];
         };
-        AgentCloseResult: {
+        ConsultantCloseResult: {
             /** Format: uuid */
             process_id: string;
             /** @enum {string} */
@@ -664,18 +664,18 @@ export interface components {
              */
             event_name: "conversation.template_sent";
         };
-        TraceAgentClosed: components["schemas"]["TraceEventBase"] & {
+        TraceConsultantClosed: components["schemas"]["TraceEventBase"] & {
             /** @enum {string} */
-            event_name: "conversation.agent_closed";
+            event_name: "conversation.consultant_closed";
             outcome: components["schemas"]["CloseOutcome"];
-            agent_id: string;
+            consultant_id: string;
             language: components["schemas"]["TemplateLocale"] | null;
         } & {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            event_name: "conversation.agent_closed";
+            event_name: "conversation.consultant_closed";
         };
         TraceThreadTaken: components["schemas"]["TraceEventBase"] & {
             /** @enum {string} */
@@ -758,7 +758,7 @@ export interface components {
              */
             event_name: "process.ended";
         };
-        TraceEvent: components["schemas"]["TraceMessageReceived"] | components["schemas"]["TraceTurnClassified"] | components["schemas"]["TraceTemplateSent"] | components["schemas"]["TraceAgentClosed"] | components["schemas"]["TraceThreadTaken"] | components["schemas"]["TraceAnalysisCompleted"] | components["schemas"]["TracePrequalificationDecided"] | components["schemas"]["TraceProcessStarted"] | components["schemas"]["TraceProcessStateChanged"] | components["schemas"]["TraceProcessEnded"];
+        TraceEvent: components["schemas"]["TraceMessageReceived"] | components["schemas"]["TraceTurnClassified"] | components["schemas"]["TraceTemplateSent"] | components["schemas"]["TraceConsultantClosed"] | components["schemas"]["TraceThreadTaken"] | components["schemas"]["TraceAnalysisCompleted"] | components["schemas"]["TracePrequalificationDecided"] | components["schemas"]["TraceProcessStarted"] | components["schemas"]["TraceProcessStateChanged"] | components["schemas"]["TraceProcessEnded"];
         CaseTrace: {
             /** Format: uuid */
             process_id: string;
@@ -968,7 +968,7 @@ export interface operations {
             422: components["responses"]["InvalidRequest"];
         };
     };
-    searchAgents: {
+    searchConsultants: {
         parameters: {
             query?: {
                 q?: components["parameters"]["OptionalSearchQuery"];
@@ -980,20 +980,20 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Matching active agents. */
+            /** @description Matching active consultants. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AgentSearchResults"];
+                    "application/json": components["schemas"]["ConsultantSearchResults"];
                 };
             };
             404: components["responses"]["NotFound"];
             422: components["responses"]["InvalidRequest"];
         };
     };
-    requestAgentCode: {
+    requestConsultantCode: {
         parameters: {
             query?: never;
             header?: never;
@@ -1002,11 +1002,11 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RequestAgentCode"];
+                "application/json": components["schemas"]["RequestConsultantCode"];
             };
         };
         responses: {
-            /** @description The request was taken. A code was sent only if the pair matched an active agent. */
+            /** @description The request was taken. A code was sent only if the pair matched an active consultant. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1018,7 +1018,7 @@ export interface operations {
             422: components["responses"]["InvalidRequest"];
         };
     };
-    openAgentSession: {
+    openConsultantSession: {
         parameters: {
             query?: never;
             header?: never;
@@ -1027,11 +1027,11 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["OpenAgentSessionRequest"];
+                "application/json": components["schemas"]["OpenConsultantSessionRequest"];
             };
         };
         responses: {
-            /** @description Agent session. */
+            /** @description Consultant session. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1142,7 +1142,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    getCurrentAgent: {
+    getCurrentConsultant: {
         parameters: {
             query?: never;
             header?: never;
@@ -1151,20 +1151,20 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The agent on the token. */
+            /** @description The consultant on the token. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CurrentAgent"];
+                    "application/json": components["schemas"]["CurrentConsultant"];
                 };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
     };
-    listAgentQueue: {
+    listConsultantQueue: {
         parameters: {
             query?: never;
             header?: never;
@@ -1179,14 +1179,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AgentQueue"];
+                    "application/json": components["schemas"]["ConsultantQueue"];
                 };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
     };
-    getAgentCase: {
+    getConsultantCase: {
         parameters: {
             query?: never;
             header?: never;
@@ -1203,7 +1203,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AgentCase"];
+                    "application/json": components["schemas"]["ConsultantCase"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -1211,7 +1211,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    getAgentCaseTrace: {
+    getConsultantCaseTrace: {
         parameters: {
             query?: never;
             header?: never;
@@ -1236,7 +1236,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    closeAgentCase: {
+    closeConsultantCase: {
         parameters: {
             query?: never;
             header?: never;
@@ -1257,7 +1257,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AgentCloseResult"];
+                    "application/json": components["schemas"]["ConsultantCloseResult"];
                 };
             };
             401: components["responses"]["Unauthorized"];

@@ -73,8 +73,8 @@ def test_me_without_a_token_is_401(harness: Harness) -> None:
     assert harness.http.get("/me").status_code == 401
 
 
-def test_an_agent_token_cannot_read_a_customer_route(harness: Harness) -> None:
-    token = issue_token(settings.jwt_secret, SessionClaims(sub="AGT-OJ9N4FGYV9", role="agent"), datetime.now(UTC))
+def test_a_consultant_token_cannot_read_a_customer_route(harness: Harness) -> None:
+    token = issue_token(settings.jwt_secret, SessionClaims(sub="AGT-OJ9N4FGYV9", role="consultant"), datetime.now(UTC))
     response = harness.http.get("/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403
     assert response.json() == {"error": "forbidden"}

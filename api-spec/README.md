@@ -26,7 +26,7 @@ python3 -c "import sys; sys.path.insert(0, 'api-spec'); import generate; generat
 
 `generate.py` rewrites two files and stamps the SHA-256 of `openapi.yaml` on the first line of each. Do not edit those files by hand.
 
-Every string enum under `components/schemas` (`Role`, `ProcessState`, `Outcome`, `ReasonCode`, `Intent`, and the rest) also gets a named alias at the end of `api/contract_models.py`, for example `Role = Literal['customer', 'agent']`. Python code imports those names; it does not declare the same list again. A closed set that never crosses the wire (event names, command names, process rule ids) lives in the module that owns it.
+Every string enum under `components/schemas` (`Role`, `ProcessState`, `Outcome`, `ReasonCode`, `Intent`, and the rest) also gets a named alias at the end of `api/contract_models.py`, for example `Role = Literal['customer', 'consultant']`. Python code imports those names; it does not declare the same list again. A closed set that never crosses the wire (event names, command names, process rule ids) lives in the module that owns it.
 
 | Output | Consumer |
 |---|---|

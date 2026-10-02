@@ -4,23 +4,23 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from api.application.session.issue_code import issue_agent_code, issue_customer_code
-from api.application.session.open_session import open_agent_session, open_customer_session
-from api.domain.agents.identity import AgentIdentity
-from api.domain.agents.login import AgentLoginKey
+from api.application.session.issue_code import issue_consultant_code, issue_customer_code
+from api.application.session.open_session import open_consultant_session, open_customer_session
+from api.domain.consultants.identity import ConsultantIdentity
+from api.domain.consultants.login import ConsultantLoginKey
 from api.domain.customers.identity import CustomerIdentity
 from api.domain.session import codes
 from api.domain.session.codes import IssuedCode
-from api.domain.session.tokens import AGENT, CUSTOMER
+from api.domain.session.tokens import CONSULTANT, CUSTOMER
 
 SECRET = "unit-test-secret-0123456789abcdefghij"
 NOW = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
 JUAN = CustomerIdentity("CLI-9EDEKZ8OUNUR", "Juan Alberto", "Romero González", "juan.romero@example.com")
 NO_EMAIL = CustomerIdentity("CLI-MOCK00000000", "Rosa Elena", "Díaz Mora", None)
-CESAR = AgentIdentity(
+CESAR = ConsultantIdentity(
     "AGT-OJ9N4FGYV9", "E75612", "César", "González Sánchez", "cesar.gonzalez@example.com", "Active", "Créditos"
 )
-CESAR_KEY = AgentLoginKey("cesar.gonzalez@example.com", "E75612")
+CESAR_KEY = ConsultantLoginKey("cesar.gonzalez@example.com", "E75612")
 
 
 class MemCustomers:
@@ -37,15 +37,15 @@ class MemCustomers:
         return None
 
 
-class MemAgents:
-    def __init__(self, rows: dict[AgentLoginKey, AgentIdentity]) -> None:
+class MemConsultants:
+    def __init__(self, rows: dict[ConsultantLoginKey, ConsultantIdentity]) -> None:
         self.rows = rows
 
-    def find_by_login(self, key: AgentLoginKey) -> AgentIdentity | None:
+    def find_by_login(self, key: ConsultantLoginKey) -> ConsultantIdentity | None:
         return self.rows.get(key)
 
-    def find_by_id(self, agent_id: str) -> AgentIdentity | None:
-        return next((row for row in self.rows.values() if row.agent_id == agent_id), None)
+    def find_by_id(self, consultant_id: str) -> ConsultantIdentity | None:
+        return next((row for row in self.rows.values() if row.consultant_id == consultant_id), None)
 
 
 class MemCodes:
@@ -124,62 +124,62 @@ def test_a_code_that_cannot_be_spent_does_not_open_a_session() -> None:
 
 
 def cesar_issued_code() -> IssuedCode:
-    return IssuedCode(uuid4(), codes.hash_code(SECRET, CESAR.agent_id, "481206"), NOW + codes.CODE_TTL, 0, None)
+    return IssuedCode(uuid4(), codes.hash_code(SECRET, CESAR.consultant_id, "481206"), NOW + codes.CODE_TTL, 0, None)
 
 
-def test_an_active_agent_stores_the_hash_of_the_code_under_the_agent_role() -> None:
+def test_an_active_consultant_stores_the_hash_of_the_code_under_the_consultant_role() -> None:
     login_codes = MemCodes()
-    delivery = issue_agent_code(MemAgents({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E75612", NOW)
+    delivery = issue_consultant_code(MemConsultants({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E75612", NOW)
     assert delivery is not None
     assert delivery.email == CESAR.email
-    assert login_codes.stored == [codes.hash_code(SECRET, CESAR.agent_id, delivery.code)]
-    assert login_codes.subjects == [(CESAR.agent_id, AGENT)]
+    assert login_codes.stored == [codes.hash_code(SECRET, CESAR.consultant_id, delivery.code)]
+    assert login_codes.subjects == [(CESAR.consultant_id, CONSULTANT)]
 
 
 def test_the_typed_pair_is_matched_trimmed_and_without_case() -> None:
     login_codes = MemCodes()
-    agents = MemAgents({CESAR_KEY: CESAR})
-    delivery = issue_agent_code(agents, login_codes, SECRET, "  Cesar.Gonzalez@EXAMPLE.com ", " e75612 ", NOW)
+    consultants = MemConsultants({CESAR_KEY: CESAR})
+    delivery = issue_consultant_code(consultants, login_codes, SECRET, "  Cesar.Gonzalez@EXAMPLE.com ", " e75612 ", NOW)
     assert delivery is not None
-    assert login_codes.subjects == [(CESAR.agent_id, AGENT)]
+    assert login_codes.subjects == [(CESAR.consultant_id, CONSULTANT)]
 
 
 @pytest.mark.parametrize("status", ["Vacation", "Leave", "Inactive"])
-def test_an_agent_who_is_not_active_stores_nothing(status: str) -> None:
+def test_a_consultant_who_is_not_active_stores_nothing(status: str) -> None:
     login_codes = MemCodes()
-    away = MemAgents({CESAR_KEY: replace(CESAR, agent_status=status)})
-    assert issue_agent_code(away, login_codes, SECRET, CESAR.email, "E75612", NOW) is None
+    away = MemConsultants({CESAR_KEY: replace(CESAR, status=status)})
+    assert issue_consultant_code(away, login_codes, SECRET, CESAR.email, "E75612", NOW) is None
     assert login_codes.stored == []
 
 
 def test_an_unknown_pair_stores_nothing() -> None:
     login_codes = MemCodes()
-    assert issue_agent_code(MemAgents({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E30001", NOW) is None
+    assert issue_consultant_code(MemConsultants({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E30001", NOW) is None
     assert login_codes.stored == []
 
 
-def test_the_right_agent_code_is_spent_and_returns_the_agent() -> None:
+def test_the_right_consultant_code_is_spent_and_returns_the_consultant() -> None:
     issued = cesar_issued_code()
     login_codes = MemCodes(issued)
-    claims = open_agent_session(MemAgents({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E75612", "481206", NOW)
+    claims = open_consultant_session(MemConsultants({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E75612", "481206", NOW)
     assert claims is not None
-    assert claims.sub == CESAR.agent_id
-    assert claims.role == AGENT
+    assert claims.sub == CESAR.consultant_id
+    assert claims.role == CONSULTANT
     assert login_codes.spent is True
 
 
-def test_an_agent_who_is_no_longer_active_cannot_use_a_sent_code() -> None:
+def test_a_consultant_who_is_no_longer_active_cannot_use_a_sent_code() -> None:
     login_codes = MemCodes(cesar_issued_code())
-    on_leave = MemAgents({CESAR_KEY: replace(CESAR, agent_status="Leave")})
-    assert open_agent_session(on_leave, login_codes, SECRET, CESAR.email, "E75612", "481206", NOW) is None
+    on_leave = MemConsultants({CESAR_KEY: replace(CESAR, status="Leave")})
+    assert open_consultant_session(on_leave, login_codes, SECRET, CESAR.email, "E75612", "481206", NOW) is None
     assert login_codes.wrong == []
     assert login_codes.spent is False
 
 
-def test_a_wrong_agent_code_is_counted_and_does_not_open_a_session() -> None:
+def test_a_wrong_consultant_code_is_counted_and_does_not_open_a_session() -> None:
     issued = cesar_issued_code()
     login_codes = MemCodes(issued)
-    claims = open_agent_session(MemAgents({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E75612", "000000", NOW)
+    claims = open_consultant_session(MemConsultants({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E75612", "000000", NOW)
     assert claims is None
     assert login_codes.wrong == [issued.id]
     assert login_codes.spent is False

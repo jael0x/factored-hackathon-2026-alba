@@ -6,7 +6,7 @@ import { AppBar } from "./AppBar";
 
 const SIGN_IN_WITH: Record<Role, string> = {
   customer: "Entra de nuevo con tu documento.",
-  agent: "Entra de nuevo con tu correo y tu código de empleado.",
+  consultant: "Entra de nuevo con tu correo y tu código de empleado.",
 };
 
 export function SessionEnded({ role }: { role: Role }) {

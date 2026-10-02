@@ -16,7 +16,7 @@ tags:
   - name: Ops
   - name: Session
   - name: Customer
-  - name: Agent
+  - name: Consultant
 
 security:
   - bearerAuth: []
@@ -157,55 +157,55 @@ paths:
         "422":
           $ref: "#/components/responses/InvalidRequest"
 
-  /agents/search:
+  /consultants/search:
     get:
       tags: [Session]
-      operationId: searchAgents
+      operationId: searchConsultants
       security: []
-      summary: Demo helper. Search the active agents, or pick one at random.
+      summary: Demo helper. Search the active consultants, or pick one at random.
       description: >
-        Only with DEMO_LOGIN=1; not found otherwise. It fills the agent login form and never opens a session.
+        Only with DEMO_LOGIN=1; not found otherwise. It fills the consultant login form and never opens a session.
         Send q or random=true, not both and not neither.
-        Only agents whose agent_status is Active are listed, because only they can receive a code.
-        With q, at most 20 rows matching name, employee code, or agent_id,
-        ordered by last_name, first_name, agent_id ascending.
-        With random=true, one active agent.
+        Only consultants whose service_agents.agent_status is Active are listed, because only they can receive a code.
+        With q, at most 20 rows matching name, employee code, or consultant_id,
+        ordered by last_name, first_name, consultant_id ascending.
+        With random=true, one active consultant.
       parameters:
         - $ref: "#/components/parameters/OptionalSearchQuery"
         - $ref: "#/components/parameters/RandomPick"
       responses:
         "200":
-          description: Matching active agents.
+          description: Matching active consultants.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AgentSearchResults"
+                $ref: "#/components/schemas/ConsultantSearchResults"
         "404":
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/InvalidRequest"
 
-  /agent/session/code:
+  /consultant/session/code:
     post:
       tags: [Session]
-      operationId: requestAgentCode
+      operationId: requestConsultantCode
       security: []
-      summary: Email a 6-digit code to the active agent with this email and employee code.
+      summary: Email a 6-digit code to the active consultant with this email and employee code.
       description: >
         Spaces around either field are ignored, the email is compared in lower case, and the employee code
-        in upper case. When the pair matches an agent whose agent_status is Active, a code valid for
+        in upper case. When the pair matches a consultant whose service_agents.agent_status is Active, a code valid for
         10 minutes is stored as a hash and emailed to that address. A new request replaces any unused code
-        for the same agent. The response is the same for every pair and every status.
+        for the same consultant. The response is the same for every pair and every status.
         It never carries the code, the address, or the name.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RequestAgentCode"
+              $ref: "#/components/schemas/RequestConsultantCode"
       responses:
         "200":
-          description: The request was taken. A code was sent only if the pair matched an active agent.
+          description: The request was taken. A code was sent only if the pair matched an active consultant.
           content:
             application/json:
               schema:
@@ -213,27 +213,27 @@ paths:
         "422":
           $ref: "#/components/responses/InvalidRequest"
 
-  /agent/session:
+  /consultant/session:
     post:
       tags: [Session]
-      operationId: openAgentSession
+      operationId: openConsultantSession
       security: []
       summary: Exchange an email, an employee code, and the emailed code for a JWT.
       description: >
-        Claims inside the token are sub = agent_id, role = agent, exp 15 minutes.
-        The pair is matched as on the code request and must still belong to an active agent.
-        The code must be the latest unused one for that agent, under 10 minutes old, with fewer than
+        Claims inside the token are sub = consultant_id, role = consultant, exp 15 minutes.
+        The pair is matched as on the code request and must still belong to an active consultant.
+        The code must be the latest unused one for that consultant, under 10 minutes old, with fewer than
         5 wrong tries. The fifth wrong code spends it. A used code does not open a second session.
-        A customer code does not open an agent session. Every failure is the same unauthorized answer.
+        A customer code does not open a consultant session. Every failure is the same unauthorized answer.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/OpenAgentSessionRequest"
+              $ref: "#/components/schemas/OpenConsultantSessionRequest"
       responses:
         "200":
-          description: Agent session.
+          description: Consultant session.
           content:
             application/json:
               schema:
@@ -269,7 +269,7 @@ paths:
       operationId: listProducts
       summary: Products of the customer in the JWT, in the currency stored on the row.
       description: >
-        Requires role customer. An agent token is forbidden.
+        Requires role customer. A consultant token is forbidden.
         customer_id is optional. If it is absent, or equal to the token sub, the response is that customer's products.
         If it is any other id, the response is an empty list. Balances are not converted.
         Order is product_id ascending.
@@ -350,33 +350,33 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /agent/me:
+  /consultant/me:
     get:
-      tags: [Agent]
-      operationId: getCurrentAgent
-      summary: The session agent's id, employee code, name, and specialty.
+      tags: [Consultant]
+      operationId: getCurrentConsultant
+      summary: The session consultant's id, employee code, name, and specialty.
       description: >
-        Requires role agent. agent_id is the token sub. specialty is null when the file has none.
-        The agent screens read the name from here; the login responses never carry it.
+        Requires role consultant. consultant_id is the token sub. specialty is null when the file has none.
+        The consultant screens read the name from here; the login responses never carry it.
       responses:
         "200":
-          description: The agent on the token.
+          description: The consultant on the token.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CurrentAgent"
+                $ref: "#/components/schemas/CurrentConsultant"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /agent/queue:
+  /consultant/queue:
     get:
-      tags: [Agent]
-      operationId: listAgentQueue
+      tags: [Consultant]
+      operationId: listConsultantQueue
       summary: Processes in human_active.
       description: >
-        Requires role agent. Ended and ai_active processes are not listed.
+        Requires role consultant. Ended and ai_active processes are not listed.
         Order is processes.created_at ascending, then process id ascending.
       responses:
         "200":
@@ -384,19 +384,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AgentQueue"
+                $ref: "#/components/schemas/ConsultantQueue"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /agent/case/{process_id}:
+  /consultant/case/{process_id}:
     get:
-      tags: [Agent]
-      operationId: getAgentCase
+      tags: [Consultant]
+      operationId: getConsultantCase
       summary: Handoff packet for a process in human_active.
       description: >
-        Requires role agent. A process that is not human_active is not found.
+        Requires role consultant. A process that is not human_active is not found.
         Packet fields that come from analysis.completed are null when that event does not exist
         (a handoff before the policy ran). There is no text field and no reply body.
       parameters:
@@ -407,7 +407,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AgentCase"
+                $ref: "#/components/schemas/ConsultantCase"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -415,13 +415,13 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /agent/case/{process_id}/trace:
+  /consultant/case/{process_id}/trace:
     get:
-      tags: [Agent]
-      operationId: getAgentCaseTrace
+      tags: [Consultant]
+      operationId: getConsultantCaseTrace
       summary: The process events, in the order they were recorded.
       description: >
-        Requires role agent.
+        Requires role consultant.
         Included events are those whose process_id is this process, plus the single event
         referenced by process.started.caused_by_event_id when that opening message has a null process_id.
         If that caused_by_event_id is null, the opening message is not attached by time.
@@ -442,15 +442,15 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /agent/case/{process_id}/close:
+  /consultant/case/{process_id}/close:
     post:
-      tags: [Agent]
-      operationId: closeAgentCase
+      tags: [Consultant]
+      operationId: closeConsultantCase
       summary: Close a human_active case as pre-qualified or not.
       description: >
-        Requires role agent. outcome is PREQUALIFIED or NOT_PREQUALIFIED.
+        Requires role consultant. outcome is PREQUALIFIED or NOT_PREQUALIFIED.
         Any other outcome, or a text field, is invalid_body. There is no reply.
-        The handler appends conversation.agent_closed. It does not run the policy.
+        The handler appends conversation.consultant_closed. It does not run the policy.
         A second close of the same process is already_closed and does not append another event.
         A process that is not human_active is not found, except a process already ended, which is already_closed.
       parameters:
@@ -467,7 +467,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AgentCloseResult"
+                $ref: "#/components/schemas/ConsultantCloseResult"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -620,7 +620,7 @@ components:
 
     Role:
       type: string
-      enum: [customer, agent]
+      enum: [customer, consultant]
 
     ProcessState:
       type: string
@@ -685,7 +685,7 @@ components:
 
     DecidedBy:
       type: string
-      enum: [policy, agent]
+      enum: [policy, consultant]
 
     RuleId:
       type: string
@@ -697,7 +697,7 @@ components:
 
     Actor:
       type: string
-      enum: [customer, agent, system, rule]
+      enum: [customer, consultant, system, rule]
 
     MessageAuthor:
       type: string
@@ -746,12 +746,12 @@ components:
           items:
             $ref: "#/components/schemas/CustomerSearchHit"
 
-    AgentSearchHit:
+    ConsultantSearchHit:
       type: object
       additionalProperties: false
-      required: [agent_id, employee_code, first_name, last_name, email]
+      required: [consultant_id, employee_code, first_name, last_name, email]
       properties:
-        agent_id:
+        consultant_id:
           type: string
         employee_code:
           type: string
@@ -762,16 +762,16 @@ components:
         email:
           type: string
 
-    AgentSearchResults:
+    ConsultantSearchResults:
       type: object
       additionalProperties: false
-      required: [agents]
+      required: [consultants]
       properties:
-        agents:
+        consultants:
           type: array
           maxItems: 20
           items:
-            $ref: "#/components/schemas/AgentSearchHit"
+            $ref: "#/components/schemas/ConsultantSearchHit"
 
     RequestCustomerCode:
       type: object
@@ -804,7 +804,7 @@ components:
           type: string
           pattern: "^[0-9]{6}$"
 
-    RequestAgentCode:
+    RequestConsultantCode:
       type: object
       additionalProperties: false
       required: [email, employee_code]
@@ -816,7 +816,7 @@ components:
           type: string
           minLength: 1
 
-    OpenAgentSessionRequest:
+    OpenConsultantSessionRequest:
       type: object
       additionalProperties: false
       required: [email, employee_code, code]
@@ -840,7 +840,7 @@ components:
           type: string
         sub:
           type: string
-          description: customer_id or agent_id, the same value as the token sub claim.
+          description: customer_id or consultant_id, the same value as the token sub claim.
         role:
           $ref: "#/components/schemas/Role"
 
@@ -856,12 +856,12 @@ components:
         last_name:
           type: string
 
-    CurrentAgent:
+    CurrentConsultant:
       type: object
       additionalProperties: false
-      required: [agent_id, employee_code, first_name, last_name, specialty]
+      required: [consultant_id, employee_code, first_name, last_name, specialty]
       properties:
-        agent_id:
+        consultant_id:
           type: string
         employee_code:
           type: string
@@ -1004,7 +1004,7 @@ components:
             - $ref: "#/components/schemas/Certificate"
           nullable: true
 
-    AgentQueueItem:
+    ConsultantQueueItem:
       type: object
       additionalProperties: false
       required: [process_id, customer_id, first_name, last_name, product, reason_code, language]
@@ -1029,7 +1029,7 @@ components:
             - $ref: "#/components/schemas/TemplateLocale"
           nullable: true
 
-    AgentQueue:
+    ConsultantQueue:
       type: object
       additionalProperties: false
       required: [cases]
@@ -1037,9 +1037,9 @@ components:
         cases:
           type: array
           items:
-            $ref: "#/components/schemas/AgentQueueItem"
+            $ref: "#/components/schemas/ConsultantQueueItem"
 
-    AgentCase:
+    ConsultantCase:
       type: object
       additionalProperties: false
       description: >
@@ -1119,7 +1119,7 @@ components:
         outcome:
           $ref: "#/components/schemas/CloseOutcome"
 
-    AgentCloseResult:
+    ConsultantCloseResult:
       type: object
       additionalProperties: false
       required: [process_id, state, end_reason, outcome]
@@ -1268,19 +1268,19 @@ components:
             body:
               type: string
 
-    TraceAgentClosed:
+    TraceConsultantClosed:
       allOf:
         - $ref: "#/components/schemas/TraceEventBase"
         - type: object
           additionalProperties: false
-          required: [event_name, outcome, agent_id, language]
+          required: [event_name, outcome, consultant_id, language]
           properties:
             event_name:
               type: string
-              enum: [conversation.agent_closed]
+              enum: [conversation.consultant_closed]
             outcome:
               $ref: "#/components/schemas/CloseOutcome"
-            agent_id:
+            consultant_id:
               type: string
             language:
               allOf:
@@ -1416,7 +1416,7 @@ components:
         - $ref: "#/components/schemas/TraceMessageReceived"
         - $ref: "#/components/schemas/TraceTurnClassified"
         - $ref: "#/components/schemas/TraceTemplateSent"
-        - $ref: "#/components/schemas/TraceAgentClosed"
+        - $ref: "#/components/schemas/TraceConsultantClosed"
         - $ref: "#/components/schemas/TraceThreadTaken"
         - $ref: "#/components/schemas/TraceAnalysisCompleted"
         - $ref: "#/components/schemas/TracePrequalificationDecided"
@@ -1429,7 +1429,7 @@ components:
           conversation.message_received: "#/components/schemas/TraceMessageReceived"
           conversation.turn_classified: "#/components/schemas/TraceTurnClassified"
           conversation.template_sent: "#/components/schemas/TraceTemplateSent"
-          conversation.agent_closed: "#/components/schemas/TraceAgentClosed"
+          conversation.consultant_closed: "#/components/schemas/TraceConsultantClosed"
           conversation.thread_taken: "#/components/schemas/TraceThreadTaken"
           analysis.completed: "#/components/schemas/TraceAnalysisCompleted"
           prequalification.decided: "#/components/schemas/TracePrequalificationDecided"

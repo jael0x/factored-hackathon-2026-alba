@@ -1,11 +1,11 @@
-Feature: Agent close
-  As a credit agent
+Feature: Consultant close
+  As a credit consultant
   I want to close a referred case as pre-qualified or not
   So that the customer gets a clear answer written by the bank, not by me or the model
 
   Background:
     Given Alicia Mariana Parra Álvarez's credit card request was referred by rule "R05"
-    And César González Sánchez is signed in as an agent
+    And César González Sánchez is signed in as a consultant
 
   Scenario: The review queue lists only cases waiting for a person
     Given Juan's case ended as pre-qualified
@@ -25,7 +25,7 @@ Feature: Agent close
       | rule    | R05              |
       | policy  | alba-credit-v1   |
 
-  Scenario: The agent has no way to write in the thread
+  Scenario: The consultant has no way to write in the thread
     When César opens Alicia's case
     Then the only actions are to close as pre-qualified or as not pre-qualified
     And there is no field to reply to Alicia
@@ -51,7 +51,7 @@ Feature: Agent close
     Then her case stays closed as not pre-qualified
     And Alicia receives no second message
 
-  Scenario: The agent cannot close with any other outcome
+  Scenario: The consultant cannot close with any other outcome
     When César tries to close Alicia's case as "REFER"
     Then the close is rejected
     And Alicia's case stays in the review queue

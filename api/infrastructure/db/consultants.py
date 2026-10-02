@@ -1,15 +1,15 @@
 import psycopg
 
-from api.domain.agents.identity import AgentHit, AgentIdentity
-from api.domain.agents.login import ACTIVE_STATUS, AgentLoginKey
+from api.domain.consultants.identity import ConsultantHit, ConsultantIdentity
+from api.domain.consultants.login import ACTIVE_STATUS, ConsultantLoginKey
 from api.infrastructure.db.search import SEARCH_LIMIT, escape_like
 
 
-class PostgresAgents:
+class PostgresConsultants:
     def __init__(self, conn: psycopg.Connection) -> None:
         self._conn = conn
 
-    def find_by_login(self, key: AgentLoginKey) -> AgentIdentity | None:
+    def find_by_login(self, key: ConsultantLoginKey) -> ConsultantIdentity | None:
         row = self._conn.execute(
             """
             SELECT agent_id, employee_code, first_name, last_name, email, agent_status, specialty
@@ -18,20 +18,20 @@ class PostgresAgents:
             """,
             (key.email, key.employee_code),
         ).fetchone()
-        return AgentIdentity(*row) if row else None
+        return ConsultantIdentity(*row) if row else None
 
-    def find_by_id(self, agent_id: str) -> AgentIdentity | None:
+    def find_by_id(self, consultant_id: str) -> ConsultantIdentity | None:
         row = self._conn.execute(
             """
             SELECT agent_id, employee_code, first_name, last_name, email, agent_status, specialty
             FROM service_agents
             WHERE agent_id = %s
             """,
-            (agent_id,),
+            (consultant_id,),
         ).fetchone()
-        return AgentIdentity(*row) if row else None
+        return ConsultantIdentity(*row) if row else None
 
-    def search_active(self, query: str) -> list[AgentHit]:
+    def search_active(self, query: str) -> list[ConsultantHit]:
         rows = self._conn.execute(
             """
             SELECT agent_id, employee_code, first_name, last_name, email
@@ -47,9 +47,9 @@ class PostgresAgents:
             """,
             {"active": ACTIVE_STATUS, "needle": escape_like(query.strip()), "limit": SEARCH_LIMIT},
         ).fetchall()
-        return [AgentHit(*row) for row in rows]
+        return [ConsultantHit(*row) for row in rows]
 
-    def pick_random_active(self) -> list[AgentHit]:
+    def pick_random_active(self) -> list[ConsultantHit]:
         rows = self._conn.execute(
             """
             SELECT agent_id, employee_code, first_name, last_name, email
@@ -60,4 +60,4 @@ class PostgresAgents:
             """,
             (ACTIVE_STATUS,),
         ).fetchall()
-        return [AgentHit(*row) for row in rows]
+        return [ConsultantHit(*row) for row in rows]

@@ -35,7 +35,7 @@ function isSession(value: unknown): value is Session {
   return (
     typeof candidate.token === "string" &&
     typeof candidate.sub === "string" &&
-    (candidate.role === "customer" || candidate.role === "agent")
+    (candidate.role === "customer" || candidate.role === "consultant")
   );
 }
 
