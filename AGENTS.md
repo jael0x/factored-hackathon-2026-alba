@@ -74,7 +74,7 @@ A person who reviews a handed-off case is a consultant (`ARCHITECTURE.md`, "Orac
 - Identifiers in `db/` and `pipeline/` keep the dataset's name: the `service_agents` table and `service_agents.csv`, the columns `agent_id` and `agent_status`, `AGENTS_COLUMNS`, and the `AGT-` ids. Comments there say consultant.
 - Everywhere else the word is consultant: Python and TypeScript names, routes (`/consultant/...`, `/consultants/search`), the JWT role, wire fields (`consultant_id`), event names, rule ids, idempotency keys, comments, docs, specs, and `diagrams/c4.html`.
 - SQL is the only code that names the dataset columns. `api/infrastructure/db/consultants.py` reads `agent_id` and `agent_status` and returns a `ConsultantIdentity`; nothing above it sees those names.
-- Spanish screens say "asesor". `mocks/index.html` still says "Agente", `conversation.agent_closed`, and `agent_close:`; read them as asesor, `conversation.consultant_closed`, and `consultant_close:`.
+- Spanish screens say "asesor", in `web/` and in `mocks/index.html`.
 
 ## No magic strings
 
