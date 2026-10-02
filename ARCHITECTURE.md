@@ -106,7 +106,9 @@ api/
       events.py           # event-name constants, idempotency-key builders, the actor of each event
       lifecycle.py        # the allowed moves, the message stamp, parse_state
       new_events.py       # one constructor per event: key, actor, process_state, payload
-      rules.py            # pure match over the event already written, when the cycle is built
+      stored_events.py    # the typed record a rule reads, parsed from a stored event
+      commands.py         # command names and their payloads
+      rules.py            # rule ids, the command key, and the pure match over the event already written
   application/            # one file per use case. Defines the ports
     session/
       ports.py
@@ -317,16 +319,16 @@ If the model sends no product and the process already has one, the turn's `produ
 
 ## Process rules
 
-Source: `api/rules.py`. An in-memory list, sorted by ascending `priority`. There is no `rules` table in v1 and no per-organization override. Each rule appears once; a copy would fire twice.
+Source: `api/domain/process/rules.py`. In memory, in the order of this table; that order is the priority, and there is no separate priority field. There is no `rules` table in v1 and no per-organization override. Each rule appears once; a copy would fire twice.
 
-A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function over the event. `actions` is an ordered list of commands.
+A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function over the event. `actions` is an ordered list of commands. A rule reads the event through the typed record in `api/domain/process/stored_events.py`, which refuses a payload or a stamp the contract does not allow.
 
 | Id | Trigger | When | Commands |
 |---|---|---|---|
 | `open_process` | `conversation.message_received` | the `process_id` column is null | `process.start` |
 | `generate_while_ai` | `conversation.message_received` | the `process_state` column is `ai_active` | `conversation.generate` |
 | `record_only_when_human` | `conversation.message_received` | the `process_state` column is `human_active` | none. The message is already in the event |
-| `ask_confirm_prequalify` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `prequalify_card` or `prequalify_loan` | `template.send` for `confirm_prequalify`. Stores the product on the process. Stays `ai_active`. The policy is not called |
+| `ask_confirm_prequalify` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `prequalify_card` or `prequalify_loan` | `template.send` for `confirm_prequalify`. The product is already on the process: `conversation.generate` stored it with the turn. Stays `ai_active`. The policy is not called |
 | `run_policy` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `confirm_prequalify` and `product` is set | `policy.run` with that `product` and the turn's declared amount, null when none |
 | `decline_prequalify` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `decline_prequalify` | `conversation.show_reply`. Stays `ai_active`. The policy is not called |
 | `run_policy_income` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `provide_income` and `product` is set and `income_requested` | `policy.run` with that `product` and the declared amount |
@@ -356,6 +358,8 @@ The first message of a new case is stamped `ai_active` with `process_id` null. B
 ## Commands
 
 Table `commands`: `id`, `command_name`, `payload jsonb`, `triggered_by_event_id`, `emitted_by_rule_id`, `idempotency_key unique`, `status` (`pending` | `done` | `failed`), `attempt_count int`, `last_error text`, `created_at`.
+
+A command's `idempotency_key` is `command:{emitted_by_rule_id}:{command_name}:{triggered_by_event_id}`. No rule emits the same command twice, so matching one event again produces the same keys and enqueues nothing new. Command names and their payloads are in `api/domain/process/commands.py`; the rule ids and the command key builder are in `api/domain/process/rules.py`. The worker imports them from there.
 
 The worker takes `pending` rows with `FOR UPDATE SKIP LOCKED`, increments `attempt_count`, runs the command, and marks it `done` or `failed`. At most 3 attempts. On the third failure it writes a handoff event and transitions to `human_active` with `reason_code = tool_failed`. It does not retry in a loop.
 
