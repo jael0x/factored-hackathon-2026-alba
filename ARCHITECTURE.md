@@ -342,7 +342,7 @@ Order inside `policy.run`: read profile → engine → insert the event. Whether
 
 ## Policy `alba-credit-v1`
 
-File `api/domain/policy/alba-credit-v1.yaml`. Function `decide(profile, product, declared_income) -> Decision`. `product` is `credit_card` or `personal_loan`. `declared_income` is the amount stated for this run, in the profile's `income_currency`, or null when none was stated. Zero is an amount. The function does not change the profile: a stated amount leaves `income_local` null.
+File `api/domain/policy/alba-credit-v1.yaml`. Function `decide(profile, product, declared_income) -> Decision`. `product` is `credit_card` or `personal_loan`. `declared_income` is the amount stated for this run, in the profile's `income_currency`, or null when none was stated. Zero is an amount. A negative or non-finite amount is not an income: `decide` rejects it, and the caller does not pass one. The function does not change the profile: a stated amount leaves `income_local` null.
 
 Input `profile`, already materialized in `customer_credit_profile`:
 

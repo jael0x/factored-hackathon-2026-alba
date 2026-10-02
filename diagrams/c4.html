@@ -916,7 +916,7 @@ spec('policy', 'po-decide', {
   summary: 'Pure function. `declared_income` is null when none was stated.',
   fixed: [
     'Same input, same output. Lives in git. `product` is `credit_card` or `personal_loan`.',
-    '`declared_income` is this run\'s stated amount, or null. Zero is an amount. The profile is not changed.',
+    '`declared_income` is this run\'s stated amount, or null. Zero is an amount. A negative or non-finite amount is rejected. The profile is not changed.',
     'A bug on Juan is a bug for every customer with those facts. No `customer_id` branch inside the policy.',
     '`rule_trace` lists every evaluated rule and stops at the first terminal result. `passed` means the rule did not close. `self_declared` means a stated amount is this run\'s income and evaluation continues.',
   ],

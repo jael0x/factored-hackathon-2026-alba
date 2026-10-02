@@ -214,6 +214,10 @@ def parse_declared_income(value: object) -> Decimal | None:
         return None
     if type(value) is not Decimal:
         raise TypeError("declared_income must be Decimal or None")
+    if not value.is_finite():
+        raise ValueError("declared_income must be a finite amount")
+    if value < 0:
+        raise ValueError("declared_income must not be negative")
     return value
 
 

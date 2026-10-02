@@ -159,6 +159,18 @@ def test_a_float_is_not_a_declared_amount() -> None:
         parse_declared_income(45000.0)
 
 
+@pytest.mark.parametrize("amount", ["NaN", "sNaN", "Infinity", "-Infinity"])
+def test_a_non_finite_declared_income_is_rejected(amount: str) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        decide(profile(income_local=None), CREDIT_CARD, Decimal(amount))
+
+
+@pytest.mark.parametrize("amount", ["-0.01", "-45000"])
+def test_a_negative_declared_income_is_rejected(amount: str) -> None:
+    with pytest.raises(ValueError, match="negative"):
+        decide(profile(income_local=None), CREDIT_CARD, Decimal(amount))
+
+
 def test_an_unknown_product_is_rejected() -> None:
     with pytest.raises(ValueError, match="product 'mortgage' is outside the policy"):
         parse_product("mortgage")
