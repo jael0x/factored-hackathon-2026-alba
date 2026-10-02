@@ -259,7 +259,7 @@ Closed names. No others are invented in v1.
 | `process.state_changed` | `processes.state` changed | `from_state`, `to_state`, `end_reason` |
 | `process.ended` | reached `ended` | `end_reason`, `policy_version` |
 
-`rule_trace` is a list of `{rule_id, input, result}`. `facts` cites column and value, for example `{name: "credit_score", value: 812, source: "customer_credit_profile.credit_score", as_of: "2026-06-17"}`.
+`rule_trace` is a list of `{rule_id, input, result}`. `result` is `passed`, `self_declared`, or an outcome, as defined under Policy `alba-credit-v1`. `facts` cites column and value, for example `{name: "credit_score", value: 812, source: "customer_credit_profile.credit_score", as_of: "2026-06-17"}`.
 
 Idempotency keys:
 
@@ -342,7 +342,7 @@ Order inside `policy.run`: read profile → engine → insert the event. Whether
 
 ## Policy `alba-credit-v1`
 
-File `api/domain/policy/alba-credit-v1.yaml`. Function `decide(profile, product) -> Decision`. `product` is `credit_card` or `personal_loan`.
+File `api/domain/policy/alba-credit-v1.yaml`. Function `decide(profile, product, declared_income) -> Decision`. `product` is `credit_card` or `personal_loan`. `declared_income` is the amount stated for this run, in the profile's `income_currency`, or null when none was stated. Zero is an amount. A negative or non-finite amount is not an income: `decide` rejects it, and the caller does not pass one. The function does not change the profile: a stated amount leaves `income_local` null.
 
 Input `profile`, already materialized in `customer_credit_profile`:
 
@@ -359,7 +359,7 @@ Input `profile`, already materialized in `customer_credit_profile`:
 
 Exchange rates for that day, read from `daily_exchange_rates` (USD per one unit of local currency): 1 MXN = 0.058641 USD, 1 COP = 0.000248 USD, 1 ARS = 0.002873 USD.
 
-Evaluation order. `rule_trace` accumulates. The first rule with a terminal result wins and later rules are not evaluated.
+Evaluation order. `rule_trace` lists every rule that was evaluated, in this order, and stops at the first terminal result. Later rules are not evaluated. `result` is a closed set: `passed` when the rule was evaluated and did not close, `self_declared` when R06 takes a stated amount and evaluation continues, or one of `PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, `NEEDS_INFO` when the rule closes. `PREQUALIFIED` is reached only when every earlier rule returned `passed` (or R06 returned `self_declared` for a stated amount) and R05 then closes on a score of 620 or more.
 
 | Id | Condition | Terminal |
 |---|---|---|
@@ -400,6 +400,8 @@ No other bank action exists in this demo. There is no money movement and no acco
 R07 and R08 do not exist in the code. An income threshold or a `k * income` limit is not implemented. The certificate carries no limit amount and no rate for the new product.
 
 `Decision` holds `outcome`, `deciding_rule`, `rule_trace`, `facts`, `policy_version = "alba-credit-v1"`.
+
+`facts` cites the column of the rule that closed, with its value and `as_of`. When R06 returned `self_declared`, that income is also cited, ahead of the closing fact: `{name: "income_local", value: the amount, source: "self_declared", as_of: the profile's as_of}`. A stated amount while `income_local` is present is ignored: R06 returns `passed`, its `input` records both numbers, and no `self_declared` fact is written. File income is cited as `customer_credit_profile.income_local`. `holds_product` is cited with source `products`. The other facts use the profile column.
 
 Templates in `templates.py`, two locales: `es` and `pt`. The Portuguese is text written by the team; the dataset has none. The template receives the `Decision` and builds the paragraph. The model does not see this step.
 
@@ -705,7 +707,7 @@ These points are left open on purpose. Implementing them on your own breaks the 
 - A separate intent router beside `ConversationTurn`.
 - Full pandera/Great Expectations suites or a policy freshness rule (R10).
 
-Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D12 to D16, found by the Sep 29 spec review (the policy run key after `NEEDS_INFO`, a second vague request, an income typed before consent, handoffs that are not `REFER`, and three wording fixes), and D17 (no route lists a customer's cases). Each one that gets decided is written into this file.
+Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D12 to D15, D16 (1) and D16 (3) (the `ask_which_product` language check, and which commands change `processes.state`), and D17 (no route lists a customer's cases). D16 (2) is closed: `decide` takes `declared_income`. Each one that gets decided is written into this file.
 
 ## Known gaps
 

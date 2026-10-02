@@ -1,5 +1,6 @@
-import hashlib
+import importlib.util
 from pathlib import Path
+from types import ModuleType
 from typing import Union, get_args, get_origin
 
 import yaml
@@ -12,6 +13,7 @@ from api.main import app
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC_PATH = ROOT / "api-spec" / "openapi.yaml"
+GENERATOR_PATH = ROOT / "api-spec" / "generate.py"
 MODELS_PATH = ROOT / "api" / "contract_models.py"
 SCHEMA_PATH = ROOT / "web" / "src" / "api" / "schema.d.ts"
 
@@ -41,9 +43,12 @@ def spec_text() -> str:
     return SPEC_PATH.read_text(encoding="utf-8")
 
 
-def spec_sha256() -> str:
-    raw = SPEC_PATH.read_bytes().replace(b"\r\n", b"\n")
-    return hashlib.sha256(raw).hexdigest()
+def load_generator() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("generate", GENERATOR_PATH)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def load_spec() -> dict:
@@ -57,7 +62,7 @@ def test_spec_paths_are_the_wire_surface() -> None:
 
 
 def test_generated_files_match_the_spec_hash() -> None:
-    digest = spec_sha256()
+    digest: str = load_generator().spec_sha256()
     assert MODELS_PATH.read_text(encoding="utf-8").startswith(f"# spec-sha256: {digest}\n")
     assert SCHEMA_PATH.read_text(encoding="utf-8").startswith(f"// spec-sha256: {digest}\n")
 

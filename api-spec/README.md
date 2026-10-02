@@ -11,7 +11,7 @@ Do not hand-write a second DTO in `api/` or `web/`. Add the field here and regen
 
 ```bash
 python -m pip install -r requirements-dev.txt
-npm install --prefix api-spec
+npm ci --prefix api-spec
 python api-spec/generate.py
 ```
 
@@ -20,7 +20,7 @@ Without a local Python environment, the Python half runs in the test image (it h
 ```bash
 docker compose --profile test run --rm --no-deps -v "$PWD:/work" -w /work test \
   python -c "import sys; sys.path.insert(0, 'api-spec'); import generate; generate.generate_python(generate.spec_sha256())"
-npm install --prefix api-spec
+npm ci --prefix api-spec
 python3 -c "import sys; sys.path.insert(0, 'api-spec'); import generate; generate.generate_typescript(generate.spec_sha256())"
 ```
 

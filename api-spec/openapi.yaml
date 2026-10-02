@@ -691,6 +691,10 @@ components:
       type: string
       enum: [R01, R02, R03, R04, R05, R06, R09]
 
+    RuleTraceResult:
+      type: string
+      enum: [passed, self_declared, PREQUALIFIED, NOT_PREQUALIFIED, REFER, NEEDS_INFO]
+
     Actor:
       type: string
       enum: [customer, consultant, system, rule]
@@ -1162,7 +1166,7 @@ components:
           additionalProperties: true
           description: Condition snapshot recorded with the step. The trace displays it. No rule matches on it.
         result:
-          type: string
+          $ref: "#/components/schemas/RuleTraceResult"
 
     TraceEventBase:
       type: object

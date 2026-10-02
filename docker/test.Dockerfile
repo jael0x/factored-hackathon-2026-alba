@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir -r /app/requirements-dev.txt
 
 COPY pipeline /app/pipeline
 COPY api /app/api
-COPY api-spec/openapi.yaml /app/api-spec/openapi.yaml
+COPY api-spec/openapi.yaml api-spec/generate.py /app/api-spec/
 COPY web/src/api /app/web/src/api
 COPY db /app/db
 COPY pytest.ini /app/pytest.ini

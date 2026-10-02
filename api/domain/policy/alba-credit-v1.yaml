@@ -1,0 +1,25 @@
+policy_version: alba-credit-v1
+rules:
+  - R01
+  - R02
+  - R03
+  - R09
+  - R04
+  - R06
+  - R05
+customer_status:
+  refer:
+    - Suspended
+    - Inactive
+  not_prequalified:
+    - Closed
+  passed:
+    - Active
+score:
+  refer_min: 580
+  refer_max: 619
+  prequalified_min: 620
+delinquency:
+  refer_min: 1
+  refer_max: 29
+  fail_min: 30
