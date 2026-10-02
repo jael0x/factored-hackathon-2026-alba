@@ -8,7 +8,7 @@ from uuid import UUID
 
 import pytest
 
-from api.contract_models import EventName, Intent, ProductKey, TurnLanguage
+from api.contract_models import EndReason, EventName, Intent, ProductKey, TurnLanguage
 from api.domain.process.commands import (
     GENERATE_COMMAND,
     SHOW_REPLY_COMMAND,
@@ -365,8 +365,8 @@ def test_a_final_policy_outcome_renders_the_certificate(outcome: str) -> None:
 @pytest.mark.parametrize(
     ("outcome", "end_reason"), [("PREQUALIFIED", "prequalified"), ("NOT_PREQUALIFIED", "not_prequalified")]
 )
-def test_a_policy_certificate_ends_the_case_with_its_outcome(outcome: str, end_reason: str) -> None:
-    assert fired(decided(outcome, "policy")) == (("end_after_decision", end_process(end_reason)),)  # type: ignore[arg-type]
+def test_a_policy_certificate_ends_the_case_with_its_outcome(outcome: str, end_reason: EndReason) -> None:
+    assert fired(decided(outcome, "policy")) == (("end_after_decision", end_process(end_reason)),)
 
 
 @pytest.mark.parametrize("outcome", ["PREQUALIFIED", "NOT_PREQUALIFIED"])
@@ -379,10 +379,10 @@ def test_a_consultant_certificate_does_not_end_the_case_a_second_time(outcome: s
 @pytest.mark.parametrize(
     ("outcome", "end_reason"), [("PREQUALIFIED", "prequalified"), ("NOT_PREQUALIFIED", "not_prequalified")]
 )
-def test_a_consultant_close_renders_then_ends_without_the_policy(outcome: str, end_reason: str) -> None:
+def test_a_consultant_close_renders_then_ends_without_the_policy(outcome: str, end_reason: EndReason) -> None:
     assert fired(closed(outcome)) == (
         ("close_on_consultant_decision", render_decision("consultant")),
-        ("close_on_consultant_decision", end_process(end_reason)),  # type: ignore[arg-type]
+        ("close_on_consultant_decision", end_process(end_reason)),
     )
 
 

@@ -3,6 +3,7 @@ from uuid import UUID
 
 import pytest
 
+from api.contract_models import EventName, Outcome, ProcessState, ReasonCode
 from api.domain.process.stored_events import (
     AnalysisCompleted,
     ConsultantClosed,
@@ -48,8 +49,8 @@ def test_a_first_message_has_no_process_and_the_birth_state() -> None:
 
 
 @pytest.mark.parametrize("state", ["ai_active", "human_active"])
-def test_a_message_in_an_open_case_carries_its_state(state: str) -> None:
-    assert parse_message(PROCESS_ID, state) == MessageReceived(EVENT_ID, PROCESS_ID, state)  # type: ignore[arg-type]
+def test_a_message_in_an_open_case_carries_its_state(state: ProcessState) -> None:
+    assert parse_message(PROCESS_ID, state) == MessageReceived(EVENT_ID, PROCESS_ID, state)
 
 
 @pytest.mark.parametrize(
@@ -111,9 +112,9 @@ def test_an_amount_that_is_not_an_income_is_refused(amount: Decimal) -> None:
 
 
 @pytest.mark.parametrize("reason", ["reply_forbidden", "model_output_invalid"])
-def test_a_withheld_turn_keeps_only_its_reason(reason: str) -> None:
+def test_a_withheld_turn_keeps_only_its_reason(reason: ReasonCode) -> None:
     payload = turn_payload(reply_ok=False, reason_code=reason, intent=None, language=None)
-    assert parse_turn(payload) == WithheldTurn(EVENT_ID, reason)  # type: ignore[arg-type]
+    assert parse_turn(payload) == WithheldTurn(EVENT_ID, reason)
 
 
 def test_a_withheld_turn_needs_a_reason() -> None:
@@ -167,9 +168,9 @@ def test_a_missing_field_is_named() -> None:
 
 
 @pytest.mark.parametrize("outcome", ["PREQUALIFIED", "NOT_PREQUALIFIED", "REFER", "NEEDS_INFO"])
-def test_an_analysis_carries_its_outcome(outcome: str) -> None:
+def test_an_analysis_carries_its_outcome(outcome: Outcome) -> None:
     event = parse_stored_event(EVENT_ID, "analysis.completed", PROCESS_ID, "ai_active", {"outcome": outcome})
-    assert event == AnalysisCompleted(EVENT_ID, outcome)  # type: ignore[arg-type]
+    assert event == AnalysisCompleted(EVENT_ID, outcome)
 
 
 def test_a_decision_carries_its_outcome_and_who_decided() -> None:
@@ -207,9 +208,9 @@ def test_a_close_carries_its_outcome() -> None:
         "process.ended",
     ],
 )
-def test_an_event_no_rule_reads_keeps_only_its_name(event_name: str) -> None:
+def test_an_event_no_rule_reads_keeps_only_its_name(event_name: EventName) -> None:
     event = parse_stored_event(EVENT_ID, event_name, PROCESS_ID, "ai_active", {})
-    assert event == NoRuleEvent(EVENT_ID, event_name)  # type: ignore[arg-type]
+    assert event == NoRuleEvent(EVENT_ID, event_name)
 
 
 def test_an_unknown_event_name_is_refused() -> None:
