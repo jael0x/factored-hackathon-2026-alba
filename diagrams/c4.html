@@ -679,6 +679,7 @@ spec('events', 'e-table', {
   fixed: [
     'Columns: `id uuid`, `event_name`, `payload jsonb`, `customer_id`, `process_id uuid`, `process_state`, `actor` (`customer`, `consultant`, `system`, `rule`), `caused_by_event_id`, `caused_by_command_id`, `idempotency_key` unique, `created_at`.',
     '`process_id` and `process_state` are columns, not payload fields.',
+    '`actor` follows the event name: `customer` for the message, `consultant` for the close, `system` for the eight events a command writes (D19).',
     'Append-only. No `UPDATE` of `payload`. Index on `(process_id, created_at)`.',
   ],
   src: 'ARCHITECTURE.md, "Events", "Indexes"',
@@ -699,7 +700,7 @@ spec('events', 'e-names', {
   fixed: [
     '`conversation.message_received`, `conversation.turn_classified`, `conversation.template_sent`, `conversation.consultant_closed`, `conversation.thread_taken`.',
     '`analysis.completed`, `prequalification.decided`, `process.started`, `process.state_changed`, `process.ended`.',
-    'Defined once as constants. Call sites never repeat the literal.',
+    'The `EventName` enum in `api-spec/openapi.yaml`, equal to the trace discriminator. Constants in `api/domain/process/events.py`; call sites never repeat the literal.',
   ],
   src: 'ARCHITECTURE.md, "Events"; AGENTS.md, "No magic strings"',
 });
@@ -719,6 +720,7 @@ spec('events', 'e-idem', {
   fixed: [
     'Message `msg:{client_message_id}`. Turn `turn:{triggered_by_event_id}`. Template `template:{template_id}:{triggered_by_event_id}`. Open process `process:{customer_id}:credit_prequalification:{triggered_by_event_id}`.',
     'Run policy `policy:{process_id}:alba-credit-v1:{product}`. Transition `transition:{process_id}:{to_state}:{caused_by_event_id}`. Consultant close `consultant_close:{process_id}`. End `end:{process_id}`.',
+    'Transition and end write two events each; each event is keyed `{action key}:{event_name}` (D19). Every builder is in `api/domain/process/events.py`.',
   ],
   open: [['New', 'The run-policy key has no triggering event in it. Juliana\'s second run, after she states her income, repeats the key of her first `NEEDS_INFO` run for the same process and product, so it would be dropped.']],
   tests: ['A second message with the same key creates no event and no decision.'],

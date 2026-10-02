@@ -109,6 +109,13 @@ def test_every_spec_enum_has_a_named_alias() -> None:
         assert list(get_args(getattr(contract_models, name))) == values
 
 
+def test_event_names_are_the_trace_discriminator() -> None:
+    schemas = load_spec()["components"]["schemas"]
+    mapping = schemas["TraceEvent"]["discriminator"]["mapping"]
+    assert list(get_args(contract_models.EventName)) == list(mapping)
+    assert schemas["TraceEventBase"]["properties"]["event_name"] == {"$ref": "#/components/schemas/EventName"}
+
+
 def test_close_body_is_only_the_two_outcomes() -> None:
     closed = CloseCaseRequest.model_validate({"outcome": "PREQUALIFIED"})
     assert closed.outcome == "PREQUALIFIED"
