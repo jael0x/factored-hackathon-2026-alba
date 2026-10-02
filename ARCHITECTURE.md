@@ -95,6 +95,9 @@ api/
     consultants/
       identity.py         # ConsultantIdentity and the search hit
       login.py            # the login key (trimmed, case ignored) and who can receive a code (Active)
+    products/
+      product.py          # CustomerProduct, the six fields GET /products returns
+      listing.py          # which products the customer sees: not Closed, and not a loan at 0
     search.py             # exactly one search criterion, for both demo searches
     policy/               # credit rules, when that component is built
       engine.py           # pure function
@@ -113,6 +116,8 @@ api/
       search_customers.py
     consultants/
       search_consultants.py
+    products/
+      list_products.py    # the session customer's products; another customer_id gets none
     processes.py          # start, transition, end, when that component is built
   infrastructure/
     config/settings.py    # env, including DB_POOL_MIN and DB_POOL_MAX
@@ -124,7 +129,7 @@ api/
       search.py           # the demo search limit and LIKE escaping, shared by both searches
       events.py           # append to events, when that component is built
       profile.py          # gold by customer_id, when that read is built
-      products.py
+      products.py         # SQL for products, filtered on the session customer, ordered by product_id
       catalog.py
     mail/smtp.py          # sends the login code by SMTP; the only module that opens SMTP
     llm/                  # the only module that imports the OpenAI SDK, when the model is built
@@ -134,7 +139,7 @@ api/
     http/
       errors.py           # {error: ...} bodies for 401, 403, 404, 422
       dependencies.py     # wires a request to a use case. get_session lives here
-      routes/             # session (/session and /consultant/session), customers (/me and /customers), consultants (/consultant/me and /consultants), config, health
+      routes/             # session (/session and /consultant/session), customers (/me and /customers), products (/products), consultants (/consultant/me and /consultants), config, health
     worker/               # takes commands, when that loop is built
   fixtures/
     oracle_customers.json # the four profiles and César
@@ -145,7 +150,8 @@ web/
   src/api/schema.d.ts           # generated from api-spec/openapi.yaml
   src/pages/Login.tsx           # customer login; shares LoginShell, IdentityForm, CodeStep with the consultant login
   src/pages/ConsultantLogin.tsx # email and employee code, then the code
-  src/pages/Home.tsx
+  src/products.ts               # Spanish names for the product types and statuses of products.csv
+  src/pages/Home.tsx            # greeting, product cards, and the Preguntar por rows
   src/pages/ConsultantHome.tsx  # greeting from GET /consultant/me until the queue is built
   src/pages/Case.tsx            # customer: chat, plus the certificate if it exists
   src/pages/ConsultantQueue.tsx
@@ -158,6 +164,7 @@ pipeline/
 db/migrations/001_init.sql
 db/migrations/002_login.sql
 db/migrations/003_consultant_login.sql
+db/migrations/004_products_balance_required.sql
 eval/                       # comes later; does not block the flow
 compose.yaml
 docker/api.Dockerfile
@@ -501,7 +508,7 @@ Expired JWT: 401. The customer sees that the session ended. It is not silently r
 
 A customer whose process is `ended` with `prequalified` or `not_prequalified` sees the certificate. They do not see the queue. The consultant does not see `ended` processes in the queue. Juan does not appear in César's queue. Neither does Mariana. Alicia does.
 
-Currency on the home screen: the row's `products.currency` column. For customers in Mexico the file stores those balances in USD. They are not converted to MXN for display. On the certificate, income is shown in local currency with the USD equivalent and the exchange-rate date beside it. Alicia in COP. Mariana in ARS.
+The home screen lists what `GET /products` returns: the customer's products except closed ones and paid loans ("HTTP contract"). Currency on the home screen: the row's `products.currency` column. For customers in Mexico the file stores those balances in USD. They are not converted to MXN for display. On the certificate, income is shown in local currency with the USD equivalent and the exchange-rate date beside it. Alicia in COP. Mariana in ARS.
 
 ## HTTP contract
 
@@ -532,7 +539,7 @@ Regenerate after every edit to `openapi.yaml`. `api/tests/test_contract.py` fail
 
 A customer token on a consultant route is 403. A consultant token on a customer route is 403. Expired or missing token is 401. A body that is not in the schema is 422 `invalid_body`.
 
-`GET /products` returns `product_id`, `product_type` (the dataset literal), `product_number`, `currency`, `current_balance`, `product_status`, ordered by `product_id`. It does not return `days_past_due`, `credit_limit`, or `interest_rate`.
+`GET /products` returns `product_id`, `product_type` (the dataset literal), `product_number`, `currency`, `current_balance`, `product_status`, ordered by `product_id`. It does not return `days_past_due`, `credit_limit`, or `interest_rate`. It leaves out products whose `product_status` is `Closed`, and loans (`Préstamo Personal`, `Préstamo Hipotecario`) whose balance is 0: a loan at 0 is paid. The status in `products` is not changed, so a paid loan still marked `Active` counts as held for R09.
 
 `POST /messages` appends `conversation.message_received` and does not choose an outcome. The response waits until the worker has finished the commands enqueued from that event. The same `client_message_id` returns the case again and appends nothing.
 
@@ -552,7 +559,7 @@ The trace includes events with this `process_id`, plus that one opening message 
 
 PostgreSQL 16. `load` is the only process that reads S3. The API and `policy.run` read Postgres.
 
-`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
+`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. `004_products_balance_required.sql` sets an empty `products.current_balance` to 0 and makes the column `NOT NULL`. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
 
 ### Read tables
 
@@ -641,11 +648,15 @@ There is no legacy database to migrate and no cutover. The CSV is the source. "M
 
 The score gap and the income gap are not cleaned. Those nulls are the R04 and R06 paths. Imputing a mean score or income erases Juliana's case and the 32% that cannot be decided.
 
+Measured on Oct 1 over `products.csv`: `product_type` takes eight values (`Cuenta Ahorro`, `Tarjeta Crédito`, `Cuenta Corriente`, `Tarjeta Débito`, `Préstamo Personal`, `Préstamo Hipotecario`, `Inversión`, `Seguro`), and `product_status` four (`Active`, `Closed`, `Blocked`, `Suspended`). Currencies are `USD`, `COP`, and `ARS`, and no balance is empty. 10,422 customers hold no product. 32,039 products are `Closed` and 700 loans have a balance of 0 (594 of them `Active`), so `GET /products` leaves out 32,686 products and 12,933 customers see none. The API returns type and status as stored; the home screen names them in Spanish (`DESIGN.md`, "Home").
+
 Mexican balances are not reconciled to MXN. The `currency` column is copied as is. For products of customers in Mexico, the file says USD.
 
 No deduplication by name. The keys are `customer_id` and `product_id`, and these four files have no duplicates. The dictionary mentions about 2% duplicates across the full dataset: if they show up in a table this flow does not load, they are not touched.
 
 Empty `days_past_due` stays null in silver. When computing the maximum, the policy treats null as 0. The CSV is not filled in.
+
+An empty `current_balance` loads as 0. It is the only imputed value: the column is `NOT NULL` like the wire field it feeds, and no policy fact reads it. The Oct 1 file has no empty balance.
 
 `Inactive`, `Suspended`, and `Closed` customers are not dropped. R01 handles them. There are 14,914, 4,407, and 2,979 of them.
 
@@ -654,7 +665,7 @@ The load report writes counts: rows read, null scores, null incomes, active prod
 ## Pipeline
 
 1. Bronze: `aws s3 cp` into `data/raw/`, plus a manifest `{path, bytes, sha256}` in `load_batches`.
-2. Silver, inside Postgres: the four read tables, only the columns listed above. Types, empty `days_past_due` as null, currency copied, product names untranslated.
+2. Silver, inside Postgres: the four read tables, only the columns listed above. Types, empty `days_past_due` as null, empty `current_balance` as 0, currency copied, product names untranslated.
 3. Gold: `customer_credit_profile`, one row for each of the 150,000 customers, with the maximum days past due and `has_active_card`, `has_active_personal_loan`.
 
 Load quality checks (fail the `load` container if any fail): row counts for the four files match the expected snapshot sizes; null rates for `credit_score` and `estimated_monthly_income` are reported; every `products.customer_id` exists in `customers`. Lineage for this demo is `load_batches` (`path`, `bytes`, `sha256`, `batch_id` on gold). There is no freshness rule in the policy (data are a static snapshot). An update-correctness fixture changes one file on disk, observes a new `sha256`, and proves `load` reloads silver and gold; that fixture is labeled as such in `docs/data_quality.md` when written.
