@@ -310,7 +310,7 @@ The dark set is cool as well: page `#0F1218`, raised `#151922`, card `#1A1E28`, 
 
 `mocks/index.html` follows this file and the flows in `specs/`. Each screen fills the browser. The walkthrough chrome is dark, so it never reads as part of the bank:
 
-- A 44px bar at the top: "Recorrido", previous and next, and the current screen with its number, which opens a menu of every screen grouped as Cliente and Agente. Left and right arrow keys step through the screens.
+- A 44px bar at the top: "Recorrido", previous and next, and the current screen with its number, which opens a menu of every screen grouped as Cliente and Asesor. Left and right arrow keys step through the screens.
 - "Nota" opens a drawer on the right with that screen's walkthrough note. Raw identifiers such as `ai_active` appear only in the notes and on consultant screens. Escape closes it.
 - Template sentences that are not written yet show as a dashed placeholder naming the `template_id`.
 
@@ -366,7 +366,7 @@ Contrast, WCAG 2.x formula, computed Sep 29, 2026 for the values in this file. G
 
 ## Interface copy
 
-Interface labels are Spanish. They are the ones this file names; a screen not built yet takes its labels from `mocks/index.html`, except that the mock's "Agente" is "asesor" in the app. The login labels in `web/src/pages/Login.tsx` and `web/src/pages/ConsultantLogin.tsx` follow the Login and Consultant login sections above. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the consultant-close message) are not in this file: they live in `api/domain/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
+Interface labels are Spanish. They are the ones this file names; a screen not built yet takes its labels from `mocks/index.html`. The login labels in `web/src/pages/Login.tsx` and `web/src/pages/ConsultantLogin.tsx` follow the Login and Consultant login sections above. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the consultant-close message) are not in this file: they live in `api/domain/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
 
 ## Open
 
