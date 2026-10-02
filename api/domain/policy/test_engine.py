@@ -173,7 +173,7 @@ def test_a_negative_declared_income_is_rejected(amount: str) -> None:
 
 
 def test_an_unknown_product_is_rejected() -> None:
-    with pytest.raises(ValueError, match="product 'mortgage' is outside the policy"):
+    with pytest.raises(ValueError, match="product 'mortgage' is not one of credit_card, personal_loan"):
         parse_product("mortgage")
 
 
@@ -273,12 +273,12 @@ def test_customer_status_decides_before_the_score(status: CustomerStatus, outcom
 
 
 def test_an_unknown_customer_status_is_rejected() -> None:
-    with pytest.raises(ValueError, match="customer_status 'Frozen' is outside the policy"):
+    with pytest.raises(ValueError, match="customer_status 'Frozen' is not one of Active, Closed, Inactive, Suspended"):
         parse_customer_status("Frozen")
 
 
 def test_a_profile_with_an_unknown_customer_status_cannot_be_built() -> None:
-    with pytest.raises(ValueError, match="customer_status 'Frozen' is outside the policy"):
+    with pytest.raises(ValueError, match="customer_status 'Frozen' is not one of Active, Closed, Inactive, Suspended"):
         replace(profile(), customer_status="Frozen")  # type: ignore[arg-type]  # rows from the database are not type-checked
 
 
@@ -629,7 +629,9 @@ def test_a_status_left_out_is_rejected(tmp_path: Path) -> None:
 
 
 def test_a_status_the_policy_does_not_know_is_rejected(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match=re.escape("customer_status.passed 'Frozen' is outside the policy")):
+    with pytest.raises(
+        ValueError, match=re.escape("customer_status.passed 'Frozen' is not one of Active, Closed, Inactive, Suspended")
+    ):
         load_policy(policy_file(tmp_path, "    - Active", "    - Frozen"))
 
 
