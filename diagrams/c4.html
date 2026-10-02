@@ -711,21 +711,20 @@ spec('events', 'e-payloads', {
   name: 'Payload minimums', tech: 'per event', status: 'defined',
   summary: 'Each event carries every fact a downstream rule needs, `language` included.',
   fixed: [
-    'Turn: `intent`, `product`, `language`, `declared_income_amount`, `declared_income_currency`, `reply_text`, `reply_ok`, `reason_code`.',
+    'Turn: `intent`, `product`, `language`, `declared_income_amount`, `declared_income_currency`, `reply_text`, `reply_ok`, `reason_code`, `product_asked_count`, `income_requested`. The last two are stamped by `conversation.generate` from earlier events of the process (D13, D14).',
     '`analysis.completed` adds `language` to the policy fields. `prequalification.decided` carries `decided_by` (`policy` or `consultant`).',
     '`rule_trace` is a list of `{rule_id, input, result}`. `facts` cite name, value, source column, and `as_of`.',
   ],
   src: 'ARCHITECTURE.md, "Events"',
 });
 spec('events', 'e-idem', {
-  name: 'Idempotency keys', tech: '8 actions', status: 'partial',
+  name: 'Idempotency keys', tech: '8 actions', status: 'defined',
   summary: 'Every action has a key derived from facts, never from a clock.',
   fixed: [
     'Message `msg:{client_message_id}`. Turn `turn:{triggered_by_event_id}`. Template `template:{template_id}:{triggered_by_event_id}`. Open process `process:{customer_id}:credit_prequalification:{triggered_by_event_id}`.',
-    'Run policy `policy:{process_id}:alba-credit-v1:{product}`. Transition `transition:{process_id}:{to_state}:{caused_by_event_id}`. Consultant close `consultant_close:{process_id}`. End `end:{process_id}`.',
+    'Run policy `policy:{process_id}:alba-credit-v1:{product}:{triggered_by_event_id}` (D12): a run after `NEEDS_INFO` comes from another turn, so it has its own key. Transition `transition:{process_id}:{to_state}:{caused_by_event_id}`. Consultant close `consultant_close:{process_id}`. End `end:{process_id}`.',
     'Transition and end write two events each; each event is keyed `{action key}:{event_name}` (D19). Every builder is in `api/domain/process/events.py`.',
   ],
-  open: [['New', 'The run-policy key has no triggering event in it. Juliana\'s second run, after she states her income, repeats the key of her first `NEEDS_INFO` run for the same process and product, so it would be dropped.']],
   tests: ['A second message with the same key creates no event and no decision.'],
   src: 'ARCHITECTURE.md, "Events"; AGENTS.md, "Database"',
 });
@@ -762,22 +761,21 @@ spec('rules', 'ru-message', {
   src: 'ARCHITECTURE.md, "Process rules"',
 });
 spec('rules', 'ru-turn', {
-  name: 'On a classified turn', tech: '10 rules', status: 'partial',
+  name: 'On a classified turn', tech: '12 rules', status: 'defined',
   summary: 'Ask for consent, run the policy, ask which product, hand off, or show the reply.',
   fixed: [
     '`ask_confirm_prequalify`: `prequalify_card` or `prequalify_loan`, then `template.send` for `confirm_prequalify`. The product is stored; the policy is not called.',
-    '`run_policy`: `confirm_prequalify` with a product, then `policy.run`. `decline_prequalify`: then `conversation.show_reply`; the case stays `ai_active`.',
-    '`run_policy_income`: `provide_income` with a product, then `policy.run` with the declared amount. It does not ask for consent again.',
-    '`ask_which_product`: `provide_income` or `confirm_prequalify` with no product, then `template.send` for `which_product`.',
+    '`run_policy`: `confirm_prequalify` with a product, then `policy.run` with the turn\'s declared amount, null when none. `decline_prequalify`: then `conversation.show_reply`; the case stays `ai_active`.',
+    '`run_policy_income`: `provide_income` with a product and `income_requested`, then `policy.run` with the declared amount. It does not ask for consent again.',
+    '`ask_consent_for_income`: `provide_income` with a product and not `income_requested`, then `template.send` for `confirm_prequalify`; the amount is not used (D14).',
+    '`ask_which_product`: `provide_income` or `confirm_prequalify` with no product and `product_asked_count` under 2, then `template.send` for `which_product`.',
+    '`hand_off_no_product`: `clarify`, `provide_income`, or `confirm_prequalify` with no product and `product_asked_count` 2 or more, then `human_active` with `out_of_scope` (D13).',
     '`hand_off_human`, `hand_off_scope`, `hand_off_language`, `hand_off_reply`: to `human_active` with `customer_requested_human`, `out_of_scope`, `language_unsupported`, or the turn\'s own code.',
-    '`show_reply`: `clarify`, `product_info`, or `chit_chat`, then `conversation.show_reply`.',
-    'Every rule except `hand_off_reply` requires `reply_ok`. Every rule except `hand_off_language`, `hand_off_reply`, and `ask_which_product` requires `language` `es` or `pt`.',
+    '`show_reply`: `clarify`, `product_info`, or `chit_chat`, then `conversation.show_reply`, except a `clarify` that `hand_off_no_product` takes.',
+    'Every rule except `hand_off_reply` requires `reply_ok`. Every rule except `hand_off_language` and `hand_off_reply` requires `language` `es` or `pt` (D16 (1)).',
+    'Every classified turn matches exactly one rule.',
   ],
-  open: [
-    ['New', '`ask_which_product` does not check `language`, so a `provide_income` or `confirm_prequalify` turn with `language = other` matches it and `hand_off_language` at once.'],
-    ['New', '`run_policy_income` does not check that consent was given. A customer who states an income right after the consent question, instead of answering it, starts `policy.run` without confirming.'],
-  ],
-  tests: ['Every rule has a test that it does not fire.'],
+  tests: ['Every rule has a test that it does not fire.', 'Every combination of `reply_ok`, `language`, `intent`, `product`, `product_asked_count`, and `income_requested` matches exactly one rule.'],
   src: 'ARCHITECTURE.md, "Process rules"; AGENTS.md, "Tests"',
 });
 spec('rules', 'ru-analysis', {
@@ -966,9 +964,9 @@ spec('policy', 'po-asks', {
   name: 'What the customer is asked', tech: 'three questions', status: 'defined',
   summary: 'Which product, consent to start, and monthly income. Nothing else.',
   fixed: [
-    'Which product, when the turn names none.',
+    'Which product, when the turn names none. At most twice; the third turn that names none goes to a person with `out_of_scope` (D13).',
     'Whether to start this pre-qualification, once the product is known (`confirm_prequalify`, D8). Once per product request: a decline keeps the case open, and a later request asks again.',
-    'Monthly income, when a consented run returned `NEEDS_INFO`, read in the country\'s currency. Stating it does not ask for consent again.',
+    'Monthly income, when a consented run returned `NEEDS_INFO`, read in the country\'s currency. Stating it does not ask for consent again. An income stated instead of the consent answer gets the consent question again (D14).',
     'Never asked: score, days past due, status, or whether they hold the product. A null score is `REFER` with no question.',
     'After those asks the engine runs. `REFER` goes to the consultant; there is no further question.',
   ],
@@ -1081,7 +1079,6 @@ spec('llm', 'l-prompt', {
   ],
   open: [
     ['D11', 'Whether ID-like numbers typed by the customer are masked before the call.'],
-    ['New', 'The prompt carries no earlier turns, yet `out_of_scope` depends on whether one clarification already happened.'],
     ['New', 'The prompt text itself, and where it is versioned so eval runs can cite it.'],
   ],
   src: 'ARCHITECTURE.md, "How the model is called"',

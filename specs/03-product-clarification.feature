@@ -16,9 +16,22 @@ Feature: Product clarification
     Then the assistant asks whether to start the pre-qualification for a credit card
     And no certificate is shown
 
-  Scenario: A request that still names no product goes to a person
+  Scenario: A second request that names no product is asked again
     Given the assistant already asked Juan once which product he wants
     When Juan writes "el crédito"
+    Then the assistant asks whether he wants a credit card or a personal loan
+    And no certificate is shown
+    And his case stays with the assistant
+
+  Scenario: A third request that names no product goes to a person
+    Given the assistant already asked Juan twice which product he wants
+    When Juan writes "el crédito"
+    Then his case enters the review queue with reason "out_of_scope"
+    And no certificate is shown
+
+  Scenario: A confirmation that still names no product after two questions goes to a person
+    Given the assistant already asked Juan twice which product he wants
+    When Juan writes "sí"
     Then his case enters the review queue with reason "out_of_scope"
     And no certificate is shown
 
