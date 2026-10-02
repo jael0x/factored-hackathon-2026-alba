@@ -75,6 +75,7 @@ A consultant is a bank employee who reviews the cases the assistant hands off. T
 | Pipeline | Python, in the `load` container. Reads local CSVs. DuckDB only if the aggregate needs it; the result lands in Postgres |
 | LLM | OpenAI API, model `gpt-6-luna` (GPT-6 Luna). The adapter `api/infrastructure/llm/conversation.py` makes one call with Structured Outputs (the `ConversationTurn` JSON schema) and returns `ConversationTurn`. The policy does not use this adapter |
 | Tests | pytest in the API. Vitest only if the client has logic; business logic does not live in the client |
+| Quality gate | ruff (lint and format), mypy strict, pytest with branch coverage, `tsc` and the Vite build. GitHub Actions runs it on every pull request to `main` and every push to `main`. See **Quality gate** |
 | Running processes | A loop inside the API process that takes `commands` rows with `status = pending`. No Kafka, no Redis, no Inngest |
 
 ## File tree
@@ -163,6 +164,10 @@ compose.yaml
 docker/api.Dockerfile
 docker/web.Dockerfile
 docker/load.Dockerfile
+docker/test.Dockerfile
+pyproject.toml              # ruff, mypy, and coverage settings
+scripts/check.sh            # the Python gate; the test service and CI run it
+.github/workflows/quality.yml
 .env.example                # no secrets; the real .env is not committed
 mocks/index.html            # static walkthrough, not the frontend
 ```
@@ -609,6 +614,7 @@ Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` exclude
 | `api` | starts when `load` finished successfully. Mounts `api/` and reloads on save | yes |
 | `web` | the frontend, Vite, proxies `/api` to the API. Mounts `web/` and reloads on save | yes |
 | `mailpit` | local mail catcher. The API's only SMTP target; its inbox is at http://localhost:8025 | yes |
+| `test` | profile `test`, not started by `up`. Waits for Postgres and runs `scripts/check.sh` with `ALBA_REQUIRE_POSTGRES=1` | no |
 
 Who runs it: anyone with the repo, a `.env`, and Docker. The default local demo sets `DEMO_LOGIN=1` and sends every login code to Mailpit. There is no SMS and no real email. Reviewers run `docker compose up` and open the web URL from the compose file. Secrets stay in `.env`; they are not committed.
 
@@ -624,6 +630,26 @@ It does not list the bucket. It does not download transactions, transcripts, dig
 Without the AWS variables and without the CSVs, `load` exits with an error that says what is missing. It does not start an empty demo or one with the four profiles made up.
 
 The Postgres volume keeps gold. A second `up` does not reload if `load_batches` already holds the same `sha256` of the four files. Deleting the volume reloads.
+
+## Quality gate
+
+`.github/workflows/quality.yml` runs on every pull request to `main` and every push to `main`. It needs no secret: no `.env`, no S3 keys, no `OPENAI_API_KEY`. Four jobs. Each one is meant to be a required status check on `main`; that is a repository setting, not part of the workflow file:
+
+| Job | Fails when |
+|---|---|
+| `python` | `scripts/check.sh` fails: `ruff check`, `ruff format --check`, `mypy` (strict), a test, total coverage under its floor, or `api/domain/` under its floor. On a pull request, also when a changed line in `api/` or `pipeline/` is not covered (`diff-cover` against the base branch, 100%) |
+| `web` | `npm run typecheck` or `npm run build` in `web/` fails |
+| `contract` | `python api-spec/generate.py` changes `api/contract_models.py` or `web/src/api/schema.d.ts` |
+| `hygiene` | a tracked file is under `data/`, is a PDF, or is a `.env` other than `.env.example`, or gitleaks finds a secret in the commits the pull request or push adds |
+
+- **One script.** `scripts/check.sh` is the Python gate. The `test` compose service and the `python` job run the same file, so a green local run means a green job.
+- **Coverage is branch coverage** over `api/` and `pipeline/`. `api/contract_models.py`, test files, and `pipeline/__main__.py` are left out.
+- **Floors only go up.** The two floors live in `scripts/check.sh`, set on Oct 1, 2026 to the measured coverage rounded down. A change that raises coverage raises the floor there in the same change. Lowering a floor is a contract change.
+- **New code is fully covered.** The changed-lines check holds every pull request to 100%, independent of the floors. The target for `api/domain/` is 100%; the remaining gaps are in `api/domain/policy/engine.py` (policy-file validation and invariant guards).
+- **Integration tests cannot pass by skipping.** Without Postgres, `migrated_database` skips. With `ALBA_REQUIRE_POSTGRES=1` (the `test` service and the `python` job) it fails.
+- **mypy is strict** and `pyproject.toml` holds its settings. `api/contract_models.py` is generated and excluded from ruff and mypy. Ruff targets Python 3.12 but skips the PEP 695 generic syntax so host runs on 3.11 still import.
+- **Third-party actions are pinned** to a commit SHA, the gitleaks binary to a SHA-256, and every tool to an exact version in `requirements-dev.txt`. The workflow has `contents: read` only.
+- **Not in the gate yet:** `tsc` inside the `test` service (that image has no Node; `IMPLEMENTATION.md` I4), mutation testing for `api/domain/`, and running `specs/*.feature`.
 
 ## Data: what is touched and what is not
 

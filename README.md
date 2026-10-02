@@ -24,19 +24,23 @@ Open http://localhost:5173/ (API health at http://localhost:8000/health). `load`
 
 ### Tests
 
-Full suite (unit and integration tests; the integration tests recreate and migrate throwaway databases, `alba_test` and `alba_api_test`, through one fixture in `conftest.py`), preferred:
+The Python gate, `scripts/check.sh`: ruff, mypy strict, and the full suite with branch coverage (unit and integration tests; the integration tests recreate and migrate throwaway databases, `alba_test` and `alba_api_test`, through one fixture in `conftest.py`). Preferred:
 
 ```bash
 docker compose --profile test run --rm test
 ```
 
-On the host (unit always; integration needs Postgres on host port **55432**):
+On the host (unit always; integration needs Postgres on host port **55432**, and is skipped without it unless `ALBA_REQUIRE_POSTGRES=1`):
 
 ```bash
 docker compose up -d postgres
 python -m pip install -r requirements-dev.txt
-pytest
+sh scripts/check.sh
 ```
+
+The web app: `npm run typecheck && npm run build` in `web/`.
+
+CI runs the same checks on every pull request to `main` and every push to `main`. The jobs, coverage floors, and what fails them are in `ARCHITECTURE.md`, "Quality gate".
 
 ## Where things are
 
