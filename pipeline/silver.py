@@ -12,7 +12,6 @@ from pipeline.constants import (
     PRODUCTS_COLUMNS,
 )
 
-
 TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "customers.csv": CUSTOMERS_COLUMNS,
     "products.csv": PRODUCTS_COLUMNS,
@@ -59,26 +58,24 @@ def load_csv_table(
             raise SystemExit(f"CSV has no header: {path}")
         missing = [col for col in columns if col not in reader.fieldnames]
         if missing:
-            raise SystemExit(
-                f"CSV {path.name} missing columns {missing}. "
-                f"Found={list(reader.fieldnames)}"
-            )
+            raise SystemExit(f"CSV {path.name} missing columns {missing}. Found={list(reader.fieldnames)}")
         col_list = sql.SQL(", ").join(sql.Identifier(c) for c in columns)
         copy_sql = sql.SQL("COPY {} ({}) FROM STDIN").format(
             sql.Identifier(table),
             col_list,
         )
-        with conn.cursor() as cur:
-            with cur.copy(copy_sql) as copy:
-                for row in reader:
-                    values = [coerce_cell(col, row.get(col)) for col in columns]
-                    copy.write_row(values)
+        with conn.cursor() as cur, cur.copy(copy_sql) as copy:
+            for row in reader:
+                values = [coerce_cell(col, row.get(col)) for col in columns]
+                copy.write_row(values)
 
 
 def reload_silver(conn: psycopg.Connection, files: list[BronzeFile]) -> None:
     by_name = {item.relative_name: item for item in files}
     with conn.cursor() as cur:
-        cur.execute("TRUNCATE customer_credit_profile, products, customers, daily_exchange_rates, service_agents RESTART IDENTITY CASCADE")
+        cur.execute(
+            "TRUNCATE customer_credit_profile, products, customers, daily_exchange_rates, service_agents RESTART IDENTITY CASCADE"
+        )
     order = (
         "customers.csv",
         "products.csv",

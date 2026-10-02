@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -49,7 +50,7 @@ def test_assert_expected_row_counts_fails_on_mismatch(testdata_dir: Path) -> Non
 
 def test_assert_expected_row_counts_fails_when_missing(testdata_dir: Path) -> None:
     files = [_bronze(testdata_dir / "customers.csv")]
-    with pytest.raises(SystemExit, match="missing bronze file products.csv"):
+    with pytest.raises(SystemExit, match=re.escape("missing bronze file products.csv")):
         assert_expected_row_counts(files, {"products.csv": 2})
 
 

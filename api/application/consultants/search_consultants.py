@@ -10,7 +10,9 @@ class ConsultantSearch(Protocol):
     def pick_random_active(self) -> list[ConsultantHit]: ...
 
 
-def search_consultants(directory: ConsultantSearch, q: str | None, random: bool | None) -> list[ConsultantHit] | RejectedSearch:
+def search_consultants(
+    directory: ConsultantSearch, q: str | None, random: bool | None
+) -> list[ConsultantHit] | RejectedSearch:
     parsed = parse_search(q, random)
     if parsed is None:
         return RejectedSearch()

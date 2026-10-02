@@ -161,12 +161,15 @@ def test_changed_file_is_reloaded(
     ):
         (work / name).write_bytes((testdata_dir / name).read_bytes())
 
-    files = [_bronze(work / name) for name in (
-        "customers.csv",
-        "products.csv",
-        "daily_exchange_rates.csv",
-        "service_agents.csv",
-    )]
+    files = [
+        _bronze(work / name)
+        for name in (
+            "customers.csv",
+            "products.csv",
+            "daily_exchange_rates.csv",
+            "service_agents.csv",
+        )
+    ]
     batch_id = new_batch_id()
     with psycopg.connect(migrated_db) as conn:
         with conn.transaction():
@@ -181,12 +184,15 @@ def test_changed_file_is_reloaded(
             + "PRD-3,CLI-TEST-JUAN,Tarjeta Crédito,****1111,USD,10.00,Active,0\n",
             encoding="utf-8",
         )
-        changed = [_bronze(work / name) for name in (
-            "customers.csv",
-            "products.csv",
-            "daily_exchange_rates.csv",
-            "service_agents.csv",
-        )]
+        changed = [
+            _bronze(work / name)
+            for name in (
+                "customers.csv",
+                "products.csv",
+                "daily_exchange_rates.csv",
+                "service_agents.csv",
+            )
+        ]
         assert all_hashes_loaded(conn, changed) is False
 
         reload_batch = new_batch_id()
@@ -227,13 +233,18 @@ def test_orphan_product_fails_quality_check(
         "PRD-X,CLI-DOES-NOT-EXIST,Tarjeta Crédito,****0000,USD,1.00,Active,0\n",
         encoding="utf-8",
     )
-    files = [_bronze(work / name) for name in (
-        "customers.csv",
-        "products.csv",
-        "daily_exchange_rates.csv",
-        "service_agents.csv",
-    )]
-    with psycopg.connect(migrated_db) as conn:
-        with pytest.raises(psycopg.errors.ForeignKeyViolation):
-            with conn.transaction():
-                reload_silver(conn, files)
+    files = [
+        _bronze(work / name)
+        for name in (
+            "customers.csv",
+            "products.csv",
+            "daily_exchange_rates.csv",
+            "service_agents.csv",
+        )
+    ]
+    with (
+        psycopg.connect(migrated_db) as conn,
+        pytest.raises(psycopg.errors.ForeignKeyViolation),
+        conn.transaction(),
+    ):
+        reload_silver(conn, files)

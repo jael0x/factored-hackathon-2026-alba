@@ -30,23 +30,46 @@ class Consultant:
 
 
 JUAN = Customer("CLI-9EDEKZ8OUNUR", "71034840", "Juan Alberto", "Romero González", "juan.romero@example.com", "México")
-ALICIA = Customer("CLI-440CO5FZIY6A", "1144095213", "Alicia Mariana", "Parra Álvarez", "alicia.parra@example.com", "Colombia")
+ALICIA = Customer(
+    "CLI-440CO5FZIY6A", "1144095213", "Alicia Mariana", "Parra Álvarez", "alicia.parra@example.com", "Colombia"
+)
 JULIANA = Customer("CLI-MD60UR8PNJDI", "80526117", "Juliana", "Castro Gómez", "juliana.castro@example.com", "México")
 NO_EMAIL = Customer("CLI-MOCK00000000", "52917380", "Rosa Elena", "Díaz Mora", None, "Colombia")
 GONZALEZ = [
-    Customer(f"CLI-GONZ{index:08d}", f"4010{index:04d}", f"Cliente{index:02d}", "González Pérez", f"cliente{index}@example.com", "México")
+    Customer(
+        f"CLI-GONZ{index:08d}",
+        f"4010{index:04d}",
+        f"Cliente{index:02d}",
+        "González Pérez",
+        f"cliente{index}@example.com",
+        "México",
+    )
     for index in range(22)
 ]
 CUSTOMERS = [JUAN, ALICIA, JULIANA, NO_EMAIL, *GONZALEZ]
 
-CESAR = Consultant("AGT-OJ9N4FGYV9", "E75612", "César", "González Sánchez", "cesar.gonzalez@example.com", "Active", "Créditos")
-ON_VACATION = Consultant("AGT-TESTVAC001", "E20001", "Marta", "Ríos Vega", "marta.rios@example.com", "Vacation", "Cobranza")
+CESAR = Consultant(
+    "AGT-OJ9N4FGYV9", "E75612", "César", "González Sánchez", "cesar.gonzalez@example.com", "Active", "Créditos"
+)
+ON_VACATION = Consultant(
+    "AGT-TESTVAC001", "E20001", "Marta", "Ríos Vega", "marta.rios@example.com", "Vacation", "Cobranza"
+)
 ON_LEAVE = Consultant("AGT-TESTLEV001", "E20002", "Pablo", "Núñez Ortiz", "pablo.nunez@example.com", "Leave", None)
-INACTIVE = Consultant("AGT-TESTINA001", "E20003", "Lucía", "Herrera Cruz", "lucia.herrera@example.com", "Inactive", "Ventas")
-SHARED_CODE_DIEGO = Consultant("AGT-TESTSCA001", "E30001", "Diego", "Medina Paz", "diego.medina@example.com", "Active", "Fraudes")
-SHARED_CODE_SOFIA = Consultant("AGT-TESTSCB001", "E30001", "Sofía", "Medina Lara", "sofia.medina@example.com", "Active", None)
-SHARED_EMAIL_ANDRES = Consultant("AGT-TESTSEA001", "E40001", "Andrés", "Silva Mora", "equipo.silva@example.com", "Active", "Retención")
-SHARED_EMAIL_VALERIA = Consultant("AGT-TESTSEB001", "E40002", "Valeria", "Silva Mora", "equipo.silva@example.com", "Active", "Ventas")
+INACTIVE = Consultant(
+    "AGT-TESTINA001", "E20003", "Lucía", "Herrera Cruz", "lucia.herrera@example.com", "Inactive", "Ventas"
+)
+SHARED_CODE_DIEGO = Consultant(
+    "AGT-TESTSCA001", "E30001", "Diego", "Medina Paz", "diego.medina@example.com", "Active", "Fraudes"
+)
+SHARED_CODE_SOFIA = Consultant(
+    "AGT-TESTSCB001", "E30001", "Sofía", "Medina Lara", "sofia.medina@example.com", "Active", None
+)
+SHARED_EMAIL_ANDRES = Consultant(
+    "AGT-TESTSEA001", "E40001", "Andrés", "Silva Mora", "equipo.silva@example.com", "Active", "Retención"
+)
+SHARED_EMAIL_VALERIA = Consultant(
+    "AGT-TESTSEB001", "E40002", "Valeria", "Silva Mora", "equipo.silva@example.com", "Active", "Ventas"
+)
 CONSULTANTS = [
     CESAR,
     ON_VACATION,
@@ -72,7 +95,12 @@ def customer_login(document_number: str) -> Login:
 
 
 def consultant_login(email: str, employee_code: str) -> Login:
-    return Login("consultant", "/consultant/session/code", "/consultant/session", {"email": email, "employee_code": employee_code})
+    return Login(
+        "consultant",
+        "/consultant/session/code",
+        "/consultant/session",
+        {"email": email, "employee_code": employee_code},
+    )
 
 
 def login_of(consultant: Consultant) -> Login:
@@ -117,10 +145,7 @@ def seed_people(url: str) -> None:
             INSERT INTO customers (customer_id, document_number, first_name, last_name, email, country, segment, customer_status)
             VALUES (%s, %s, %s, %s, %s, %s, 'Basic', 'Active')
             """,
-            [
-                (c.customer_id, c.document_number, c.first_name, c.last_name, c.email, c.country)
-                for c in CUSTOMERS
-            ],
+            [(c.customer_id, c.document_number, c.first_name, c.last_name, c.email, c.country) for c in CUSTOMERS],
         )
         conn.cursor().executemany(
             """

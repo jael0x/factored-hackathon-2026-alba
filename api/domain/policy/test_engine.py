@@ -1,3 +1,4 @@
+import re
 from dataclasses import replace
 from datetime import date
 from decimal import Decimal
@@ -113,7 +114,7 @@ def test_every_product_key_has_a_holding_flag() -> None:
 
 
 def test_decide_runs_the_policy_file() -> None:
-    assert ALBA_CREDIT_V1 == load_policy()
+    assert load_policy() == ALBA_CREDIT_V1
 
 
 def test_terminal_trace_results_are_exactly_the_outcomes() -> None:
@@ -628,7 +629,7 @@ def test_a_status_left_out_is_rejected(tmp_path: Path) -> None:
 
 
 def test_a_status_the_policy_does_not_know_is_rejected(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="customer_status.passed 'Frozen' is outside the policy"):
+    with pytest.raises(ValueError, match=re.escape("customer_status.passed 'Frozen' is outside the policy")):
         load_policy(policy_file(tmp_path, "    - Active", "    - Frozen"))
 
 
