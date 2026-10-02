@@ -51,6 +51,7 @@ Gaps against the contract in what is built (item M0):
 - No lint or type-check config exists yet (I4).
 - Customer login built on Sep 29 and refined on Sep 30 (the two-column layout, the demo popover), one C4 component at a time: the screen (W2), the routes, and the engine. A browser mock (MSW) was tried and removed on Sep 30; screens are built against the local stack. `002_login.sql` adds `customers.email` and hashed codes; `mailpit` receives every code. `api/tests/test_login_integration.py` covers the `01` scenarios against Postgres, and `api/tests/test_code_rules_integration.py` runs the code rules (expiry, five wrong tries, replacement, one use) for both roles.
 - Consultant login built on Sep 30 the same way (D18): `/consultant/login` and a `/consultant` greeting (W8), `POST /consultant/session/code`, `POST /consultant/session`, and `GET /consultant/me`. On the layers of 537e417: `api/domain/consultants` (the login key and the `Active` rule), the consultant use cases in `api/application/session` on the same code steps as the customer's, `api/infrastructure/db/consultants.py`, and `api/presentation/http/routes/consultants.py`. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty`. `specs/11-consultant-login.feature` holds its scenarios, because `01` had reached 15; `api/tests/test_consultant_login_integration.py` covers them.
+- Customer home built on Oct 1 (W3, and the products part of E7): `GET /products` and `/` with the product cards. `api/tests/test_products_integration.py` and `api/application/products/test_list_products.py` cover the API side of `02`; the Spanish names and the empty state were checked in the browser, since the web app has no test runner yet (I4). E7 stays open for `profile.py` and `catalog.py`. Decided and built the same day: `GET /products` leaves out `Closed` products and loans at 0 (`api/domain/products/listing.py`), and `004_products_balance_required.sql` with the load writes 0 for an empty balance (`specs/10`).
 - I1, decided Sep 30: `api-spec/generate.py` appends a named alias for every string enum in `openapi.yaml` (`Role = Literal['customer', 'consultant']` and 17 more) to `api/contract_models.py`. Since Oct 1 `api/domain/session/tokens.py` imports `Role` from there too, so no set the wire carries is declared twice. `test_every_spec_enum_has_a_named_alias` guards the list.
 
 ## Interfaces (do first)
@@ -114,7 +115,9 @@ Gaps against the contract in what is built (item M0):
   Settles the C4 items on code hashing and wrong-attempt limits.
   - Specs: `01` all, `11` all.
   - Depends on I1 and I2.
-- [ ] **E7. Read routes.** Customer and consultant search, and products with the session filter. The demo customer and consultant searches, `GET /me`, and `GET /consultant/me` are built (Sep 29-30). `api/tools/profile.py`, `products.py`, `catalog.py`.
+- [ ] **E7. Read routes.** Customer and consultant search, and products with the session filter. The demo customer and consultant searches, `GET /me`, and `GET /consultant/me` are built (Sep 29-30). `api/infrastructure/db/profile.py`, `products.py`, `catalog.py`.
+  - Products, built Oct 1 with W3: `GET /products` on the layers of the login. `routes/products.py`, `application/products/list_products.py`, the product record under `domain/products/`, and the SQL in `infrastructure/db/products.py`. The query filters on the token `sub` and orders by `product_id`. A `customer_id` that is not the `sub` returns `[]` without a query. `domain/products/listing.py` leaves out `Closed` products and loans at 0.
+  - Product tests: the use case alone (no id, its own id, another id with the repository untouched), and against Postgres (Juan's two rows exactly, Juliana in USD, Alicia in COP, Juan asking for Alicia's id, a customer with no products, a loan at 0 left out and a card at 0 kept, 403 for a consultant token, 401 without one). The listing rule alone, per type and status. Sabotage runs drop the filter, the own-id rule, and the paid-loan rule.
   - Specs: `01` and `11` search scenarios; `02` all.
   - Depends on E6.
 - [ ] **E8. Case and consultant routes.** `POST /messages`, `GET /case/{process_id}`, the consultant queue, packet, trace, and close, exactly as in `ARCHITECTURE.md` "HTTP contract", typed with the generated models. That section already fixes the order (`created_at`, then id), the 404 and 409 cases, and the packet with null analysis fields when no `analysis.completed` exists.
@@ -160,8 +163,13 @@ Every screen follows `DESIGN.md` and `mocks/index.html`, and handles loading, er
 
 - [x] **W1. App shell.** Built Sep 29: routing, the aurora and tokens, the bearer token on every call, and the "Tu sesión terminó" card on 401. Each later page adds its own route.
 - [x] **W2. Customer login.** The document number, then the code from the email (Mailpit in the demo), and the demo search and random pick when `GET /config` says `demo_login`. Built Sep 29-30 against the real API. Specs: `01`.
-- [ ] **W3. Home.** Products in the row's currency. Specs: `02`.
-- [ ] **W4. Case.** The thread; one uuid per send; the typing indicator "escribiendo…" until the `POST /messages` response arrives, with no fixed sleep and no polling; the returned `Case` replaces the thread; the certificate when it exists. Specs: `03` to `07` as the customer sees them.
+- [x] **W3. Home.** Products in the row's currency. Specs: `02`.
+  - Built Oct 1 with E7's products part, against the local stack. White cards in a two-column grid, in the API's order. The top line is the Spanish name of `product_type` and the number masked to its last four. Then the amount with its code (`1,559.57 USD`), then the status in Spanish, in the gender of the product ("Activa", "Activo"). Closed products and paid loans do not reach the screen.
+  - One map in `web/src/products.ts` names the types and statuses that `ARCHITECTURE.md` "Data" lists. A value outside it shows as the file has it.
+  - No rate and no days past due: `GET /products` does not return them.
+  - A customer with no products reads "Todavía no tienes productos con nosotros.".
+  - The two "Preguntar por" rows show disabled until W4 wires them to `POST /messages`.
+- [ ] **W4. Case.** The thread; one uuid per send; the typing indicator "escribiendo…" until the `POST /messages` response arrives, with no fixed sleep and no polling; the returned `Case` replaces the thread; the certificate when it exists. The "Preguntar por" rows on `/` start sending here. Specs: `03` to `07` as the customer sees them.
 - [ ] **W5. Consultant queue and case.** The packet, two close actions, and no reply field. Specs: `08`. **Blocked** by D15 (3) for closes on non-`REFER` cases.
 - [ ] **W6. Trace.** The process's events in order, with the detail column of `09`. Specs: `09`.
 - [ ] **W7. Oracle flows in the browser.** The four oracle flows, one of them in Portuguese. Depends on E9 and W2 to W6.
