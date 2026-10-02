@@ -11,7 +11,7 @@ from api.contract_models import (
     RequestCustomerCode,
     Session,
 )
-from api.domain.session.codes import CODE_TTL, CodeDelivery
+from api.domain.session.codes import CODE_TTL_SECONDS, CodeDelivery
 from api.domain.session.tokens import SessionClaims, issue_token
 from api.infrastructure.mail.smtp import Mailer, get_mailer
 from api.presentation.http.dependencies import (
@@ -75,7 +75,7 @@ def open_consultant_session(
 def _code_requested(delivery: CodeDelivery | None, tasks: BackgroundTasks, mailer: Mailer) -> CodeRequested:
     if delivery is not None:
         tasks.add_task(mailer.send_login_code, delivery.email, delivery.code)
-    return CodeRequested(expires_in_seconds=int(CODE_TTL.total_seconds()))
+    return CodeRequested(expires_in_seconds=CODE_TTL_SECONDS)
 
 
 def _session(claims: SessionClaims | None, secret: str, now: datetime) -> Session:

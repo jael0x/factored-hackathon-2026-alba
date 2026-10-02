@@ -2,5 +2,9 @@
 -r api/requirements.txt
 pytest==8.4.2
 httpx==0.28.1
-pyyaml==6.0.2
 datamodel-code-generator==0.33.0
+pytest-cov==7.0.0
+ruff==0.13.2
+mypy==1.18.2
+types-PyYAML==6.0.12.20260906
+diff-cover==9.7.1

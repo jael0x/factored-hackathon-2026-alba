@@ -1,6 +1,7 @@
-import hashlib
+import importlib.util
 from pathlib import Path
-from typing import Union, get_args, get_origin
+from types import ModuleType
+from typing import Any, Union, get_args, get_origin
 
 import yaml
 from fastapi.routing import APIRoute
@@ -12,6 +13,7 @@ from api.main import app
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC_PATH = ROOT / "api-spec" / "openapi.yaml"
+GENERATOR_PATH = ROOT / "api-spec" / "generate.py"
 MODELS_PATH = ROOT / "api" / "contract_models.py"
 SCHEMA_PATH = ROOT / "web" / "src" / "api" / "schema.d.ts"
 
@@ -41,12 +43,16 @@ def spec_text() -> str:
     return SPEC_PATH.read_text(encoding="utf-8")
 
 
-def spec_sha256() -> str:
-    raw = SPEC_PATH.read_bytes().replace(b"\r\n", b"\n")
-    return hashlib.sha256(raw).hexdigest()
+def load_generator() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("generate", GENERATOR_PATH)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def load_spec() -> dict:
+# The parsed OpenAPI document nests to any depth, and the tests index into it freely.
+def load_spec() -> dict[str, Any]:
     loaded = yaml.safe_load(spec_text())
     assert isinstance(loaded, dict)
     return loaded
@@ -57,7 +63,7 @@ def test_spec_paths_are_the_wire_surface() -> None:
 
 
 def test_generated_files_match_the_spec_hash() -> None:
-    digest = spec_sha256()
+    digest: str = load_generator().spec_sha256()
     assert MODELS_PATH.read_text(encoding="utf-8").startswith(f"# spec-sha256: {digest}\n")
     assert SCHEMA_PATH.read_text(encoding="utf-8").startswith(f"// spec-sha256: {digest}\n")
 
@@ -101,6 +107,13 @@ def test_every_spec_enum_has_a_named_alias() -> None:
     assert enums
     for name, values in enums.items():
         assert list(get_args(getattr(contract_models, name))) == values
+
+
+def test_event_names_are_the_trace_discriminator() -> None:
+    schemas = load_spec()["components"]["schemas"]
+    mapping = schemas["TraceEvent"]["discriminator"]["mapping"]
+    assert list(get_args(contract_models.EventName)) == list(mapping)
+    assert schemas["TraceEventBase"]["properties"]["event_name"] == {"$ref": "#/components/schemas/EventName"}
 
 
 def test_close_body_is_only_the_two_outcomes() -> None:

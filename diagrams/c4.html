@@ -476,7 +476,7 @@ node('events', {
   parent: 'api', kind: 'component', name: 'Event store', tech: 'api/infrastructure/db/events.py',
   summary: 'Appends immutable events with idempotency keys, and stamps the process columns on a message.',
   desc: ['Appends to `events`. No `UPDATE` of a payload. Repeating a POST with the same key creates no new event and no new decision.'],
-  files: ['api/infrastructure/db/events.py'],
+  files: ['api/infrastructure/db/events.py', 'api/domain/process/new_events.py', 'db/migrations/004_event_sequence.sql'],
   src: 'ARCHITECTURE.md, "Events"',
 });
 node('rules', {
@@ -497,12 +497,12 @@ node('processes', {
   parent: 'api', kind: 'component', name: 'Process lifecycle', tech: 'api/application/processes.py',
   summary: 'Start, transition, end of `credit_prequalification`. The row in `processes` is the projection.',
   desc: ['Owns the process row and the allowed transitions. Any transition not in the table is an error and is not written.'],
-  files: ['api/application/processes.py'],
+  files: ['api/application/processes.py', 'api/domain/process/lifecycle.py', 'api/infrastructure/db/processes.py'],
   src: 'ARCHITECTURE.md, "Process"',
 });
 node('policy', {
   parent: 'api', kind: 'component', name: 'Policy engine', tech: 'api/domain/policy/engine.py',
-  summary: '`decide(profile, product) -> Decision`. Pure: same input, same output. Lives in git.',
+  summary: '`decide(profile, product, declared_income) -> Decision`. Pure: same input, same output. Lives in git.',
   desc: ['The only owner of eligibility. It is synthetic, because the dataset ships no credit manual, and the certificate says so. The model does not use it and cannot call it.'],
   files: ['api/domain/policy/engine.py', 'api/domain/policy/alba-credit-v1.yaml'],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"',
@@ -604,6 +604,7 @@ spec('routers', 'r-customer-msg', {
   fixed: [
     '`POST /messages` body is `text` and `client_message_id`. The `customer_id` comes from the JWT. The customer does not send `process_id` or `process_state`.',
     'Key `msg:{client_message_id}`. It does not wait for a process. Repeating the POST creates no new event and no new decision.',
+    'The same id with another text or from another customer is 409 `message_id_reused` and appends nothing.',
     'The response is the `Case`, sent after the worker finishes the commands enqueued from that event. The handler does not choose an outcome.',
     'In `human_active` the message is stored and the model is not called.',
   ],
@@ -629,7 +630,7 @@ spec('routers', 'r-reads', {
     '`GET /me`, `GET /consultant/me`, `GET /products`, `GET /case/{process_id}`, `GET /consultant/queue`, `GET /consultant/case/{process_id}`, `GET /consultant/case/{process_id}/trace`. Shapes are in `api-spec/openapi.yaml`.',
     'The filter `customer_id = jwt.sub` is in every customer query. A `customer_id` query that is not the token sub returns an empty product list.',
     'The customer API does not list `customer_credit_profile`. The certificate has no score, no limit, and no rate.',
-    'The consultant queue shows processes in `human_active` only. The trace shows the process `events` in order, plus the opening message via `caused_by_event_id`.',
+    'The consultant queue shows processes in `human_active` only. The trace shows the process `events` in the order they were written (`seq`), plus each message with a null `process_id` that one of them names in `caused_by_event_id`.',
   ],
   open: [
     ['New', 'The brief asks for "open questions" in the handoff; `PLAN.md` §2 notes that field is not in the contract.'],
@@ -674,12 +675,14 @@ spec('auth', 'a-session', {
 });
 
 spec('events', 'e-table', {
-  name: 'events table', tech: 'db/migrations/001_init.sql', status: 'defined',
+  name: 'events table', tech: 'db/migrations/001_init.sql, 004_event_sequence.sql', status: 'defined',
   summary: 'Append-only facts with actor, cause, process columns, and a unique key.',
   fixed: [
-    'Columns: `id uuid`, `event_name`, `payload jsonb`, `customer_id`, `process_id uuid`, `process_state`, `actor` (`customer`, `consultant`, `system`, `rule`), `caused_by_event_id`, `caused_by_command_id`, `idempotency_key` unique, `created_at`.',
+    'Columns: `id uuid`, `event_name`, `payload jsonb`, `customer_id`, `process_id uuid`, `process_state`, `actor` (`customer`, `consultant`, `system`, `rule`), `caused_by_event_id`, `caused_by_command_id`, `idempotency_key` unique, `created_at`, `seq` (identity: the order events were written in).',
     '`process_id` and `process_state` are columns, not payload fields.',
-    'Append-only. No `UPDATE` of `payload`. Index on `(process_id, created_at)`.',
+    '`actor` follows the event name: `customer` for the message, `consultant` for the close, `system` for the eight events a command writes (D19).',
+    'Every event has a `process_state`: the stamp for a message, otherwise the state its own write leaves the process in (D20).',
+    'Append-only. No `UPDATE` of `payload`. Indexes on `(process_id, created_at)`, `(process_id, seq)`, and unique `seq`.',
   ],
   src: 'ARCHITECTURE.md, "Events", "Indexes"',
 });
@@ -690,6 +693,7 @@ spec('events', 'e-stamp', {
     'An open process exists: `process_id` is that process and `process_state` its state.',
     'None open: `process_id` stays null and `process_state` is `ai_active`, the state a new process is born in.',
     'The event does not open the process; `open_process` does. The message row is never updated or copied.',
+    'The open process is read `FOR SHARE`: a message sent while the case moves waits and carries the result.',
   ],
   src: 'ARCHITECTURE.md, "Events"',
 });
@@ -699,7 +703,7 @@ spec('events', 'e-names', {
   fixed: [
     '`conversation.message_received`, `conversation.turn_classified`, `conversation.template_sent`, `conversation.consultant_closed`, `conversation.thread_taken`.',
     '`analysis.completed`, `prequalification.decided`, `process.started`, `process.state_changed`, `process.ended`.',
-    'Defined once as constants. Call sites never repeat the literal.',
+    'The `EventName` enum in `api-spec/openapi.yaml`, equal to the trace discriminator. Constants in `api/domain/process/events.py`; call sites never repeat the literal.',
   ],
   src: 'ARCHITECTURE.md, "Events"; AGENTS.md, "No magic strings"',
 });
@@ -719,6 +723,7 @@ spec('events', 'e-idem', {
   fixed: [
     'Message `msg:{client_message_id}`. Turn `turn:{triggered_by_event_id}`. Template `template:{template_id}:{triggered_by_event_id}`. Open process `process:{customer_id}:credit_prequalification:{triggered_by_event_id}`.',
     'Run policy `policy:{process_id}:alba-credit-v1:{product}`. Transition `transition:{process_id}:{to_state}:{caused_by_event_id}`. Consultant close `consultant_close:{process_id}`. End `end:{process_id}`.',
+    'Transition and end write two events each; each event is keyed `{action key}:{event_name}` (D19). Every builder is in `api/domain/process/events.py`.',
   ],
   open: [['New', 'The run-policy key has no triggering event in it. Juliana\'s second run, after she states her income, repeats the key of her first `NEEDS_INFO` run for the same process and product, so it would be dropped.']],
   tests: ['A second message with the same key creates no event and no decision.'],
@@ -866,6 +871,7 @@ spec('processes', 'p-catalog', {
     'One row: `process_key = credit_prequalification`, initial state `ai_active`, opened by `open_process` on the first message of a customer with no open process.',
     '`started` is not persisted. The row is born `ai_active` and `process.started` records it.',
     'A customer has at most one process with `state <> ended`, guaranteed by a partial unique index.',
+    'A replayed start returns its process; a start while another case is open writes nothing, and the message joins that case (D20).',
   ],
   src: 'ARCHITECTURE.md, "Process"',
 });
@@ -878,6 +884,7 @@ spec('processes', 'p-states', {
     '`ai_active` to `human_active`: policy `REFER`, request for a human, tool failure, unsupported language.',
     '`human_active`: nobody talks in the thread. The customer may write; the message is stored. The consultant closes with `prequalified` or `not_prequalified`.',
     '`ended` is not reopened. Another message opens a new process.',
+    'Staying in `ai_active` writes nothing. A move locks the row, checks its own key, then the table in `api/domain/process/lifecycle.py`; an illegal move writes nothing.',
   ],
   open: [['New', 'The `ai_active` to `human_active` triggers omit `out_of_scope`, `reply_forbidden`, and `model_output_invalid`, which `hand_off_scope` and `hand_off_reply` also cause.']],
   src: 'ARCHITECTURE.md, "Process", "Process rules"',
@@ -912,13 +919,14 @@ spec('processes', 'p-end', {
   src: 'ARCHITECTURE.md, "Process-native loop", "Commands", "Consultant close"',
 });
 spec('policy', 'po-decide', {
-  name: 'decide(profile, product)', tech: 'api/domain/policy/engine.py', status: 'partial',
-  summary: 'Pure function. `product` is `credit_card` or `personal_loan`.',
+  name: 'decide(profile, product, declared_income)', tech: 'api/domain/policy/engine.py', status: 'defined',
+  summary: 'Pure function. `declared_income` is null when none was stated.',
   fixed: [
     'Same input, same output. Lives in git. `product` is `credit_card` or `personal_loan`.',
+    '`declared_income` is this run\'s stated amount, or null. Zero is an amount. A negative or non-finite amount is rejected. The profile is not changed.',
     'A bug on Juan is a bug for every customer with those facts. No `customer_id` branch inside the policy.',
+    '`rule_trace` lists every evaluated rule and stops at the first terminal result. `passed` means the rule did not close. `self_declared` means a stated amount is this run\'s income and evaluation continues.',
   ],
-  open: [['New', 'The signature takes no declared income, yet R06 uses a stated amount as this run\'s income.']],
   tests: ['Break the function on purpose once and confirm the exact test goes red.'],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; AGENTS.md, "Tests"',
 });
@@ -946,6 +954,7 @@ spec('policy', 'po-rules', {
     'R04: no score, refer. The customer is not asked for it.',
     'R06: no income and none stated, `NEEDS_INFO`. No income and an amount stated: not terminal; the amount is this run\'s income, marked `self_declared`, the gold row stays null. Income on file: a typed number is ignored and R06 does not fire.',
     'R05: score below 580 does not pre-qualify, 580 to 619 refers, 620 or more pre-qualifies.',
+    'A prequalification trace is R01 through R05: the earlier rules are `passed`, and R05 closes on a score of 620 or more. A terminal rule stops the trace.',
   ],
   tests: [
     'Income None, score None, delinquency 30 and 29, status `Closed`, product already held.',
@@ -971,6 +980,7 @@ spec('policy', 'po-decision', {
   fixed: [
     '`outcome`, `deciding_rule`, `rule_trace`, `facts`, `policy_version = "alba-credit-v1"`.',
     'One outcome, not `is_prequalified` plus `needs_human`.',
+    '`facts` cites the closing rule. A `self_declared` income is cited ahead of it, with source `self_declared`. A typed amount is ignored when income is on file.',
   ],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; AGENTS.md, "Types"',
 });

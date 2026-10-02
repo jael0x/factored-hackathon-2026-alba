@@ -75,6 +75,7 @@ A consultant is a bank employee who reviews the cases the assistant hands off. T
 | Pipeline | Python, in the `load` container. Reads local CSVs. DuckDB only if the aggregate needs it; the result lands in Postgres |
 | LLM | OpenAI API, model `gpt-6-luna` (GPT-6 Luna). The adapter `api/infrastructure/llm/conversation.py` makes one call with Structured Outputs (the `ConversationTurn` JSON schema) and returns `ConversationTurn`. The policy does not use this adapter |
 | Tests | pytest in the API. Vitest only if the client has logic; business logic does not live in the client |
+| Quality gate | ruff (lint and format), mypy strict, pytest with branch coverage, `tsc` and the Vite build. GitHub Actions runs it on every pull request to `main` and every push to `main`. See **Quality gate** |
 | Running processes | A loop inside the API process that takes `commands` rows with `status = pending`. No Kafka, no Redis, no Inngest |
 
 ## File tree
@@ -99,11 +100,15 @@ api/
       product.py          # CustomerProduct, the six fields GET /products returns
       listing.py          # which products the customer sees: not Closed, and not a loan at 0
     search.py             # exactly one search criterion, for both demo searches
+    closed_sets.py        # parse_member: a stored or loaded value narrowed into its closed set
     policy/               # credit rules, when that component is built
       engine.py           # pure function
       alba-credit-v1.yaml # rules and thresholds
       templates.py        # certificate, ES and PT
     process/
+      events.py           # event-name constants, idempotency-key builders, the actor of each event
+      lifecycle.py        # the allowed moves, the message stamp, parse_state
+      new_events.py       # one constructor per event: key, actor, process_state, payload
       rules.py            # pure match over the event already written, when the cycle is built
   application/            # one file per use case. Defines the ports
     session/
@@ -118,7 +123,7 @@ api/
       search_consultants.py
     products/
       list_products.py    # the session customer's products; another customer_id gets none
-    processes.py          # start, transition, end, when that component is built
+    processes.py          # record a customer message, start, hand off, end; the Events and Processes ports
   infrastructure/
     config/settings.py    # env, including DB_POOL_MIN and DB_POOL_MAX
     db/
@@ -127,7 +132,8 @@ api/
       customers.py        # SQL for customers
       consultants.py      # SQL for service_agents
       search.py           # the demo search limit and LIKE escaping, shared by both searches
-      events.py           # append to events, when that component is built
+      events.py           # append to events, idempotent on the key
+      processes.py        # SQL for processes: the open case, the insert, the row lock, the state
       profile.py          # gold by customer_id, when that read is built
       products.py         # SQL for products, filtered on the session customer, ordered by product_id
       catalog.py
@@ -164,12 +170,17 @@ pipeline/
 db/migrations/001_init.sql
 db/migrations/002_login.sql
 db/migrations/003_consultant_login.sql
-db/migrations/004_products_balance_required.sql
+db/migrations/004_event_sequence.sql
+db/migrations/005_products_balance_required.sql
 eval/                       # comes later; does not block the flow
 compose.yaml
 docker/api.Dockerfile
 docker/web.Dockerfile
 docker/load.Dockerfile
+docker/test.Dockerfile
+pyproject.toml              # ruff, mypy, and coverage settings
+scripts/check.sh            # the Python gate; the test service and CI run it
+.github/workflows/quality.yml
 .env.example                # no secrets; the real .env is not committed
 mocks/index.html            # static walkthrough, not the frontend
 ```
@@ -224,13 +235,15 @@ Allowed transitions. Any other is an error and is not written.
 | `human_active` | `ended` | `prequalified` or `not_prequalified` | the consultant closes with that choice |
 | `ended` | none | none | not reopened. Another message creates a new process |
 
+Staying in `ai_active` is not a move: nothing is written for it. The three moves are in `api/domain/process/lifecycle.py`. `process.transition` makes the one move without an `end_reason`, to `human_active`; `process.end` makes the two moves to `ended`, each with its `end_reason`. A move takes the process row `FOR UPDATE`, checks its own key first (a replay returns without writing, even if the case moved on since), then the table. Anything else raises, and the transaction writes nothing.
+
 `reason_code` is a closed list: `customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`. No others. The policy rule that fired stays on `deciding_rule` (R05, R06, and the rest). `policy_refer` is the one code for every policy `REFER`.
 
 `started` is not persisted. The process `INSERT` is born in `ai_active`, and the `process.started` event records it.
 
 The process row also holds `product` (`credit_card` | `personal_loan` | null) and `language` (`es` | `pt` | null). Both stay null until a turn sets them.
 
-A customer has at most one process with `state <> 'ended'`. A partial unique index guarantees it.
+A customer has at most one process with `state <> 'ended'`. A partial unique index guarantees it. `process.start` inserts with `ON CONFLICT` on that index. If its own `process.started` key already exists, it returns that process and writes nothing, even if the case has ended since. If another case is open, for example when two first messages arrive before the case exists, it writes nothing and the message joins that case: its turn names the open process, and the message reaches the thread through the turn's `caused_by_event_id`.
 
 ### Consultant close
 
@@ -247,11 +260,15 @@ The same case cannot be closed twice. The event key is `consultant_close:{proces
 
 Table `events`. Append-only. No `UPDATE` of `payload`.
 
-Columns: `id uuid`, `event_name text`, `payload jsonb`, `customer_id text`, `process_id uuid`, `process_state text`, `actor text` (`customer` | `consultant` | `system` | `rule`), `caused_by_event_id uuid`, `caused_by_command_id uuid`, `idempotency_key text unique`, `created_at timestamptz`.
+Columns: `id uuid`, `event_name text`, `payload jsonb`, `customer_id text`, `process_id uuid`, `process_state text`, `actor text` (`customer` | `consultant` | `system` | `rule`), `caused_by_event_id uuid`, `caused_by_command_id uuid`, `idempotency_key text unique`, `created_at timestamptz`, `seq bigint` (identity).
 
-`process_id` and `process_state` are columns. They are not payload fields. The customer does not send them.
+`seq` is the order events were written in. Events written in one transaction share `created_at`, and `id` is random, so every order over events uses `seq`.
 
-Closed names. No others are invented in v1.
+`process_id` and `process_state` are columns. They are not payload fields. The customer does not send them. Every event carries a `process_state`. The message gets the stamp below. Every other event gets the state its own write leaves the process in: `ai_active` for `process.started`, the target for `process.state_changed`, `human_active` for `conversation.thread_taken`, `ended` for `process.ended`, and the process's current state for the rest. Each event's constructor in `api/domain/process/new_events.py` sets it.
+
+`actor` follows the event name, never the caller: `customer` for `conversation.message_received`, `consultant` for `conversation.consultant_closed`, and `system` for the other eight, which a worker command writes. No event in v1 is written with `rule`.
+
+Closed names. No others are invented in v1. They are the `EventName` enum in `api-spec/openapi.yaml`, equal to the trace discriminator; the constants live in `api/domain/process/events.py`.
 
 | `event_name` | When it is written | Minimum payload |
 |---|---|---|
@@ -266,7 +283,7 @@ Closed names. No others are invented in v1.
 | `process.state_changed` | `processes.state` changed | `from_state`, `to_state`, `end_reason` |
 | `process.ended` | reached `ended` | `end_reason`, `policy_version` |
 
-`rule_trace` is a list of `{rule_id, input, result}`. `facts` cites column and value, for example `{name: "credit_score", value: 812, source: "customer_credit_profile.credit_score", as_of: "2026-06-17"}`.
+`rule_trace` is a list of `{rule_id, input, result}`. `result` is `passed`, `self_declared`, or an outcome, as defined under Policy `alba-credit-v1`. `facts` cites column and value, for example `{name: "credit_score", value: 812, source: "customer_credit_profile.credit_score", as_of: "2026-06-17"}`.
 
 Idempotency keys:
 
@@ -281,9 +298,11 @@ Idempotency keys:
 | Consultant close | `consultant_close:{process_id}` |
 | End process | `end:{process_id}` |
 
-The frontend sends `client_message_id` (one uuid per send). The message key is that uuid. It does not wait for a `process_id`. Repeating the POST creates no new event and no new decision.
+The key in this table belongs to the action. An action that writes one event gives it that key. `process.transition` and `process.end` write two events each, so each of those events is keyed `{action key}:{event_name}`: for example `end:{process_id}:process.state_changed` and `end:{process_id}:process.ended`. The builders for every key are in `api/domain/process/events.py`.
 
-When `conversation.message_received` is inserted, the API stamps the two columns:
+The frontend sends `client_message_id` (one uuid per send). The message key is that uuid. It does not wait for a `process_id`. Repeating the POST creates no new event and no new decision. A key names one fact: the same key with the same `event_name`, `customer_id`, and `payload` returns the stored event; the same key with anything else raises `IdempotencyConflict` and writes nothing. For a message, that is another text or another customer, and `POST /messages` answers 409 `message_id_reused`.
+
+When `conversation.message_received` is inserted, the API stamps the two columns. It reads the open process `FOR SHARE`, so a message sent while that process moves waits for the move and carries its result:
 
 - If the customer already has a process with `state <> 'ended'`, `process_id` is that process and `process_state` is its state.
 - If not, `process_id` stays null and `process_state` is `ai_active`, the state a new process is born in. The event does not open the process. The `open_process` rule does.
@@ -336,7 +355,7 @@ The worker takes `pending` rows with `FOR UPDATE SKIP LOCKED`, increments `attem
 
 | `command_name` | Does | Does not |
 |---|---|---|
-| `process.start` | inserts `processes` and `process.started` | call the model |
+| `process.start` | inserts `processes` and `process.started`. Writes nothing when its key exists or another case is open | call the model |
 | `process.transition` | changes `state`, writes `process.state_changed` and, if the target is `human_active`, `conversation.thread_taken` | call the model |
 | `process.end` | `state = ended`. Writes `process.state_changed` and `process.ended`, both with the same `end_reason` | call the model, and does not run the policy again |
 | `conversation.generate` | one LLM call, persists the JSON, writes `conversation.turn_classified`. If the message `process_id` is null, the turn uses the process this cycle just opened for that customer. Stores `language` and, when set, `product` on the process | write `analysis.completed`, enqueue `policy.run` or `process.transition`, copy the customer message, update the message row |
@@ -349,7 +368,7 @@ Order inside `policy.run`: read profile → engine → insert the event. Whether
 
 ## Policy `alba-credit-v1`
 
-File `api/domain/policy/alba-credit-v1.yaml`. Function `decide(profile, product) -> Decision`. `product` is `credit_card` or `personal_loan`.
+File `api/domain/policy/alba-credit-v1.yaml`. Function `decide(profile, product, declared_income) -> Decision`. `product` is `credit_card` or `personal_loan`. `declared_income` is the amount stated for this run, in the profile's `income_currency`, or null when none was stated. Zero is an amount. A negative or non-finite amount is not an income: `decide` rejects it, and the caller does not pass one. The function does not change the profile: a stated amount leaves `income_local` null.
 
 Input `profile`, already materialized in `customer_credit_profile`:
 
@@ -366,7 +385,7 @@ Input `profile`, already materialized in `customer_credit_profile`:
 
 Exchange rates for that day, read from `daily_exchange_rates` (USD per one unit of local currency): 1 MXN = 0.058641 USD, 1 COP = 0.000248 USD, 1 ARS = 0.002873 USD.
 
-Evaluation order. `rule_trace` accumulates. The first rule with a terminal result wins and later rules are not evaluated.
+Evaluation order. `rule_trace` lists every rule that was evaluated, in this order, and stops at the first terminal result. Later rules are not evaluated. `result` is a closed set: `passed` when the rule was evaluated and did not close, `self_declared` when R06 takes a stated amount and evaluation continues, or one of `PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, `NEEDS_INFO` when the rule closes. `PREQUALIFIED` is reached only when every earlier rule returned `passed` (or R06 returned `self_declared` for a stated amount) and R05 then closes on a score of 620 or more.
 
 | Id | Condition | Terminal |
 |---|---|---|
@@ -407,6 +426,8 @@ No other bank action exists in this demo. There is no money movement and no acco
 R07 and R08 do not exist in the code. An income threshold or a `k * income` limit is not implemented. The certificate carries no limit amount and no rate for the new product.
 
 `Decision` holds `outcome`, `deciding_rule`, `rule_trace`, `facts`, `policy_version = "alba-credit-v1"`.
+
+`facts` cites the column of the rule that closed, with its value and `as_of`. When R06 returned `self_declared`, that income is also cited, ahead of the closing fact: `{name: "income_local", value: the amount, source: "self_declared", as_of: the profile's as_of}`. A stated amount while `income_local` is present is ignored: R06 returns `passed`, its `input` records both numbers, and no `self_declared` fact is written. File income is cited as `customer_credit_profile.income_local`. `holds_product` is cited with source `products`. The other facts use the profile column.
 
 Templates in `templates.py`, two locales: `es` and `pt`. The Portuguese is text written by the team; the dataset has none. The template receives the `Decision` and builds the paragraph. The model does not see this step.
 
@@ -530,7 +551,7 @@ Regenerate after every edit to `openapi.yaml`. `api/tests/test_contract.py` fail
 | `GET /me` | customer | | `{customer_id, first_name, last_name}` of the token's customer. The login responses never carry a name |
 | `GET /consultant/me` | consultant | | `{consultant_id, employee_code, first_name, last_name, specialty}` of the token's consultant. `specialty` may be null |
 | `GET /products` | customer | optional `customer_id` query | that customer's products, or `[]` if the query id is not the token `sub` |
-| `POST /messages` | customer | `{text, client_message_id}` | the `Case` after the worker finishes that cycle's commands |
+| `POST /messages` | customer | `{text, client_message_id}` | the `Case` after the worker finishes that cycle's commands. 409 if the id was sent with another text or by another customer |
 | `GET /case/{process_id}` | customer | | `Case` for the token's customer. Another customer's id is 404 |
 | `GET /consultant/queue` | consultant | | processes in `human_active` |
 | `GET /consultant/case/{process_id}` | consultant | | handoff packet. 404 unless the process is `human_active` |
@@ -541,9 +562,9 @@ A customer token on a consultant route is 403. A consultant token on a customer 
 
 `GET /products` returns `product_id`, `product_type` (the dataset literal), `product_number`, `currency`, `current_balance`, `product_status`, ordered by `product_id`. It does not return `days_past_due`, `credit_limit`, or `interest_rate`. It leaves out products whose `product_status` is `Closed`, and loans (`Préstamo Personal`, `Préstamo Hipotecario`) whose balance is 0: a loan at 0 is paid. The status in `products` is not changed, so a paid loan still marked `Active` counts as held for R09.
 
-`POST /messages` appends `conversation.message_received` and does not choose an outcome. The response waits until the worker has finished the commands enqueued from that event. The same `client_message_id` returns the case again and appends nothing.
+`POST /messages` appends `conversation.message_received` and does not choose an outcome. The response waits until the worker has finished the commands enqueued from that event. The same `client_message_id` with the same text from the same customer returns the case again and appends nothing. With another text or from another customer it is 409 `message_id_reused` and appends nothing.
 
-`Case.messages` is one list. Customer lines are the `conversation.message_received` events for that process, including the opening message reached only by `process.started.caused_by_event_id` when that event's `process_id` is null. Assistant and template lines are `messages` rows. A row with a null `event_id` is omitted and logged, not attached by time. Order is the linked event's `created_at`, then event `id`.
+`Case.messages` is one list. Customer lines are the `conversation.message_received` events for that process, plus each such event with a null `process_id` that an event of the process names in `caused_by_event_id`: the opening message through `process.started`, and a message sent before the case existed that joined it. Assistant and template lines are `messages` rows. A row with a null `event_id` is omitted and logged, not attached by time. Order is the linked event's `seq`.
 
 `Case.certificate` is null until `prequalification.decided` exists. It carries `locale`, `outcome`, `body`, `product`, and the income fields copied from `analysis.completed` facts named `income_local`, `income_currency`, and `income_usd`. `as_of` is the `as_of` of the `income_local` fact. A missing fact is null. The certificate has no credit limit and no rate. It does not include the score or the deciding rule.
 
@@ -551,7 +572,7 @@ The consultant queue is ordered by `processes.created_at`, then process id. Each
 
 The packet copies `product`, `credit_score`, the income fields, `deciding_rule`, `policy_version`, and `outcome` from `analysis.completed`. Those fields are null when that event does not exist. `reason_code` comes from `conversation.thread_taken`.
 
-The trace includes events with this `process_id`, plus that one opening message by `caused_by_event_id`. Order is `created_at`, then event `id`. `rule_trace.input` is an open object (`dict[str, Any]` in the generated model): the engine records the condition snapshot, and no matcher branches on it.
+The trace includes events with this `process_id`, plus each message with a null `process_id` that one of them names in `caused_by_event_id`, as for `Case.messages`. Order is `seq`. `rule_trace.input` is an open object (`dict[str, Any]` in the generated model): the engine records the condition snapshot, and no matcher branches on it.
 
 `POST /consultant/case/{process_id}/close` accepts only `PREQUALIFIED` or `NOT_PREQUALIFIED`. A text field is rejected. A process that is not `human_active` is 404, except one already `ended`, which is 409 and does not append a second `conversation.consultant_closed`.
 
@@ -559,7 +580,7 @@ The trace includes events with this `process_id`, plus that one opening message 
 
 PostgreSQL 16. `load` is the only process that reads S3. The API and `policy.run` read Postgres.
 
-`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. `004_products_balance_required.sql` sets an empty `products.current_balance` to 0 and makes the column `NOT NULL`. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
+`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. `004_event_sequence.sql` adds `events.seq`. `005_products_balance_required.sql` sets an empty `products.current_balance` to 0 and makes the column `NOT NULL`. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
 
 ### Read tables
 
@@ -596,7 +617,7 @@ The customer API does not list this table. `policy.run` reads one row, the one f
 - `service_agents`: primary key `agent_id`, unique index on `(lower(email), upper(employee_code))`
 - `customer_credit_profile`: primary key `customer_id`
 - `commands (status)` where `status = 'pending'`
-- `events (process_id, created_at)`
+- `events (process_id, created_at)`, `events (process_id, seq)`, and a unique index on `events (seq)`
 - a partial unique index on `processes (customer_id, process_key) where state <> 'ended'`
 
 The filter `customer_id = jwt.sub` is in every API query. A test calls `products` with Juan's JWT and asks for Alicia's id: the response carries no rows of Alicia's.
@@ -614,6 +635,7 @@ Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` exclude
 | `api` | starts when `load` finished successfully. Mounts `api/` and reloads on save | yes |
 | `web` | the frontend, Vite, proxies `/api` to the API. Mounts `web/` and reloads on save | yes |
 | `mailpit` | local mail catcher. The API's only SMTP target; its inbox is at http://localhost:8025 | yes |
+| `test` | profile `test`, not started by `up`. Waits for Postgres and runs `scripts/check.sh` with `ALBA_REQUIRE_POSTGRES=1` | no |
 
 Who runs it: anyone with the repo, a `.env`, and Docker. The default local demo sets `DEMO_LOGIN=1` and sends every login code to Mailpit. There is no SMS and no real email. Reviewers run `docker compose up` and open the web URL from the compose file. Secrets stay in `.env`; they are not committed.
 
@@ -629,6 +651,26 @@ It does not list the bucket. It does not download transactions, transcripts, dig
 Without the AWS variables and without the CSVs, `load` exits with an error that says what is missing. It does not start an empty demo or one with the four profiles made up.
 
 The Postgres volume keeps gold. A second `up` does not reload if `load_batches` already holds the same `sha256` of the four files. Deleting the volume reloads.
+
+## Quality gate
+
+`.github/workflows/quality.yml` runs on every pull request to `main` and every push to `main`. It needs no secret: no `.env`, no S3 keys, no `OPENAI_API_KEY`. Four jobs. Each one is meant to be a required status check on `main`; that is a repository setting, not part of the workflow file:
+
+| Job | Fails when |
+|---|---|
+| `python` | `scripts/check.sh` fails: `ruff check`, `ruff format --check`, `mypy` (strict), a test, total coverage under its floor, or `api/domain/` under its floor. On a pull request, also when a changed line in `api/` or `pipeline/` is not covered (`diff-cover` against the base branch, 100%) |
+| `web` | `npm run typecheck` or `npm run build` in `web/` fails |
+| `contract` | `python api-spec/generate.py` changes `api/contract_models.py` or `web/src/api/schema.d.ts` |
+| `hygiene` | a tracked file is under `data/`, is a PDF, or is a `.env` other than `.env.example`, or gitleaks finds a secret in the commits the pull request or push adds |
+
+- **One script.** `scripts/check.sh` is the Python gate. The `test` compose service and the `python` job run the same file, so a green local run means a green job.
+- **Coverage is branch coverage** over `api/` and `pipeline/`. `api/contract_models.py`, test files, and `pipeline/__main__.py` are left out.
+- **Floors only go up.** The two floors live in `scripts/check.sh`, set on Oct 1, 2026 to the measured coverage rounded down. A change that raises coverage raises the floor there in the same change. Lowering a floor is a contract change.
+- **New code is fully covered.** The changed-lines check holds every pull request to 100%, independent of the floors. The target for `api/domain/` is 100%; the remaining gaps are in `api/domain/policy/engine.py` (policy-file validation and invariant guards).
+- **Integration tests cannot pass by skipping.** Without Postgres, `migrated_database` skips. With `ALBA_REQUIRE_POSTGRES=1` (the `test` service and the `python` job) it fails.
+- **mypy is strict** and `pyproject.toml` holds its settings. `api/contract_models.py` is generated and excluded from ruff and mypy. Ruff targets Python 3.12 but skips the PEP 695 generic syntax so host runs on 3.11 still import.
+- **Third-party actions are pinned** to a commit SHA, the gitleaks binary to a SHA-256, and every tool to an exact version in `requirements-dev.txt`. The workflow has `contents: read` only.
+- **Not in the gate yet:** `tsc` inside the `test` service (that image has no Node; `IMPLEMENTATION.md` I4), mutation testing for `api/domain/`, and running `specs/*.feature`.
 
 ## Data: what is touched and what is not
 
@@ -716,7 +758,7 @@ These points are left open on purpose. Implementing them on your own breaks the 
 - A separate intent router beside `ConversationTurn`.
 - Full pandera/Great Expectations suites or a policy freshness rule (R10).
 
-Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D12 to D16, found by the Sep 29 spec review (the policy run key after `NEEDS_INFO`, a second vague request, an income typed before consent, handoffs that are not `REFER`, and three wording fixes), and D17 (no route lists a customer's cases). Each one that gets decided is written into this file.
+Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D12 to D15, D16 (1) and D16 (3) (the `ask_which_product` language check, and which commands change `processes.state`), and D17 (no route lists a customer's cases). D16 (2) is closed: `decide` takes `declared_income`. D19 is closed: the keys of two-event actions, the actor of each event, and where event names live. D20 is closed: `process_state` on every event, the write order, a second start, and a reused message id. Each one that gets decided is written into this file.
 
 ## Known gaps
 

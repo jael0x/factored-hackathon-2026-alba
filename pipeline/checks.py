@@ -25,9 +25,7 @@ def assert_expected_row_counts(
             raise SystemExit(f"Quality check: missing bronze file {name}")
         actual = count_csv_rows(item.path)
         if actual != expected_count:
-            raise SystemExit(
-                f"Quality check failed for {name}: expected {expected_count} rows, got {actual}"
-            )
+            raise SystemExit(f"Quality check failed for {name}: expected {expected_count} rows, got {actual}")
         print(f"check rows ok {name}={actual}")
 
 
@@ -43,10 +41,7 @@ def report_customer_nulls(customers_path: Path) -> tuple[int, int, int]:
                 null_score += 1
             if (row.get("estimated_monthly_income") or "").strip() == "":
                 null_income += 1
-    print(
-        f"check nulls customers total={total} null_score={null_score} "
-        f"null_income={null_income}"
-    )
+    print(f"check nulls customers total={total} null_score={null_score} null_income={null_income}")
     return total, null_score, null_income
 
 

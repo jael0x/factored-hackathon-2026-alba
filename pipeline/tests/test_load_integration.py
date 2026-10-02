@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
@@ -8,7 +9,7 @@ import pytest
 from pipeline.batches import all_hashes_loaded, new_batch_id, record_batches
 from pipeline.bronze import BronzeFile, file_sha256
 from pipeline.gold import rebuild_gold
-from pipeline.silver import reload_silver
+from pipeline.silver import load_csv_table, reload_silver
 
 pytestmark = pytest.mark.integration
 
@@ -162,12 +163,15 @@ def test_changed_file_is_reloaded(
     ):
         (work / name).write_bytes((testdata_dir / name).read_bytes())
 
-    files = [_bronze(work / name) for name in (
-        "customers.csv",
-        "products.csv",
-        "daily_exchange_rates.csv",
-        "service_agents.csv",
-    )]
+    files = [
+        _bronze(work / name)
+        for name in (
+            "customers.csv",
+            "products.csv",
+            "daily_exchange_rates.csv",
+            "service_agents.csv",
+        )
+    ]
     batch_id = new_batch_id()
     with psycopg.connect(migrated_db) as conn:
         with conn.transaction():
@@ -182,12 +186,15 @@ def test_changed_file_is_reloaded(
             + "PRD-3,CLI-TEST-JUAN,Tarjeta Crédito,****1111,USD,10.00,Active,0\n",
             encoding="utf-8",
         )
-        changed = [_bronze(work / name) for name in (
-            "customers.csv",
-            "products.csv",
-            "daily_exchange_rates.csv",
-            "service_agents.csv",
-        )]
+        changed = [
+            _bronze(work / name)
+            for name in (
+                "customers.csv",
+                "products.csv",
+                "daily_exchange_rates.csv",
+                "service_agents.csv",
+            )
+        ]
         assert all_hashes_loaded(conn, changed) is False
 
         reload_batch = new_batch_id()
@@ -228,16 +235,32 @@ def test_orphan_product_fails_quality_check(
         "PRD-X,CLI-DOES-NOT-EXIST,Tarjeta Crédito,****0000,USD,1.00,Active,0\n",
         encoding="utf-8",
     )
-    files = [_bronze(work / name) for name in (
-        "customers.csv",
-        "products.csv",
-        "daily_exchange_rates.csv",
-        "service_agents.csv",
-    )]
+    files = [
+        _bronze(work / name)
+        for name in (
+            "customers.csv",
+            "products.csv",
+            "daily_exchange_rates.csv",
+            "service_agents.csv",
+        )
+    ]
+    with (
+        psycopg.connect(migrated_db) as conn,
+        pytest.raises(psycopg.errors.ForeignKeyViolation),
+        conn.transaction(),
+    ):
+        reload_silver(conn, files)
+
+
+def test_a_csv_missing_a_column_is_rejected_before_any_row_is_copied(migrated_db: str, tmp_path: Path) -> None:
+    path = tmp_path / "customers.csv"
+    path.write_text("customer_id,full_name\nCLI-1,Ana\n", encoding="utf-8")
+    expected = "CSV customers.csv missing columns ['credit_score']. Found=['customer_id', 'full_name']"
     with psycopg.connect(migrated_db) as conn:
-        with pytest.raises(psycopg.errors.ForeignKeyViolation):
-            with conn.transaction():
-                reload_silver(conn, files)
+        before = conn.execute("SELECT count(*) FROM customers").fetchone()
+        with pytest.raises(SystemExit, match=f"^{re.escape(expected)}$"):
+            load_csv_table(conn, path, "customers", ("customer_id", "credit_score"))
+        assert conn.execute("SELECT count(*) FROM customers").fetchone() == before
 
 
 def test_an_empty_balance_loads_as_zero(
@@ -250,8 +273,7 @@ def test_an_empty_balance_loads_as_zero(
         (tmp_path / name).write_bytes((testdata_dir / name).read_bytes())
     products_path = tmp_path / "products.csv"
     products_path.write_text(
-        products_path.read_text(encoding="utf-8-sig")
-        + "PRD-3,CLI-TEST-JULI,Cuenta Ahorro,4410009,USD,,Active,\n",
+        products_path.read_text(encoding="utf-8-sig") + "PRD-3,CLI-TEST-JULI,Cuenta Ahorro,4410009,USD,,Active,\n",
         encoding="utf-8",
     )
     with psycopg.connect(migrated_db) as conn:
@@ -262,11 +284,11 @@ def test_an_empty_balance_loads_as_zero(
 
 
 def test_a_product_without_a_balance_is_rejected(migrated_db: str) -> None:
-    with psycopg.connect(migrated_db) as conn:
-        with pytest.raises(psycopg.errors.NotNullViolation):
-            conn.execute(
-                """
-                INSERT INTO products (product_id, customer_id, product_type, product_number, currency, current_balance, product_status)
-                VALUES ('PRD-4', 'CLI-TEST-JULI', 'Cuenta Ahorro', '4410010', 'USD', NULL, 'Active')
-                """
-            )
+    with psycopg.connect(migrated_db) as conn, pytest.raises(psycopg.errors.NotNullViolation):
+        conn.execute(
+            """
+            INSERT INTO products
+                (product_id, customer_id, product_type, product_number, currency, current_balance, product_status)
+            VALUES ('PRD-4', 'CLI-TEST-JULI', 'Cuenta Ahorro', '4410010', 'USD', NULL, 'Active')
+            """
+        )

@@ -67,7 +67,9 @@ def test_a_code_sent_while_active_does_not_open_a_session_after_the_consultant_l
     harness.request_code(login_of(SHARED_EMAIL_ANDRES))
     code = harness.last_code()
     with psycopg.connect(login_database) as conn:
-        conn.execute("UPDATE service_agents SET agent_status = 'Leave' WHERE agent_id = %s", (SHARED_EMAIL_ANDRES.consultant_id,))
+        conn.execute(
+            "UPDATE service_agents SET agent_status = 'Leave' WHERE agent_id = %s", (SHARED_EMAIL_ANDRES.consultant_id,)
+        )
     try:
         assert harness.open_session(login_of(SHARED_EMAIL_ANDRES), code) == 401
     finally:
@@ -176,7 +178,10 @@ def test_a_demo_consultant_search_is_in_name_order(harness: Harness) -> None:
 
 def test_a_demo_random_pick_is_an_active_consultant(harness: Harness) -> None:
     inactive = {ON_VACATION.consultant_id, ON_LEAVE.consultant_id, INACTIVE.consultant_id}
-    picked = {harness.http.get("/consultants/search", params={"random": "true"}).json()["consultants"][0]["consultant_id"] for _ in range(30)}
+    picked = {
+        harness.http.get("/consultants/search", params={"random": "true"}).json()["consultants"][0]["consultant_id"]
+        for _ in range(30)
+    }
     assert picked.isdisjoint(inactive)
 
 
@@ -185,7 +190,9 @@ def test_a_demo_consultant_search_needs_exactly_one_of_q_or_random(harness: Harn
     assert harness.http.get("/consultants/search", params={"q": "César", "random": "true"}).status_code == 422
 
 
-def test_with_the_demo_login_off_consultants_cannot_be_searched(harness: Harness, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_with_the_demo_login_off_consultants_cannot_be_searched(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(settings, "demo_login", False)
     response = harness.http.get("/consultants/search", params={"q": "César González"})
     assert response.status_code == 404

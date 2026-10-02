@@ -305,7 +305,9 @@ paths:
         The customer does not send process_id or process_state. customer_id comes from the token.
         The handler appends conversation.message_received. It does not choose an outcome.
         The response is sent after the worker has finished the commands enqueued from that event.
-        The same client_message_id returns this case again and does not append a second event.
+        The same client_message_id with the same text from the same customer returns this case again
+        and does not append a second event. The same client_message_id with another text, or from another
+        customer, is 409 message_id_reused and appends nothing.
         The first message of a new case still has a null process_id on the event.
         The returned case uses the process that cycle opened.
       requestBody:
@@ -325,6 +327,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/MessageIdReused"
         "422":
           $ref: "#/components/responses/InvalidRequest"
 
@@ -424,10 +428,11 @@ paths:
       summary: The process events, in the order they were recorded.
       description: >
         Requires role consultant.
-        Included events are those whose process_id is this process, plus the single event
-        referenced by process.started.caused_by_event_id when that opening message has a null process_id.
-        If that caused_by_event_id is null, the opening message is not attached by time.
-        Order is created_at ascending, then event id ascending.
+        Included events are those whose process_id is this process, plus each
+        conversation.message_received with a null process_id that an event of this process names in
+        caused_by_event_id: the opening message through process.started, and a message sent before the
+        case existed that joined it. A message no event names is not attached by time.
+        Order is the order the events were written (events.seq).
       parameters:
         - $ref: "#/components/parameters/ProcessId"
       responses:
@@ -530,6 +535,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/NotFoundError"
+    MessageIdReused:
+      description: This client_message_id was already sent with another text or by another customer. Nothing is appended.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MessageIdReusedError"
     AlreadyClosed:
       description: This process was already ended. The outcome does not change.
       content:
@@ -601,6 +612,15 @@ components:
         error:
           type: string
           enum: [not_found]
+
+    MessageIdReusedError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [message_id_reused]
 
     AlreadyClosedError:
       type: object
@@ -693,6 +713,10 @@ components:
       type: string
       enum: [R01, R02, R03, R04, R05, R06, R09]
 
+    RuleTraceResult:
+      type: string
+      enum: [passed, self_declared, PREQUALIFIED, NOT_PREQUALIFIED, REFER, NEEDS_INFO]
+
     Actor:
       type: string
       enum: [customer, consultant, system, rule]
@@ -708,6 +732,20 @@ components:
     ProcessKey:
       type: string
       enum: [credit_prequalification]
+
+    EventName:
+      type: string
+      enum:
+        - conversation.message_received
+        - conversation.turn_classified
+        - conversation.template_sent
+        - conversation.consultant_closed
+        - conversation.thread_taken
+        - analysis.completed
+        - prequalification.decided
+        - process.started
+        - process.state_changed
+        - process.ended
 
     Config:
       type: object
@@ -970,10 +1008,11 @@ components:
       additionalProperties: false
       description: >
         messages is the thread. Customer lines come from conversation.message_received events
-        that belong to the process, including the opening message reached by
-        process.started.caused_by_event_id. Assistant and template lines come from messages rows.
-        A messages row with a null event_id is omitted. Order is the linked event's created_at
-        ascending, then event id ascending. certificate is null until prequalification.decided exists.
+        that belong to the process, plus each such event with a null process_id that an event of the
+        process names in caused_by_event_id (the opening message through process.started, and a message
+        sent before the case existed that joined it). Assistant and template lines come from messages rows.
+        A messages row with a null event_id is omitted. Order is the order the linked events were written
+        (events.seq). certificate is null until prequalification.decided exists.
       required: [process_id, state, end_reason, product, language, messages, certificate]
       properties:
         process_id:
@@ -1164,16 +1203,18 @@ components:
           additionalProperties: true
           description: Condition snapshot recorded with the step. The trace displays it. No rule matches on it.
         result:
-          type: string
+          $ref: "#/components/schemas/RuleTraceResult"
 
     TraceEventBase:
       type: object
       additionalProperties: false
-      required: [id, created_at, actor, process_id, process_state, caused_by_event_id]
+      required: [id, event_name, created_at, actor, process_id, process_state, caused_by_event_id]
       properties:
         id:
           type: string
           format: uuid
+        event_name:
+          $ref: "#/components/schemas/EventName"
         created_at:
           type: string
           format: date-time

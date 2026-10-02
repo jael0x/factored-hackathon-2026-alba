@@ -11,7 +11,8 @@ SCHEMA = ROOT / "web" / "src" / "api" / "schema.d.ts"
 
 
 def spec_sha256() -> str:
-    return hashlib.sha256(SPEC.read_bytes()).hexdigest()
+    raw = SPEC.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def run(cmd: list[str]) -> None:
@@ -31,7 +32,9 @@ def enum_aliases(models: str, enums: dict[str, list[str]]) -> str:
     clashes = [name for name in enums if f"class {name}(" in models]
     if clashes:
         raise SystemExit(f"Enum aliases would shadow generated classes: {clashes}")
-    return "\n".join(f"{name} = Literal[{', '.join(repr(value) for value in values)}]" for name, values in enums.items())
+    return "\n".join(
+        f"{name} = Literal[{', '.join(repr(value) for value in values)}]" for name, values in enums.items()
+    )
 
 
 def generate_python(digest: str) -> None:

@@ -129,7 +129,9 @@ def cesar_issued_code() -> IssuedCode:
 
 def test_an_active_consultant_stores_the_hash_of_the_code_under_the_consultant_role() -> None:
     login_codes = MemCodes()
-    delivery = issue_consultant_code(MemConsultants({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E75612", NOW)
+    delivery = issue_consultant_code(
+        MemConsultants({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E75612", NOW
+    )
     assert delivery is not None
     assert delivery.email == CESAR.email
     assert login_codes.stored == [codes.hash_code(SECRET, CESAR.consultant_id, delivery.code)]
@@ -154,14 +156,19 @@ def test_a_consultant_who_is_not_active_stores_nothing(status: str) -> None:
 
 def test_an_unknown_pair_stores_nothing() -> None:
     login_codes = MemCodes()
-    assert issue_consultant_code(MemConsultants({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E30001", NOW) is None
+    assert (
+        issue_consultant_code(MemConsultants({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E30001", NOW)
+        is None
+    )
     assert login_codes.stored == []
 
 
 def test_the_right_consultant_code_is_spent_and_returns_the_consultant() -> None:
     issued = cesar_issued_code()
     login_codes = MemCodes(issued)
-    claims = open_consultant_session(MemConsultants({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E75612", "481206", NOW)
+    claims = open_consultant_session(
+        MemConsultants({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E75612", "481206", NOW
+    )
     assert claims is not None
     assert claims.sub == CESAR.consultant_id
     assert claims.role == CONSULTANT
@@ -179,7 +186,9 @@ def test_a_consultant_who_is_no_longer_active_cannot_use_a_sent_code() -> None:
 def test_a_wrong_consultant_code_is_counted_and_does_not_open_a_session() -> None:
     issued = cesar_issued_code()
     login_codes = MemCodes(issued)
-    claims = open_consultant_session(MemConsultants({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E75612", "000000", NOW)
+    claims = open_consultant_session(
+        MemConsultants({CESAR_KEY: CESAR}), login_codes, SECRET, CESAR.email, "E75612", "000000", NOW
+    )
     assert claims is None
     assert login_codes.wrong == [issued.id]
     assert login_codes.spent is False

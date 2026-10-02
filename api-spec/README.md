@@ -11,7 +11,7 @@ Do not hand-write a second DTO in `api/` or `web/`. Add the field here and regen
 
 ```bash
 python -m pip install -r requirements-dev.txt
-npm install --prefix api-spec
+npm ci --prefix api-spec
 python api-spec/generate.py
 ```
 
@@ -20,13 +20,13 @@ Without a local Python environment, the Python half runs in the test image (it h
 ```bash
 docker compose --profile test run --rm --no-deps -v "$PWD:/work" -w /work test \
   python -c "import sys; sys.path.insert(0, 'api-spec'); import generate; generate.generate_python(generate.spec_sha256())"
-npm install --prefix api-spec
+npm ci --prefix api-spec
 python3 -c "import sys; sys.path.insert(0, 'api-spec'); import generate; generate.generate_typescript(generate.spec_sha256())"
 ```
 
 `generate.py` rewrites two files and stamps the SHA-256 of `openapi.yaml` on the first line of each. Do not edit those files by hand.
 
-Every string enum under `components/schemas` (`Role`, `ProcessState`, `Outcome`, `ReasonCode`, `Intent`, and the rest) also gets a named alias at the end of `api/contract_models.py`, for example `Role = Literal['customer', 'consultant']`. Python code imports those names; it does not declare the same list again. A closed set that never crosses the wire (event names, command names, process rule ids) lives in the module that owns it.
+Every string enum under `components/schemas` (`Role`, `ProcessState`, `Outcome`, `ReasonCode`, `Intent`, and the rest) also gets a named alias at the end of `api/contract_models.py`, for example `Role = Literal['customer', 'consultant']`. Python code imports those names; it does not declare the same list again. A closed set that never crosses the wire (command names, process rule ids) lives in the module that owns it. Event names do cross it, as the trace discriminator, so they are the `EventName` enum; their constants and the idempotency-key builders live in `api/domain/process/events.py`.
 
 | Output | Consumer |
 |---|---|

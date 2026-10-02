@@ -28,6 +28,8 @@ def _database_url(name: str) -> str:
 @pytest.fixture(scope="module")
 def migrated_database() -> Callable[[str], str]:
     if not _postgres_available():
+        if os.environ.get("ALBA_REQUIRE_POSTGRES") == "1":
+            pytest.fail(f"Postgres not reachable at {ADMIN_URL} and ALBA_REQUIRE_POSTGRES=1")
         pytest.skip("Postgres not reachable for integration tests")
 
     def create(name: str) -> str:

@@ -8,13 +8,14 @@ RUN pip install --no-cache-dir -r /app/requirements-dev.txt
 
 COPY pipeline /app/pipeline
 COPY api /app/api
-COPY api-spec/openapi.yaml /app/api-spec/openapi.yaml
+COPY api-spec/openapi.yaml api-spec/generate.py /app/api-spec/
 COPY web/src/api /app/web/src/api
 COPY db /app/db
-COPY pytest.ini /app/pytest.ini
+COPY pytest.ini pyproject.toml /app/
+COPY scripts /app/scripts
 COPY conftest.py /app/conftest.py
 
 ENV PYTHONPATH=/app
 ENV ALBA_TEST_ADMIN_DATABASE_URL=postgresql://alba:alba@postgres:5432/postgres
 
-CMD ["pytest", "-v"]
+CMD ["sh", "scripts/check.sh"]

@@ -7,10 +7,10 @@ from fastapi.testclient import TestClient
 
 os.environ.setdefault("JWT_SECRET", "test-only-jwt-secret-0123456789abcdef")
 
-from api.infrastructure.config.settings import settings  # noqa: E402
-from api.infrastructure.mail.smtp import get_mailer  # noqa: E402
-from api.main import app  # noqa: E402
-from api.tests.login_harness import LOGIN_TEST_DB, FakeMailer, Harness, seed_people  # noqa: E402
+from api.infrastructure.config.settings import settings
+from api.infrastructure.mail.smtp import get_mailer
+from api.main import app
+from api.tests.login_harness import LOGIN_TEST_DB, FakeMailer, Harness, seed_people
 
 
 @pytest.fixture(scope="module")
