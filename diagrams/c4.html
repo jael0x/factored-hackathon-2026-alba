@@ -476,7 +476,7 @@ node('events', {
   parent: 'api', kind: 'component', name: 'Event store', tech: 'api/infrastructure/db/events.py',
   summary: 'Appends immutable events with idempotency keys, and stamps the process columns on a message.',
   desc: ['Appends to `events`. No `UPDATE` of a payload. Repeating a POST with the same key creates no new event and no new decision.'],
-  files: ['api/infrastructure/db/events.py'],
+  files: ['api/infrastructure/db/events.py', 'api/domain/process/new_events.py', 'db/migrations/004_event_sequence.sql'],
   src: 'ARCHITECTURE.md, "Events"',
 });
 node('rules', {
@@ -497,7 +497,7 @@ node('processes', {
   parent: 'api', kind: 'component', name: 'Process lifecycle', tech: 'api/application/processes.py',
   summary: 'Start, transition, end of `credit_prequalification`. The row in `processes` is the projection.',
   desc: ['Owns the process row and the allowed transitions. Any transition not in the table is an error and is not written.'],
-  files: ['api/application/processes.py'],
+  files: ['api/application/processes.py', 'api/domain/process/lifecycle.py', 'api/infrastructure/db/processes.py'],
   src: 'ARCHITECTURE.md, "Process"',
 });
 node('policy', {
@@ -604,6 +604,7 @@ spec('routers', 'r-customer-msg', {
   fixed: [
     '`POST /messages` body is `text` and `client_message_id`. The `customer_id` comes from the JWT. The customer does not send `process_id` or `process_state`.',
     'Key `msg:{client_message_id}`. It does not wait for a process. Repeating the POST creates no new event and no new decision.',
+    'The same id with another text or from another customer is 409 `message_id_reused` and appends nothing.',
     'The response is the `Case`, sent after the worker finishes the commands enqueued from that event. The handler does not choose an outcome.',
     'In `human_active` the message is stored and the model is not called.',
   ],
@@ -629,7 +630,7 @@ spec('routers', 'r-reads', {
     '`GET /me`, `GET /consultant/me`, `GET /products`, `GET /case/{process_id}`, `GET /consultant/queue`, `GET /consultant/case/{process_id}`, `GET /consultant/case/{process_id}/trace`. Shapes are in `api-spec/openapi.yaml`.',
     'The filter `customer_id = jwt.sub` is in every customer query. A `customer_id` query that is not the token sub returns an empty product list.',
     'The customer API does not list `customer_credit_profile`. The certificate has no score, no limit, and no rate.',
-    'The consultant queue shows processes in `human_active` only. The trace shows the process `events` in order, plus the opening message via `caused_by_event_id`.',
+    'The consultant queue shows processes in `human_active` only. The trace shows the process `events` in the order they were written (`seq`), plus each message with a null `process_id` that one of them names in `caused_by_event_id`.',
   ],
   open: [
     ['New', 'The brief asks for "open questions" in the handoff; `PLAN.md` §2 notes that field is not in the contract.'],
@@ -674,13 +675,14 @@ spec('auth', 'a-session', {
 });
 
 spec('events', 'e-table', {
-  name: 'events table', tech: 'db/migrations/001_init.sql', status: 'defined',
+  name: 'events table', tech: 'db/migrations/001_init.sql, 004_event_sequence.sql', status: 'defined',
   summary: 'Append-only facts with actor, cause, process columns, and a unique key.',
   fixed: [
-    'Columns: `id uuid`, `event_name`, `payload jsonb`, `customer_id`, `process_id uuid`, `process_state`, `actor` (`customer`, `consultant`, `system`, `rule`), `caused_by_event_id`, `caused_by_command_id`, `idempotency_key` unique, `created_at`.',
+    'Columns: `id uuid`, `event_name`, `payload jsonb`, `customer_id`, `process_id uuid`, `process_state`, `actor` (`customer`, `consultant`, `system`, `rule`), `caused_by_event_id`, `caused_by_command_id`, `idempotency_key` unique, `created_at`, `seq` (identity: the order events were written in).',
     '`process_id` and `process_state` are columns, not payload fields.',
     '`actor` follows the event name: `customer` for the message, `consultant` for the close, `system` for the eight events a command writes (D19).',
-    'Append-only. No `UPDATE` of `payload`. Index on `(process_id, created_at)`.',
+    'Every event has a `process_state`: the stamp for a message, otherwise the state its own write leaves the process in (D20).',
+    'Append-only. No `UPDATE` of `payload`. Indexes on `(process_id, created_at)`, `(process_id, seq)`, and unique `seq`.',
   ],
   src: 'ARCHITECTURE.md, "Events", "Indexes"',
 });
@@ -691,6 +693,7 @@ spec('events', 'e-stamp', {
     'An open process exists: `process_id` is that process and `process_state` its state.',
     'None open: `process_id` stays null and `process_state` is `ai_active`, the state a new process is born in.',
     'The event does not open the process; `open_process` does. The message row is never updated or copied.',
+    'The open process is read `FOR SHARE`: a message sent while the case moves waits and carries the result.',
   ],
   src: 'ARCHITECTURE.md, "Events"',
 });
@@ -868,6 +871,7 @@ spec('processes', 'p-catalog', {
     'One row: `process_key = credit_prequalification`, initial state `ai_active`, opened by `open_process` on the first message of a customer with no open process.',
     '`started` is not persisted. The row is born `ai_active` and `process.started` records it.',
     'A customer has at most one process with `state <> ended`, guaranteed by a partial unique index.',
+    'A replayed start returns its process; a start while another case is open writes nothing, and the message joins that case (D20).',
   ],
   src: 'ARCHITECTURE.md, "Process"',
 });
@@ -880,6 +884,7 @@ spec('processes', 'p-states', {
     '`ai_active` to `human_active`: policy `REFER`, request for a human, tool failure, unsupported language.',
     '`human_active`: nobody talks in the thread. The customer may write; the message is stored. The consultant closes with `prequalified` or `not_prequalified`.',
     '`ended` is not reopened. Another message opens a new process.',
+    'Staying in `ai_active` writes nothing. A move locks the row, checks its own key, then the table in `api/domain/process/lifecycle.py`; an illegal move writes nothing.',
   ],
   open: [['New', 'The `ai_active` to `human_active` triggers omit `out_of_scope`, `reply_forbidden`, and `model_output_invalid`, which `hand_off_scope` and `hand_off_reply` also cause.']],
   src: 'ARCHITECTURE.md, "Process", "Process rules"',

@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal, TypeVar, get_args
+from typing import Literal, get_args
 
 import yaml
 
@@ -16,6 +16,7 @@ from api.contract_models import (
     RuleId,
     RuleTraceResult,
 )
+from api.domain.closed_sets import parse_member
 
 CustomerStatus = Literal["Active", "Suspended", "Inactive", "Closed"]
 
@@ -59,14 +60,6 @@ POLICY_VERSIONS: frozenset[PolicyVersion] = frozenset(get_args(PolicyVersion))
 POLICY_PATH = Path(__file__).with_name("alba-credit-v1.yaml")
 
 TraceValue = Decimal | int | str | bool | None
-Member = TypeVar("Member", bound=str)
-
-
-def parse_member(value: object, members: frozenset[Member], label: str) -> Member:
-    for member in members:
-        if value == member:
-            return member
-    raise ValueError(f"{label} {value!r} is outside the policy")
 
 
 def parse_customer_status(value: object) -> CustomerStatus:

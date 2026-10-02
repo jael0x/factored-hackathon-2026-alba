@@ -96,3 +96,15 @@ Feature: Pre-qualification decision
     When Juan writes "quiero un préstamo personal"
     Then a new case opens for Juan
     And the ended case stays closed
+
+  Scenario: A message id sent again with another text is refused
+    Given Juan sent "sí" with a message id
+    When the app sends "no" with the same message id
+    Then the app is told that message id was already used
+    And Juan's conversation still shows "sí" once and no "no"
+
+  Scenario: Two messages sent before the case opens join one case
+    Given Juan has no open case
+    When Juan writes "quiero una tarjeta de crédito" and then "y también un préstamo" before the first is answered
+    Then Juan has one open case
+    And both messages are in that case's conversation
