@@ -266,7 +266,7 @@ Closed names. No others are invented in v1. They are the `EventName` enum in `ap
 | `event_name` | When it is written | Minimum payload |
 |---|---|---|
 | `conversation.message_received` | `POST /messages` | `text`, `client_message_id` |
-| `conversation.turn_classified` | `conversation.generate` finished | `intent`, `product`, `language`, `declared_income_amount`, `declared_income_currency`, `reply_text`, `reply_ok`, `reason_code` |
+| `conversation.turn_classified` | `conversation.generate` finished | `intent`, `product`, `language`, `declared_income_amount`, `declared_income_currency`, `reply_text`, `reply_ok`, `reason_code`, `product_asked_count`, `income_requested` |
 | `conversation.template_sent` | a non-terminal template was sent | `locale`, `template_id`, `body` |
 | `conversation.consultant_closed` | the consultant closes the case | `outcome`, `consultant_id`, `language` |
 | `conversation.thread_taken` | the transition to `human_active` | `reason_code`, `from_state`, `to_state` |
@@ -286,10 +286,12 @@ Idempotency keys:
 | Classified turn | `turn:{triggered_by_event_id}` |
 | Template sent | `template:{template_id}:{triggered_by_event_id}` |
 | Open process | `process:{customer_id}:credit_prequalification:{triggered_by_event_id}` |
-| Run policy | `policy:{process_id}:alba-credit-v1:{product}` |
+| Run policy | `policy:{process_id}:alba-credit-v1:{product}:{triggered_by_event_id}` |
 | Transition | `transition:{process_id}:{to_state}:{caused_by_event_id}` |
 | Consultant close | `consultant_close:{process_id}` |
 | End process | `end:{process_id}` |
+
+The run-policy key carries the turn that triggered it (`PLAN.md` D12). Juliana's run after her income is a second run for the same process and product, triggered by another turn, so it has its own key. A message delivered twice is one turn and still makes one run, and a retried `policy.run` writes the same payload under the same key.
 
 The key in this table belongs to the action. An action that writes one event gives it that key. `process.transition` and `process.end` write two events each, so each of those events is keyed `{action key}:{event_name}`: for example `end:{process_id}:process.state_changed` and `end:{process_id}:process.ended`. The builders for every key are in `api/domain/process/events.py`.
 
@@ -308,6 +310,11 @@ The message is an event. It is not the case. The case is the process. A new thre
 
 If the model sends no product and the process already has one, the turn's `product` is the stored one. If the turn's `product` is set, the process stores it. The turn's `language` is stored on the process.
 
+`conversation.generate` also stamps two facts on the turn, because rules cannot query (`PLAN.md` D13, D14). Both are read only from this process's events whose `seq` is lower than the triggering message's, so a retry writes the same payload, and a message written before a question was sent is not an answer to it. The model does not see or set them.
+
+- `product_asked_count`: how many times the customer was already asked which product. It counts the `conversation.template_sent` events with `template_id = which_product`, plus the `conversation.turn_classified` events with intent `clarify`, `product` null, `reply_ok` true, and `language` `es` or `pt` (a clarification that was shown).
+- `income_requested`: true when the latest `analysis.completed` has outcome `NEEDS_INFO` and the same `product` as this turn (after the stored product is copied), and no `conversation.template_sent` with `template_id = confirm_prequalify` and no `conversation.turn_classified` with intent `decline_prequalify` comes after it. Otherwise false, including when there is no analysis.
+
 ## Process rules
 
 Source: `api/rules.py`. An in-memory list, sorted by ascending `priority`. There is no `rules` table in v1 and no per-organization override. Each rule appears once; a copy would fire twice.
@@ -320,15 +327,17 @@ A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function o
 | `generate_while_ai` | `conversation.message_received` | the `process_state` column is `ai_active` | `conversation.generate` |
 | `record_only_when_human` | `conversation.message_received` | the `process_state` column is `human_active` | none. The message is already in the event |
 | `ask_confirm_prequalify` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `prequalify_card` or `prequalify_loan` | `template.send` for `confirm_prequalify`. Stores the product on the process. Stays `ai_active`. The policy is not called |
-| `run_policy` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `confirm_prequalify` and `product` is set | `policy.run` with that `product` |
+| `run_policy` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `confirm_prequalify` and `product` is set | `policy.run` with that `product` and the turn's declared amount, null when none |
 | `decline_prequalify` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `decline_prequalify` | `conversation.show_reply`. Stays `ai_active`. The policy is not called |
-| `run_policy_income` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `provide_income` and `product` is set | `policy.run` with that `product` and the declared amount |
-| `ask_which_product` | `conversation.turn_classified` | `reply_ok` and `intent` is `provide_income` or `confirm_prequalify` and `product` is null | `template.send` for `which_product`. Stays `ai_active`. The policy is not called |
+| `run_policy_income` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `provide_income` and `product` is set and `income_requested` | `policy.run` with that `product` and the declared amount |
+| `ask_consent_for_income` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `provide_income` and `product` is set and not `income_requested` | `template.send` for `confirm_prequalify`. Stays `ai_active`. The policy is not called, and the amount is not used |
+| `ask_which_product` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `provide_income` or `confirm_prequalify` and `product` is null and `product_asked_count` is under 2 | `template.send` for `which_product`. Stays `ai_active`. The policy is not called |
+| `hand_off_no_product` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `clarify`, `provide_income`, or `confirm_prequalify` and `product` is null and `product_asked_count` is 2 or more | `process.transition` to `human_active`, `reason_code = out_of_scope` |
 | `hand_off_human` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `human_request` | `process.transition` to `human_active`, `reason_code = customer_requested_human` |
 | `hand_off_scope` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `out_of_scope` | `process.transition` to `human_active`, `reason_code = out_of_scope` |
 | `hand_off_language` | `conversation.turn_classified` | `reply_ok` and `language` is `other` | `process.transition` to `human_active`, `reason_code = language_unsupported` |
 | `hand_off_reply` | `conversation.turn_classified` | `reply_ok` is false | `process.transition` to `human_active`, with the turn's `reason_code`. `reply_text` is not shown |
-| `show_reply` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `clarify`, `product_info`, or `chit_chat` | `conversation.show_reply`. The policy is not called |
+| `show_reply` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `clarify`, `product_info`, or `chit_chat`, except a `clarify` with `product` null and `product_asked_count` 2 or more | `conversation.show_reply`. The policy is not called |
 | `render_needs_info` | `analysis.completed` | `outcome == "NEEDS_INFO"` | `template.send` for `needs_income`. Stays `ai_active` |
 | `render_refer_notice` | `analysis.completed` | `outcome == "REFER"` | `template.send` for `refer_notice`. The notice does not include the score and does not say whether the customer pre-qualifies |
 | `take_thread` | `analysis.completed` | `payload.outcome == "REFER"` | `process.transition` to `human_active`, `reason_code = policy_refer`; that command writes `conversation.thread_taken` |
@@ -337,6 +346,10 @@ A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function o
 | `close_on_consultant_decision` | `conversation.consultant_closed` | `outcome` is `PREQUALIFIED` or `NOT_PREQUALIFIED` | `decision.render` with `decided_by = consultant`, then `process.end` |
 
 `generate_while_ai` does not run if the `process_state` column is `human_active`. The prompt is not the brake.
+
+Every `conversation.turn_classified` matches exactly one rule, for every combination of `reply_ok`, `language`, `intent`, `product`, `product_asked_count`, and `income_requested`. The rule tests enumerate every combination and assert it.
+
+A customer gets at most three tries to name a product (`PLAN.md` D13): the first two turns that name none are asked which product, by `which_product` or by the shown clarification, and the third goes to a person with `out_of_scope`.
 
 The first message of a new case is stamped `ai_active` with `process_id` null. Both `open_process` and `generate_while_ai` match. The loop inserts those commands in the order of the table and runs them in that order before taking another event. `process.start` creates the process. Then `conversation.generate` classifies the sentence and writes the turn with that new `process_id`.
 
@@ -402,7 +415,7 @@ Three things, and no others.
 
 | Asked | When |
 |---|---|
-| Which product, credit card or personal loan | the turn names no product |
+| Which product, credit card or personal loan | the turn names no product. At most twice; the third turn that names none goes to a person |
 | Whether to start this run's pre-qualification | the turn is `prequalify_card` or `prequalify_loan` (product known). Soft consent before any `policy.run` for that product request |
 | Monthly income | `income_local` is null after a consented `policy.run` returned `NEEDS_INFO` |
 
@@ -411,6 +424,8 @@ The income amount is read in the country's currency. The gold row is not filled 
 The customer is not asked for `credit_score`, `days_past_due`, `customer_status`, or whether they already hold the product. Those stay on the file. A null score is `REFER` with no question.
 
 Consent is once per product request on the process. A `confirm_prequalify` is what first enqueues `policy.run`. A later `provide_income` on the same process does not ask again. `decline_prequalify` leaves the process `ai_active`; a later `prequalify_card` or `prequalify_loan` asks for consent again.
+
+An income stated instead of answering the consent question does not start the policy (`PLAN.md` D14). The turn has `income_requested` false, so `ask_consent_for_income` asks the consent question again, and that amount is not used. A yes that also states an amount ("sí, gano 45,000 pesos al mes") is `confirm_prequalify`, and `run_policy` passes the amount.
 
 Once those asks are done for this case, the engine runs. `PREQUALIFIED` and `NOT_PREQUALIFIED` end it. `REFER` goes to the consultant. There is no further question.
 
@@ -464,7 +479,9 @@ What goes into the prompt. This is everything that leaves the service for OpenAI
 
 `prequalify_card` and `prequalify_loan` do not run the policy. They store the product and trigger `confirm_prequalify` (template). Only `confirm_prequalify` with a product set enqueues `policy.run`. `decline_prequalify` shows the model's `reply_text` and leaves the case open.
 
-`out_of_scope` covers a new mortgage, investments, a limit increase, disputing a transaction, a third party's balance, and "el crédito" when it still names no product after one clarification. The first time the customer says only "un crédito", the intent is `clarify`, not `out_of_scope`.
+A message that says yes to the consent question is `confirm_prequalify`, even when it also states an amount. `provide_income` is an amount with no yes. This is the label in the held-out set too.
+
+`out_of_scope` covers a new mortgage, investments, a limit increase, disputing a transaction, and a third party's balance. A request that names no product ("un crédito", "el crédito") is `clarify` every time; the model is not told how many times it was asked. The rules count the asks and send the third such turn to a person with `out_of_scope` (`hand_off_no_product`).
 
 The model gets no tool that accepts a `customer_id`. There is no tool-calling into the policy. The policy is not a model tool: it is a command that runs afterwards, with the session's id.
 
@@ -716,13 +733,13 @@ No model is trained on the transcripts. They are templates. They do not feed the
 9. `end_after_decision` leaves the process `ended` / `prequalified`.
 10. The customer screen shows the certificate. César does not see it.
 
-If the text had been "quiero un crédito", step 5 returns `clarify` and `product` null. There is no consent ask and no policy. The process stays `ai_active`. The question is which of the two products: credit card or personal loan. When he later names a product (`prequalify_card` or `prequalify_loan`), step 6 asks for consent.
+If the text had been "quiero un crédito", step 5 returns `clarify` and `product` null. There is no consent ask and no policy. The process stays `ai_active`. The question is which of the two products: credit card or personal loan. When he later names a product (`prequalify_card` or `prequalify_loan`), step 6 asks for consent. If he writes "el crédito" again, he is asked a second time. A third turn that names no product moves the case to `human_active` with `out_of_scope`.
 
 If at step 7 he writes "no", the intent is `decline_prequalify`. The policy is not called. The process stays `ai_active`.
 
 ## The other three flows
 
-Juliana, `CLI-MD60UR8PNJDI`, score 714, income null, account `2,528.58 USD`. She asks for a card. After she confirms pre-qualification, R06 returns `NEEDS_INFO`. `template.send` writes `conversation.template_sent` (`needs_income`). She stays `ai_active`. The message asks for her monthly income. The sentences are not written in this contract yet. If she answers with an amount, that amount is this run's income, marked `self_declared`, and the gold row stays null. The process already holds `credit_card`, so `run_policy_income` runs the policy with that product (no second consent). Score 714 continues to R05 and the result is `PREQUALIFIED`. She does not go to César.
+Juliana, `CLI-MD60UR8PNJDI`, score 714, income null, account `2,528.58 USD`. She asks for a card. After she confirms pre-qualification, R06 returns `NEEDS_INFO`. `template.send` writes `conversation.template_sent` (`needs_income`). She stays `ai_active`. The message asks for her monthly income. The sentences are not written in this contract yet. If she answers with an amount, that amount is this run's income, marked `self_declared`, and the gold row stays null. The process already holds `credit_card`, and the turn carries `income_requested` because the latest analysis for that product was `NEEDS_INFO`, so `run_policy_income` runs the policy with that product (no second consent). Its key carries her income turn, not her "sí", so it is a new run. Score 714 continues to R05 and the result is `PREQUALIFIED`. She does not go to César.
 
 Alicia, `CLI-440CO5FZIY6A`, score 615, income 4,707,334.28 COP (1,167 USD), no card. After she confirms, R05 `REFER`. `template.send` writes `conversation.template_sent` (`refer_notice`): a person will review. The notice does not include the score and does not say whether she pre-qualifies. The sentences are not written in this contract yet. Then `conversation.thread_taken` with `reason_code = policy_refer`. César sees the packet: request, score, income, rule R05, policy `alba-credit-v1`. He does not answer in the thread. His only action is to close with `PREQUALIFIED` or `NOT_PREQUALIFIED`. That writes `conversation.consultant_closed`, then the automatic message and `process.end`. Which of the two he picks for Alicia is not fixed here. A message from Alicia while the case is still `human_active` is stored and does not call the model.
 
@@ -747,7 +764,7 @@ These points are left open on purpose. Implementing them on your own breaks the 
 - A separate intent router beside `ConversationTurn`.
 - Full pandera/Great Expectations suites or a policy freshness rule (R10).
 
-Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D12 to D15, D16 (1) and D16 (3) (the `ask_which_product` language check, and which commands change `processes.state`), and D17 (no route lists a customer's cases). D16 (2) is closed: `decide` takes `declared_income`. D19 is closed: the keys of two-event actions, the actor of each event, and where event names live. D20 is closed: `process_state` on every event, the write order, a second start, and a reused message id. Each one that gets decided is written into this file.
+Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D15 (handoffs that are not a policy `REFER`), D16 (3) (which commands change `processes.state`), and D17 (no route lists a customer's cases). D12, D13, D14, and D16 (1) are closed (Oct 2): the run-policy key carries the triggering turn, the third turn with no product goes to a person, an income before consent asks for consent again, and `ask_which_product` checks `language`. D16 (2) is closed: `decide` takes `declared_income`. D19 is closed: the keys of two-event actions, the actor of each event, and where event names live. D20 is closed: `process_state` on every event, the write order, a second start, and a reused message id. Each one that gets decided is written into this file.
 
 ## Known gaps
 
@@ -766,7 +783,7 @@ The open-process key includes the triggering event id, so a later message after 
 5. **`NEEDS_INFO` is a template event.** `template.send` writes `conversation.template_sent` with `template_id = needs_income`. The case stays `ai_active`. `prequalification.decided` is not used. The sentences are not in this contract yet. See `render_needs_info` and Juliana's flow.
 6. **The `REFER` notice is a template event.** `template.send` writes `conversation.template_sent` with `template_id = refer_notice`, then the case moves to `human_active` with `reason_code = policy_refer`. The notice does not include the score and does not say whether the customer pre-qualifies. The sentences are not in this contract yet. See `render_refer_notice` and Alicia's flow.
 7. **`language` travels on the event.** The turn carries it. `policy.run` copies it onto `analysis.completed`. `decision.render` and `template.send` read it from the triggering event. The process stores it, and the consultant close copies it onto `conversation.consultant_closed`. Nothing reads `llm_turns` for the locale.
-8. **`provide_income` carries the product on the turn.** A turn that names a product stores it on the process. A later `provide_income` copies that stored product onto the turn when the model sends none. If it is still null, `ask_which_product` sends `which_product` and the policy waits.
+8. **`provide_income` carries the product on the turn.** A turn that names a product stores it on the process. A later `provide_income` copies that stored product onto the turn when the model sends none. If it is still null, `ask_which_product` sends `which_product` and the policy waits, at most twice.
 10. **`reason_code` is a closed list.** `customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`. The policy rule stays on `deciding_rule`. See the list under **Process**.
 4. **The first turn takes the process this cycle just opened.** The first message is always the customer's, and its `process_id` column stays null. `process.start` runs first. `conversation.generate` then writes `conversation.turn_classified` with that process id. There is one open process per customer. The message row is not updated, and the message is not copied. See **Events**, the `conversation.generate` command, and Juan's flow step 5.
 
