@@ -55,6 +55,7 @@ Gaps against the contract in what is built (item M0):
 - I1, decided Sep 30: `api-spec/generate.py` appends a named alias for every string enum in `openapi.yaml` (`Role = Literal['customer', 'consultant']` and 18 more) to `api/contract_models.py`. Since Oct 1 `api/domain/session/tokens.py` imports `Role` from there too, so no set the wire carries is declared twice. `test_every_spec_enum_has_a_named_alias` guards the list.
 - I1, Oct 1 (D19): event names became the wire enum `EventName`, and `api/domain/process/events.py` holds their constants, every idempotency-key builder, and the actor of each event. Command names and process rule ids stay with E4 and E3.
 - E2, built Oct 2 (D20): `events.seq` (`004_event_sequence.sql`) orders every event; `api/domain/process/lifecycle.py` holds the three moves and the message stamp; `new_events.py` builds each event with its key, actor, and `process_state`; `api/application/processes.py` records a message and starts, hands off, and ends a case through `PostgresEvents` and `PostgresProcesses`. Two-connection tests cover a second start and a message sent during a handoff. `POST /messages` declares 409 `message_id_reused`; the route itself is E8.
+- Language switch built Oct 2 (W9, D21): every label in Spanish, English, or Portuguese from `web/src/i18n/`, the switch in every app bar, and the login code email in the request's `locale`. The conversation part of D21 is I5, written into the contract the same day: each message carries `locale`, the case stores it from its opening message, and the model's `language` only sends an unreadable message to a person.
 - E1, built Sep 30 and hardened Oct 1: `decide(profile, product, declared_income)` in `api/domain/policy/engine.py`, thresholds and rule order in `alba-credit-v1.yaml`. D16 (2) is closed. The trace lists every evaluated rule and stops at the first terminal result. The policy file is checked when it loads (every status and every rule listed once, no gap between bands, R04 before R05), and a negative or non-finite declared income is rejected. `api/domain/policy/test_engine.py` covers the branches. `api/fixtures/oracle_customers.json` stays with M1.
 
 ## Interfaces (do first)
@@ -70,8 +71,13 @@ Gaps against the contract in what is built (item M0):
   - **Thread source (settled):** customer lines come from the process's `conversation.message_received` events, plus the opening message reached through `process.started.caused_by_event_id`. Assistant and template lines come from `messages` rows.
   - **Updates (settled):** `POST /messages` returns the `Case` after the worker finishes that cycle's commands, so the page does not poll.
   - **Still open:** no route lists a customer's processes. After a reload or a new login, the client cannot find an open case or an issued certificate unless it kept the `process_id` from a `POST /messages` response.
-- [ ] **I3. `ConversationTurn` and turn fixtures.** `api/infrastructure/llm/schema.py` in the contract's shape, plus one JSON turn per step of the four oracle flows and the spec examples. Engine tests inject them. Depends on I1.
+- [ ] **I3. `ConversationTurn` and turn fixtures.** `api/infrastructure/llm/schema.py` in the contract's shape (`language` is `es`, `en`, `pt`, or `other` since I5), plus one JSON turn per step of the four oracle flows and the spec examples. Engine tests inject them. Depends on I1.
 - [ ] **I4. Tooling.** ruff and mypy for Python, `tsc --noEmit` for the web app, all run by the `test` service. `README.md` names the one command. Since Oct 1 `scripts/check.sh` runs ruff, mypy strict, and pytest with coverage floors in the `test` service, and CI runs it plus `tsc` (`ARCHITECTURE.md`, "Quality gate"). Still open: `tsc` in the `test` service, whose image has no Node.
+- [x] **I5. Language on the wire (D21).** The switch's language rides on each message and decides what Alba writes. `api-spec/openapi.yaml`: `SendMessageRequest` carries it, and the template locale and turn language sets add `en`. `ARCHITECTURE.md`: the sections where the model's `language` picks the template locale say the message's language picks it, and `other` still hands off. The matching scenarios in `03` to `08` are updated. Blocks the language parts of E3, E5, E8, M3, and M4.
+  - Done Oct 2. Names: `locale` (`es`, `en`, `pt`) is the switch's choice everywhere Alba writes (the message, the process, the turn, `analysis.completed`, the consultant close, the templates, the certificate, the `Case`, the queue, the packet); `language` (`es`, `en`, `pt`, `other`) is only what the model read. `TemplateLocale` is gone; `Locale` is the one set.
+  - `process.start` stores the opening message's `locale` and `process.started` carries it; each turn stores its message's. `006_process_locale.sql` renames `processes.language` to `locale`, `NOT NULL`. E2's `record_customer_message` and `start_process` take the locale; `api/tests/test_process_cycle_integration.py` covers a case opened in Portuguese and a message id reused with another locale.
+  - D16 (1) closed with it: `ask_which_product` checks `language` like the other turn rules. English forbidden phrases: any word containing `pre-qualif` or `prequalif`.
+  - Specs: `05` "The certificate is written in the language the customer chose", `07` uses French for the unsupported language, `08` "The outcome is written in the customer's language, not the consultant's", `12` the two answer-language scenarios.
 
 ## Engine (E)
 
@@ -91,7 +97,7 @@ Gaps against the contract in what is built (item M0):
   - Depends on I1.
 - [ ] **E3. Rules.** `api/rules.py`: the rules as pure functions over the event, in table order. Each rule has a test that it fires and a test that it does not.
   - Specs: `03` scenarios 1, 2, 4; `04` all; `07` the handoff outline and "The assistant stops replying once a person has the case".
-  - Depends on E2. **Blocked** by D12, D14, D16 (1); `03` scenario 3 by D13.
+  - Depends on E2. **Blocked** by D12, D14; `03` scenario 3 by D13. D16 (1) closed Oct 2 with I5: every turn rule but `hand_off_language` and `hand_off_reply` requires `language` in `es`, `en`, `pt`; `open_process` passes the message's `locale` to `process.start`.
 - [ ] **E4. Worker and commands.** `api/worker.py`, a loop in the API process:
   - takes `pending` commands with `FOR UPDATE SKIP LOCKED`;
   - makes at most 3 attempts, then moves the case to `human_active` with `tool_failed`;
@@ -102,8 +108,8 @@ Gaps against the contract in what is built (item M0):
   Event-chain tests cross the worker (`AGENTS.md` "Tests"). Settles the C4 items on who calls `match_rules`, whether an event and its commands commit together, and the poll interval.
   - Specs: `07` "Repeated model failures send the case to a person".
   - Depends on E2 and E3. **Blocked** by D16 (3) in wording only.
-- [ ] **E5. Templates.** `api/domain/policy/templates.py`, ES and PT, for `confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the policy certificate, and the two consultant-path messages. The contract says these sentences are not written yet: they are written here, read by both of us, then noted in the contract. The certificate shows income in local currency with the USD equivalent and the rate date, and no limit or rate.
-  - Specs: `05` certificate scenarios and "A request in Portuguese gets a Portuguese certificate"; `07` "The referral notice tells the customer a person will review".
+- [ ] **E5. Templates.** `api/domain/policy/templates.py`, ES, EN, and PT (D21), for `confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the policy certificate, and the two consultant-path messages. The contract says these sentences are not written yet: they are written here, read by both of us, then noted in the contract. The certificate shows income in local currency with the USD equivalent and the rate date, and no limit or rate.
+  - Specs: `05` certificate scenarios and "The certificate is written in the language the customer chose"; `08` "The outcome is written in the customer's language, not the consultant's"; `07` "The referral notice tells the customer a person will review".
   - Depends on E1. **Blocked** by D15 (1) for the non-`REFER` notice.
 - [x] **E6. Auth.** `api/domain/session`, `api/domain/consultants`, `api/application/session`, and `api/presentation/http`. The customer half was built Sep 29, the consultant half Sep 30 (D18: `/consultant/login`, email plus employee code, `Active` consultants only):
   - 6-digit codes valid 10 minutes, stored hashed in `login_codes`, emailed by `api/infrastructure/mail/smtp.py` to Mailpit; a new code replaces the unused one; the fifth wrong code spends it;
@@ -123,7 +129,7 @@ Gaps against the contract in what is built (item M0):
   - Specs: `01` and `11` search scenarios; `02` all.
   - Depends on E6.
 - [ ] **E8. Case and consultant routes.** `POST /messages`, `GET /case/{process_id}`, the consultant queue, packet, trace, and close, exactly as in `ARCHITECTURE.md` "HTTP contract", typed with the generated models. That section already fixes the order (`created_at`, then id), the 404 and 409 cases, and the packet with null analysis fields when no `analysis.completed` exists.
-  - Specs: `08` for `REFER` cases; `09` all; the HTTP side of `03` to `07`.
+  - Specs: `08` for `REFER` cases; `09` all; the HTTP side of `03` to `07`. `POST /messages` takes `locale` (I5) and passes it to `record_customer_message`; the `Case`, the queue items, and the packet carry the case's `locale`.
   - Depends on E4 and E6. **Blocked** by D15 (3) for closes on non-`REFER` cases.
 - [ ] **E9. Oracle integration test.** The four flows through HTTP and the worker with injected turns:
   - Juan: `PREQUALIFIED` by R05.
@@ -142,7 +148,7 @@ Gaps against the contract in what is built (item M0):
   - latency, tokens, and cost per turn;
   - Structured Outputs validity;
   - whether `temperature` 0 is accepted;
-  - Spanish and Portuguese quality.
+  - Spanish, English, and Portuguese quality.
 
   Numbers go to `PLAN.md` §6 and feed D1, D6, D7.
 - [ ] **M3. Model adapter and prompt.** `api/infrastructure/llm/conversation.py`:
@@ -151,10 +157,10 @@ Gaps against the contract in what is built (item M0):
   - forbidden phrases set `reply_forbidden`;
   - a missing key fails the command and names the key.
 
-  The prompt is built from the four booleans, the state, the catalog, and the text, and is versioned so eval runs can cite it. pytest never calls OpenAI.
+  The prompt is built from the four booleans, the state, the catalog in Spanish, English, and Portuguese, the text, and the message's `locale` to write `reply_text` in (I5), and is versioned so eval runs can cite it. The forbidden phrases include the English `pre-qualif` and `prequalif`. pytest never calls OpenAI.
   - Specs: `07` "A reply that states an outcome is withheld".
   - Depends on I3 and M2. **Blocked** by D11 for masking only, and by D13 if its option (a) is chosen.
-- [ ] **M4. Held-out set.** Team-labeled utterances in ES-MX, ES-CO, ES-AR, and PT, with the expected intent, product, language, and route. Portuguese is team-written or machine-translated and disclosed. Frozen with its sha256 before M3's prompt tuning. **Blocked** by D7 for its size.
+- [ ] **M4. Held-out set.** Team-labeled utterances in ES-MX, ES-CO, ES-AR, EN, and PT, with the expected intent, product, language, and route. English is team-written (D21); Portuguese is team-written or machine-translated; both are disclosed. Frozen with its sha256 before M3's prompt tuning. **Blocked** by D7 for its size.
 - [ ] **M5. B0 keyword baseline.** Pure, the same `ConversationTurn` output shape, runs offline. Depends on I3.
 - [ ] **M6. Harness and metrics.** Intent level first: B0 against the model on M4. Then route level through the API once E9 passes: the §7 metrics of `PLAN.md` with denominators and intervals, written to `eval/reports/`. **Blocked** by D7 for B1, case counts, and spend.
 - [ ] **M7. Data-quality report and model cards.** `docs/data_quality.md` (the traps in `PLAN.md` §4.3, the load checks, the update-correctness fixture labeled as such), `docs/model_card_risk.md` (`PLAN.md` §4.4), and a card for the `ConversationTurn` component. R1 to R7, R10, and R12 as time allows.
@@ -171,11 +177,14 @@ Every screen follows `DESIGN.md` and `mocks/index.html`, and handles loading, er
   - No rate and no days past due: `GET /products` does not return them.
   - A customer with no products reads "Todavía no tienes productos con nosotros.".
   - The two "Preguntar por" rows show disabled until W4 wires them to `POST /messages`.
-- [ ] **W4. Case.** The thread; one uuid per send; the typing indicator "escribiendo…" until the `POST /messages` response arrives, with no fixed sleep and no polling; the returned `Case` replaces the thread; the certificate when it exists. The "Preguntar por" rows on `/` start sending here. Specs: `03` to `07` as the customer sees them.
+- [ ] **W4. Case.** The thread; one uuid per send, with the switch's `locale` in the same body so a retry repeats it; the typing indicator ("escribiendo…", and its English and Portuguese labels in `web/src/i18n/`) until the `POST /messages` response arrives, with no fixed sleep and no polling; the returned `Case` replaces the thread; the certificate when it exists. The "Preguntar por" rows on `/` start sending here. Specs: `03` to `07` as the customer sees them.
 - [ ] **W5. Consultant queue and case.** The packet, two close actions, and no reply field. Specs: `08`. **Blocked** by D15 (3) for closes on non-`REFER` cases.
 - [ ] **W6. Trace.** The process's events in order, with the detail column of `09`. Specs: `09`.
 - [ ] **W7. Oracle flows in the browser.** The four oracle flows, one of them in Portuguese. Depends on E9 and W2 to W6.
 - [x] **W8. Consultant login page.** `/consultant/login` (D18): email and employee code, then the emailed code; `Active` consultants only; the demo consultant search and random pick; a link to and from `/login`. `/consultant` greets the consultant until W5 replaces it. Built Sep 30 against the real API. Specs: `11`.
+- [x] **W9. Language switch (D21).** Spanish, English, and Portuguese in the app bar of every screen, both login pages included. One dictionary per language in `web/src/i18n/`: the Spanish one defines the keys, and a missing or extra key fails `tsc`. The product names and statuses carry each language's own gender. A first visit follows the browser, else Spanish; the choice is kept in the browser and sets `<html lang>`. The code request carries the language, and `api/infrastructure/mail/smtp.py` writes the email in it. Specs: `12`.
+  - Built Oct 2 against the local stack. `Locale` (`es`, `en`, `pt`) is a wire enum, required on both code requests; a request without it is a 422. `api/infrastructure/mail/test_smtp.py` and the two login integration tests cover the email side of `12`; the switch, the first visit, the labels, and the product genders were checked in the browser, at 360 and 375 px too, since the web app has no test runner yet (I4).
+  - On phones the name pill hides so the switch fits; the greeting already names the customer.
 
 ## Spec work from the Sep 29 review
 
