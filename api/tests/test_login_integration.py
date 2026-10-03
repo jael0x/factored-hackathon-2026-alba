@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 import psycopg
 import pytest
 
+from api.contract_models import Locale
 from api.domain.session.tokens import SessionClaims, issue_token
 from api.infrastructure.config.settings import settings
 from api.tests.login_harness import ALICIA, JUAN, JULIANA, NO_EMAIL, Harness, customer_login
@@ -15,9 +16,24 @@ UNKNOWN_DOCUMENT = "00000000"
 def test_asking_for_a_code_emails_it_to_the_address_on_file(harness: Harness) -> None:
     assert harness.request_code(customer_login(JUAN.document_number)) == {"expires_in_seconds": 600}
     assert len(harness.mail.sent) == 1
-    to, code = harness.mail.sent[0]
+    to, code, _ = harness.mail.sent[0]
     assert to == "juan.romero@example.com"
     assert len(code) == 6 and code.isdigit()
+
+
+@pytest.mark.parametrize("locale", ["es", "en", "pt"])
+def test_the_code_email_is_written_in_the_chosen_language(harness: Harness, locale: Locale) -> None:
+    harness.request_code(customer_login(JUAN.document_number), locale)
+    assert [sent.locale for sent in harness.mail.sent] == [locale]
+
+
+@pytest.mark.parametrize("locale", [None, "fr"])
+def test_a_code_request_without_a_known_language_is_rejected(harness: Harness, locale: str | None) -> None:
+    body = {"document_number": JUAN.document_number} | ({} if locale is None else {"locale": locale})
+    response = harness.http.post("/session/code", json=body)
+    assert response.status_code == 422
+    assert response.json() == {"error": "invalid_body"}
+    assert harness.mail.sent == []
 
 
 def test_the_stored_code_is_a_hash(harness: Harness) -> None:

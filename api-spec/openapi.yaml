@@ -107,7 +107,7 @@ paths:
       summary: Email a 6-digit code to the customer with this document number.
       description: >
         When document_number matches a customer with an email on file, a code valid for 10 minutes
-        is stored as a hash and emailed to that address. A new request replaces any unused code
+        is stored as a hash and emailed to that address, written in locale. A new request replaces any unused code
         for the same customer. The response is the same whether or not the document matches and
         whether or not the customer has an email. It never carries the code, the address, or the name.
       requestBody:
@@ -194,7 +194,7 @@ paths:
       description: >
         Spaces around either field are ignored, the email is compared in lower case, and the employee code
         in upper case. When the pair matches a consultant whose service_agents.agent_status is Active, a code valid for
-        10 minutes is stored as a hash and emailed to that address. A new request replaces any unused code
+        10 minutes is stored as a hash and emailed to that address, written in locale. A new request replaces any unused code
         for the same consultant. The response is the same for every pair and every status.
         It never carries the code, the address, or the name.
       requestBody:
@@ -644,6 +644,11 @@ components:
       type: string
       enum: [customer, consultant]
 
+    Locale:
+      type: string
+      description: The language chosen with the switch in the app bar (PLAN.md D21).
+      enum: [es, en, pt]
+
     ProcessState:
       type: string
       enum: [ai_active, human_active, ended]
@@ -812,11 +817,13 @@ components:
     RequestCustomerCode:
       type: object
       additionalProperties: false
-      required: [document_number]
+      required: [document_number, locale]
       properties:
         document_number:
           type: string
           minLength: 1
+        locale:
+          $ref: "#/components/schemas/Locale"
 
     CodeRequested:
       type: object
@@ -843,7 +850,7 @@ components:
     RequestConsultantCode:
       type: object
       additionalProperties: false
-      required: [email, employee_code]
+      required: [email, employee_code, locale]
       properties:
         email:
           type: string
@@ -851,6 +858,8 @@ components:
         employee_code:
           type: string
           minLength: 1
+        locale:
+          $ref: "#/components/schemas/Locale"
 
     OpenConsultantSessionRequest:
       type: object

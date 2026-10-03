@@ -1,9 +1,10 @@
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 import psycopg
 from fastapi.testclient import TestClient
 
-from api.contract_models import Role
+from api.contract_models import Locale, Role
 
 LOGIN_TEST_DB = "alba_api_test"
 
@@ -107,12 +108,18 @@ def login_of(consultant: Consultant) -> Login:
     return consultant_login(consultant.email, consultant.employee_code)
 
 
+class SentCode(NamedTuple):
+    to: str
+    code: str
+    locale: Locale
+
+
 @dataclass
 class FakeMailer:
-    sent: list[tuple[str, str]] = field(default_factory=list)
+    sent: list[SentCode] = field(default_factory=list)
 
-    def send_login_code(self, to: str, code: str) -> None:
-        self.sent.append((to, code))
+    def send_login_code(self, to: str, code: str, locale: Locale) -> None:
+        self.sent.append(SentCode(to, code, locale))
 
 
 @dataclass
@@ -120,16 +127,15 @@ class Harness:
     http: TestClient
     mail: FakeMailer
 
-    def request_code(self, login: Login) -> dict[str, object]:
-        response = self.http.post(login.code_path, json=login.identity)
+    def request_code(self, login: Login, locale: Locale = "es") -> dict[str, object]:
+        response = self.http.post(login.code_path, json={**login.identity, "locale": locale})
         assert response.status_code == 200
         body = response.json()
         assert isinstance(body, dict)
         return body
 
     def last_code(self) -> str:
-        _, code = self.mail.sent[-1]
-        return code
+        return self.mail.sent[-1].code
 
     def open_session(self, login: Login, code: str) -> int:
         return self.http.post(login.session_path, json={**login.identity, "code": code}).status_code

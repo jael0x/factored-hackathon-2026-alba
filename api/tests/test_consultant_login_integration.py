@@ -1,6 +1,7 @@
 import psycopg
 import pytest
 
+from api.contract_models import Locale
 from api.infrastructure.config.settings import settings
 from api.tests.login_harness import (
     CESAR,
@@ -29,15 +30,28 @@ def bearer(token: str) -> dict[str, str]:
 def test_an_active_consultant_gets_a_code_at_their_email(harness: Harness) -> None:
     assert harness.request_code(login_of(CESAR)) == {"expires_in_seconds": 600}
     assert len(harness.mail.sent) == 1
-    to, code = harness.mail.sent[0]
+    to, code, _ = harness.mail.sent[0]
     assert to == "cesar.gonzalez@example.com"
     assert len(code) == 6 and code.isdigit()
+
+
+@pytest.mark.parametrize("locale", ["es", "en", "pt"])
+def test_the_consultant_code_email_is_written_in_the_chosen_language(harness: Harness, locale: Locale) -> None:
+    harness.request_code(login_of(CESAR), locale)
+    assert [sent.locale for sent in harness.mail.sent] == [locale]
+
+
+def test_a_consultant_code_request_without_a_language_is_rejected(harness: Harness) -> None:
+    response = harness.http.post("/consultant/session/code", json=login_of(CESAR).identity)
+    assert response.status_code == 422
+    assert response.json() == {"error": "invalid_body"}
+    assert harness.mail.sent == []
 
 
 def test_spaces_and_letter_case_do_not_change_the_match(harness: Harness) -> None:
     typed = consultant_login("  Cesar.Gonzalez@EXAMPLE.com ", " e75612 ")
     harness.request_code(typed)
-    assert [to for to, _ in harness.mail.sent] == ["cesar.gonzalez@example.com"]
+    assert [sent.to for sent in harness.mail.sent] == ["cesar.gonzalez@example.com"]
     response = harness.http.post("/consultant/session", json={**typed.identity, "code": harness.last_code()})
     assert response.status_code == 200
     assert response.json()["sub"] == CESAR.consultant_id
@@ -82,7 +96,7 @@ def test_a_code_sent_while_active_does_not_open_a_session_after_the_consultant_l
 
 def test_on_a_shared_employee_code_the_email_picks_the_consultant(harness: Harness) -> None:
     harness.request_code(login_of(SHARED_CODE_SOFIA))
-    assert [to for to, _ in harness.mail.sent] == ["sofia.medina@example.com"]
+    assert [sent.to for sent in harness.mail.sent] == ["sofia.medina@example.com"]
     code = harness.last_code()
     assert harness.open_session(login_of(SHARED_CODE_DIEGO), code) == 401
     response = harness.http.post("/consultant/session", json={**login_of(SHARED_CODE_SOFIA).identity, "code": code})
@@ -91,7 +105,7 @@ def test_on_a_shared_employee_code_the_email_picks_the_consultant(harness: Harne
 
 def test_on_a_shared_email_the_employee_code_picks_the_consultant(harness: Harness) -> None:
     harness.request_code(login_of(SHARED_EMAIL_VALERIA))
-    assert [to for to, _ in harness.mail.sent] == ["equipo.silva@example.com"]
+    assert [sent.to for sent in harness.mail.sent] == ["equipo.silva@example.com"]
     code = harness.last_code()
     assert harness.open_session(login_of(SHARED_EMAIL_ANDRES), code) == 401
     response = harness.http.post("/consultant/session", json={**login_of(SHARED_EMAIL_VALERIA).identity, "code": code})

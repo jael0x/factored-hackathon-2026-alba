@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends
 
 from api.contract_models import (
     CodeRequested,
+    Locale,
     OpenConsultantSessionRequest,
     OpenCustomerSessionRequest,
     RequestConsultantCode,
@@ -39,7 +40,7 @@ def request_customer_code(
     issue: Annotated[IssueCustomerCode, Depends(get_issue_customer_code)],
     mailer: Annotated[Mailer, Depends(get_mailer)],
 ) -> CodeRequested:
-    return _code_requested(issue(body.document_number.strip()), tasks, mailer)
+    return _code_requested(issue(body.document_number.strip()), body.locale, tasks, mailer)
 
 
 @router.post("", response_model=Session)
@@ -59,7 +60,7 @@ def request_consultant_code(
     issue: Annotated[IssueConsultantCode, Depends(get_issue_consultant_code)],
     mailer: Annotated[Mailer, Depends(get_mailer)],
 ) -> CodeRequested:
-    return _code_requested(issue(body.email, body.employee_code), tasks, mailer)
+    return _code_requested(issue(body.email, body.employee_code), body.locale, tasks, mailer)
 
 
 @consultant_router.post("", response_model=Session)
@@ -72,9 +73,11 @@ def open_consultant_session(
     return _session(open_consultant(body.email, body.employee_code, body.code), secret, now)
 
 
-def _code_requested(delivery: CodeDelivery | None, tasks: BackgroundTasks, mailer: Mailer) -> CodeRequested:
+def _code_requested(
+    delivery: CodeDelivery | None, locale: Locale, tasks: BackgroundTasks, mailer: Mailer
+) -> CodeRequested:
     if delivery is not None:
-        tasks.add_task(mailer.send_login_code, delivery.email, delivery.code)
+        tasks.add_task(mailer.send_login_code, delivery.email, delivery.code, locale)
     return CodeRequested(expires_in_seconds=CODE_TTL_SECONDS)
 
 
