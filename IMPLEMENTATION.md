@@ -56,6 +56,7 @@ Gaps against the contract in what is built (item M0):
 - I1, Oct 1 (D19): event names became the wire enum `EventName`, and `api/domain/process/events.py` holds their constants, every idempotency-key builder, and the actor of each event. Command names and process rule ids stay with E4 and E3.
 - E2, built Oct 2 (D20): `events.seq` (`004_event_sequence.sql`) orders every event; `api/domain/process/lifecycle.py` holds the three moves and the message stamp; `new_events.py` builds each event with its key, actor, and `process_state`; `api/application/processes.py` records a message and starts, hands off, and ends a case through `PostgresEvents` and `PostgresProcesses`. Two-connection tests cover a second start and a message sent during a handoff. `POST /messages` declares 409 `message_id_reused`; the route itself is E8.
 - Language switch built Oct 2 (W9, D21): every label in Spanish, English, or Portuguese from `web/src/i18n/`, the switch in every app bar, and the login code email in the request's `locale`. The conversation part of D21 is I5, written into the contract the same day: each message carries `locale`, the case stores it from its opening message, and the model's `language` only sends an unreadable message to a person.
+- E3, built Oct 2: the 21 process rules in `api/domain/process/rules.py`, pure over the typed record `stored_events.py` parses, with the command names and payloads in `commands.py`. The command key is written into the contract ("Commands"). Nothing calls `match_rules` yet; that is E4.
 - E1, built Sep 30 and hardened Oct 1: `decide(profile, product, declared_income)` in `api/domain/policy/engine.py`, thresholds and rule order in `alba-credit-v1.yaml`. D16 (2) is closed. The trace lists every evaluated rule and stops at the first terminal result. The policy file is checked when it loads (every status and every rule listed once, no gap between bands, R04 before R05), and a negative or non-finite declared income is rejected. `api/domain/policy/test_engine.py` covers the branches. `api/fixtures/oracle_customers.json` stays with M1.
 
 ## Interfaces (do first)
@@ -63,10 +64,10 @@ Gaps against the contract in what is built (item M0):
 - [ ] **I1. Closed sets in code.** Every closed set from `AGENTS.md` "No magic strings" is defined once.
   - Sets the wire carries are generated as named `Literal` aliases at the end of `api/contract_models.py` from `api-spec/openapi.yaml` (decided Sep 30). Python code imports them and does not declare them again. These are: role, state, end reason, product, locale, language, outcome, close outcome, currency, reason code, intent, template id, `decided_by`, policy rule id, actor, message author, policy version, process key, and event name.
   - Sets the wire does not carry live in the module that owns them in the contract's file tree:
-    - `api/presentation/worker/`: command names;
+    - `api/domain/process/commands.py`: command names and their payloads (since Oct 2, E3: the domain rules emit them, and the domain cannot import the worker);
     - `api/domain/process/rules.py`: process rule ids.
   - Event names and idempotency keys, done Oct 1 (D19): `EventName` is a wire enum in `openapi.yaml`, referenced by `TraceEventBase.event_name`; `test_event_names_are_the_trace_discriminator` checks it equals the discriminator mapping. `api/domain/process/events.py` holds the ten constants, the key builders (a two-event action keys each event `{action key}:{event_name}`), and the actor of each event, so the pure rules can import them.
-  - The additions from D13 and D15 wait for those decisions.
+  - D13 and D14 (Oct 2) add the process rule ids `ask_consent_for_income` and `hand_off_no_product`; they are defined with the other rule ids in E3. The additions from D15 wait for that decision.
 - [x] **I2. HTTP route contract.** Done in e0e3532: `api-spec/openapi.yaml` and `ARCHITECTURE.md` "HTTP contract" (15 paths, roles, error codes, the `Case`, the packet, and the trace).
   - **Thread source (settled):** customer lines come from the process's `conversation.message_received` events, plus the opening message reached through `process.started.caused_by_event_id`. Assistant and template lines come from `messages` rows.
   - **Updates (settled):** `POST /messages` returns the `Case` after the worker finishes that cycle's commands, so the page does not poll.
@@ -95,15 +96,20 @@ Gaps against the contract in what is built (item M0):
 - [x] **E2. Events and processes.** `api/infrastructure/db/events.py`: append with the idempotency key; a repeated key writes nothing and says so; the same key for another fact raises. `api/application/processes.py`: stamps `process_id` and `process_state` on `conversation.message_received`; start, transition (only the allowed table; anything else raises and writes nothing), end. Built Oct 2 (D20).
   - Specs: `05` "A message delivered twice does not produce a second decision", "A new message after an ended case opens a new case", "A message id sent again with another text is refused", "Two messages sent before the case opens join one case". `api/tests/test_process_cycle_integration.py` covers them at the store; the certificate and the thread wait for E3 to E5 and E8.
   - Depends on I1.
-- [ ] **E3. Rules.** `api/rules.py`: the rules as pure functions over the event, in table order. Each rule has a test that it fires and a test that it does not.
+- [x] **E3. Rules.** `api/domain/process/rules.py`: the rules as pure functions over the event, in table order. Each rule has a test that it fires and a test that it does not. Built Oct 2.
+  - `stored_events.py` parses a stored event into the typed record a rule reads, and refuses what the contract does not allow: a message stamped `ended`, or `human_active` with no process; a shown turn with a `reason_code`; a withheld turn with any reason but `reply_forbidden` or `model_output_invalid`; an amount read as a float. `commands.py` holds the command names and one payload type per command. `match_rules(event)` returns the planned commands, each with its rule, its event, and its key (`ARCHITECTURE.md`, "Commands").
+  - Tests in `api/domain/process/test_rules.py` and `test_stored_events.py`: the 1,920 turn combinations, every rule firing and not firing, every other trigger, the four oracle flows and Juan in Portuguese as event sequences, and the table checks. Sabotage runs: a third ask still asking which product, `ask_which_product` without the language check, the handoff before the referral notice, and `end_after_decision` ignoring `decided_by`; each turns its exact tests red. These are pure tests; the same scenarios over HTTP pass with E4, E8, and E9.
   - Specs: `03` scenarios 1, 2, 4; `04` all; `07` the handoff outline and "The assistant stops replying once a person has the case".
-  - Depends on E2. **Blocked** by D12, D14; `03` scenario 3 by D13. D16 (1) closed Oct 2 with I5: every turn rule but `hand_off_language` and `hand_off_reply` requires `language` in `es`, `en`, `pt`; `open_process` passes the message's `locale` to `process.start`.
+  - Specs, from D13 and D14 (Oct 2): `03` the second and third requests with no product; `04` an income instead of the consent answer, and a yes with an income; `07` another language with no product.
+  - A test enumerates every combination of `reply_ok`, `language`, `intent`, `product`, `product_asked_count`, and `income_requested`, and asserts that exactly one `conversation.turn_classified` rule matches each.
+  - Depends on E2. D12, D13, D14, and D16 (1) closed Oct 2. D16 (1) closed with I5: every turn rule but `hand_off_language` and `hand_off_reply` requires `language` in `es`, `en`, `pt`. Still to do: `open_process` passes the message's `locale` to `process.start` (today `process.start` has no payload).
 - [ ] **E4. Worker and commands.** `api/worker.py`, a loop in the API process:
   - takes `pending` commands with `FOR UPDATE SKIP LOCKED`;
   - makes at most 3 attempts, then moves the case to `human_active` with `tool_failed`;
-  - runs the eight handlers;
+  - runs the eight handlers; `conversation.generate` stamps `product_asked_count` and `income_requested` on the turn from this process's earlier events (D13, D14), and `policy.run` uses the key with the triggering turn (D12);
   - takes the model call as an injected function, so tests pass turns as JSON;
-  - lets the `POST /messages` handler wait until the commands enqueued from its event are done, because the response is the `Case` after that cycle. The handler waits; it does not run commands itself.
+  - lets the `POST /messages` handler wait until the commands enqueued from its event are done, because the response is the `Case` after that cycle. The handler waits; it does not run commands itself;
+  - reads each event through `parse_stored_event`, inserts the `PlannedCommand` rows from `match_rules` in their order and on their keys (a key already present inserts nothing), and stores a payload's amount as an exact decimal: psycopg loads jsonb numbers as `float` unless the loader uses `parse_float=Decimal`, and the rules refuse a float (E3).
 
   Event-chain tests cross the worker (`AGENTS.md` "Tests"). Settles the C4 items on who calls `match_rules`, whether an event and its commands commit together, and the poll interval.
   - Specs: `07` "Repeated model failures send the case to a person".
@@ -138,7 +144,7 @@ Gaps against the contract in what is built (item M0):
   - Mariana: `NOT_PREQUALIFIED` by R02.
 
   This is the contract's oracle test.
-  - Depends on E1 to E8. **Blocked** by D12.
+  - Depends on E1 to E8. D12 closed Oct 2.
 
 ## Model and eval (M)
 
@@ -155,11 +161,13 @@ Gaps against the contract in what is built (item M0):
   - one call with Structured Outputs, the Pydantic check, and one retry;
   - an `llm_turns` row on every call, with the model, tokens, and latency;
   - forbidden phrases set `reply_forbidden`;
+  - a turn whose intent names one product and whose `product` names another, or none, is invalid output, so `confirm_prequalify` always has a product to name (E3);
+  - the contract says a turn with `model_output_invalid` is written, but `intent` and `language` are required and there is no valid value to write; settle it in `openapi.yaml` here. The rules read only `reason_code` on a withheld turn (E3);
   - a missing key fails the command and names the key.
 
   The prompt is built from the four booleans, the state, the catalog in Spanish, English, and Portuguese, the text, and the message's `locale` to write `reply_text` in (I5), and is versioned so eval runs can cite it. The forbidden phrases include the English `pre-qualif` and `prequalif`. pytest never calls OpenAI.
   - Specs: `07` "A reply that states an outcome is withheld".
-  - Depends on I3 and M2. **Blocked** by D11 for masking only, and by D13 if its option (a) is chosen.
+  - Depends on I3 and M2. **Blocked** by D11 for masking only. D13 chose option (c), so the prompt carries no count of earlier questions.
 - [ ] **M4. Held-out set.** Team-labeled utterances in ES-MX, ES-CO, ES-AR, EN, and PT, with the expected intent, product, language, and route. English is team-written (D21); Portuguese is team-written or machine-translated; both are disclosed. Frozen with its sha256 before M3's prompt tuning. **Blocked** by D7 for its size.
 - [ ] **M5. B0 keyword baseline.** Pure, the same `ConversationTurn` output shape, runs offline. Depends on I3.
 - [ ] **M6. Harness and metrics.** Intent level first: B0 against the model on M4. Then route level through the API once E9 passes: the §7 metrics of `PLAN.md` with denominators and intervals, written to `eval/reports/`. **Blocked** by D7 for B1, case counts, and spend.
@@ -188,7 +196,7 @@ Every screen follows `DESIGN.md` and `mocks/index.html`, and handles loading, er
 
 ## Spec work from the Sep 29 review
 
-- After each of D12 to D16 is decided: update `03`, `04`, `06`, `07`, and `08` to match, in the change that writes the decision into the contract.
+- After each of D12 to D16 is decided: update `03`, `04`, `06`, `07`, and `08` to match, in the change that writes the decision into the contract. D12, D13, D14, and D16 (1) done Oct 2 (`03`, `04`, `07`; `06` needed no change).
 - Scenarios missing for behavior the contract already defines. Each is added in the item that builds the behavior:
   - two invalid model outputs send the case to a person with `model_output_invalid` (`07`, M3);
   - the consultant login (email and employee code, `Active` consultants only, D18): written Sep 30 as `11-consultant-login.feature`, since `01` had reached 15 scenarios;

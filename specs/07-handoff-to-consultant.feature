@@ -35,6 +35,12 @@ Feature: Handoff to a consultant
       | quiero una hipoteca nueva      | out_of_scope             |
       | je voudrais une carte bancaire | language_unsupported     |
 
+  Scenario: A message in another language that names no product is not asked which product
+    Given Juan Alberto Romero González is signed in with no open case
+    When Juan writes "je gagne 3 000 par mois"
+    Then his case enters the review queue with reason "language_unsupported"
+    And the assistant does not ask which product he wants
+
   Scenario: A reply that states an outcome is withheld
     Given the assistant drafts a reply to Juan that says he "precalifica"
     When the reply is checked before it is shown
