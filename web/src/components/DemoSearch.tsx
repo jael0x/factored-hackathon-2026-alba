@@ -1,5 +1,7 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 
+import { useMessages } from "../i18n/messages";
+
 export type DemoSource<Hit> = {
   heading: string;
   help: string;
@@ -32,6 +34,7 @@ export function DemoSearch<Hit>({ titleId, source, isSelected, onPick, onClose }
   const [results, setResults] = useState<Results<Hit>>({ status: "idle" });
   const [attempt, setAttempt] = useState(0);
   const { search, pickRandom } = source;
+  const t = useMessages();
 
   useEffect(() => {
     const q = query.trim();
@@ -72,7 +75,7 @@ export function DemoSearch<Hit>({ titleId, source, isSelected, onPick, onClose }
           {source.heading}
         </h2>
         <button type="button" className="btn text" onClick={onClose}>
-          Cerrar
+          {t.demo.close}
         </button>
       </div>
       <div className="stack">
@@ -106,7 +109,7 @@ export function DemoSearch<Hit>({ titleId, source, isSelected, onPick, onClose }
         />
         <div className="actions-row">
           <button type="button" className="btn secondary" onClick={pickAtRandom}>
-            Elegir al azar
+            {t.demo.pickRandom}
           </button>
         </div>
       </div>
@@ -123,27 +126,28 @@ type SearchResultsProps<Hit> = {
 };
 
 function SearchResults<Hit>({ results, source, isSelected, onPick, onRetry }: SearchResultsProps<Hit>) {
+  const t = useMessages();
   if (results.status === "idle") {
     return null;
   }
   if (results.status === "loading") {
-    return <span className="pulse" aria-label="Buscando" />;
+    return <span className="pulse" aria-label={t.demo.searching} />;
   }
   if (results.status === "error") {
     return (
       <div className="actions-row" role="alert">
-        <p className="error-line">No pudimos buscar.</p>
+        <p className="error-line">{t.demo.searchFailed}</p>
         <button type="button" className="btn text" onClick={onRetry}>
-          Reintentar
+          {t.retry}
         </button>
       </div>
     );
   }
   if (results.hits.length === 0) {
-    return <p className="empty caption muted solid results">Nadie coincide con esa búsqueda.</p>;
+    return <p className="empty caption muted solid results">{t.demo.noMatch}</p>;
   }
   return (
-    <ul className="results solid" aria-label="Resultados">
+    <ul className="results solid" aria-label={t.demo.results}>
       {results.hits.map((hit) => (
         <li key={source.key(hit)}>
           <button type="button" aria-pressed={isSelected(hit)} onClick={() => onPick(hit)}>

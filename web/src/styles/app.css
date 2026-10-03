@@ -138,6 +138,40 @@ input {
   font-weight: 500;
 }
 
+.lang-switch {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--r-pill);
+}
+
+.lang-switch button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background-color var(--t-press) var(--ease), color var(--t-press) var(--ease);
+}
+
+.lang-switch button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--solid-shadow);
+}
+
+/* The greeting already names the customer, so phones drop the pill to fit the switch. */
+@media (max-width: 640px) {
+  .name-pill { display: none; }
+}
+
 .page {
   max-width: 1040px;
   margin: 0 auto;
@@ -574,7 +608,7 @@ a.btn { text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   .orb, .pulse { animation: none; }
   .enter, .popover { animation: fade 120ms linear both; }
-  .btn { transition: none; }
+  .btn, .lang-switch button { transition: none; }
 }
 
 @keyframes fade {

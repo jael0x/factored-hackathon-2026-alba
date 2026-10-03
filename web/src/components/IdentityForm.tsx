@@ -1,5 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 
+import { useMessages } from "../i18n/messages";
+
 type IdentityFormProps = {
   ready: boolean;
   requestCode: () => Promise<number | null>;
@@ -10,6 +12,7 @@ type IdentityFormProps = {
 export function IdentityForm({ ready, requestCode, onSent, children }: IdentityFormProps) {
   const [sending, setSending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const t = useMessages();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -29,11 +32,11 @@ export function IdentityForm({ ready, requestCode, onSent, children }: IdentityF
       {children}
       {failed && (
         <p className="error-line" role="alert">
-          No pudimos enviar la solicitud. Inténtalo de nuevo.
+          {t.login.sendFailed}
         </p>
       )}
       <button type="submit" className="btn primary block" disabled={sending || !ready}>
-        {sending ? "Enviando…" : "Enviar código"}
+        {sending ? t.login.sending : t.login.sendCode}
       </button>
     </form>
   );

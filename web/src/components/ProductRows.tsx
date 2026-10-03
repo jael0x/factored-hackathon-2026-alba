@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { components } from "../api/schema";
+import { useMessages } from "../i18n/messages";
 import { ASK_ABOUT } from "../products";
 
 type ProductKey = components["schemas"]["ProductKey"];
@@ -22,19 +23,20 @@ const ICONS: Record<ProductKey, ReactNode> = {
 };
 
 export function ProductRows() {
+  const t = useMessages();
   return (
     <section className="sheet glass" aria-labelledby="ask-about">
       <h2 id="ask-about" className="heading">
-        Preguntar por
+        {t.home.askAbout}
       </h2>
-      {ASK_ABOUT.map(({ key, label }) => (
+      {ASK_ABOUT.map((key) => (
         <button key={key} type="button" className="chev" disabled>
           <span className="tile">
             <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
               {ICONS[key]}
             </svg>
           </span>
-          <span className="grow">{label}</span>
+          <span className="grow">{t.products.askAbout[key]}</span>
           <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M9 6l6 6-6 6" />
           </svg>

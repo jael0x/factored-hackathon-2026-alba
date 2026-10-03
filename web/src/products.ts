@@ -3,42 +3,51 @@ import type { components } from "./api/schema";
 type Product = components["schemas"]["Product"];
 type ProductKey = components["schemas"]["ProductKey"];
 
-type Gender = "feminine" | "masculine";
+export type Gender = "feminine" | "masculine";
 
-type ProductName = { label: string; gender: Gender };
+export type ProductName = { label: string; gender: Gender };
 
-const PRODUCT_TYPES: ReadonlyMap<string, ProductName> = new Map([
-  ["Cuenta Ahorro", { label: "Cuenta de ahorro", gender: "feminine" }],
-  ["Cuenta Corriente", { label: "Cuenta corriente", gender: "feminine" }],
-  ["Tarjeta Crédito", { label: "Tarjeta de crédito", gender: "feminine" }],
-  ["Tarjeta Débito", { label: "Tarjeta de débito", gender: "feminine" }],
-  ["Préstamo Personal", { label: "Préstamo personal", gender: "masculine" }],
-  ["Préstamo Hipotecario", { label: "Préstamo hipotecario", gender: "masculine" }],
-  ["Inversión", { label: "Inversión", gender: "feminine" }],
-  ["Seguro", { label: "Seguro", gender: "masculine" }],
-]);
+// The product_type and product_status values ARCHITECTURE.md "Data" lists. Closed never reaches the screen.
+const PRODUCT_TYPES = [
+  "Cuenta Ahorro",
+  "Cuenta Corriente",
+  "Tarjeta Crédito",
+  "Tarjeta Débito",
+  "Préstamo Personal",
+  "Préstamo Hipotecario",
+  "Inversión",
+  "Seguro",
+] as const;
 
-const PRODUCT_STATUSES: ReadonlyMap<string, Record<Gender, string>> = new Map([
-  ["Active", { feminine: "Activa", masculine: "Activo" }],
-  ["Blocked", { feminine: "Bloqueada", masculine: "Bloqueado" }],
-  ["Suspended", { feminine: "Suspendida", masculine: "Suspendido" }],
-]);
+const PRODUCT_STATUSES = ["Active", "Blocked", "Suspended"] as const;
 
-const MASKED_ENDING: Record<Gender, string> = { feminine: "terminada en", masculine: "terminado en" };
+type ProductType = (typeof PRODUCT_TYPES)[number];
+type ProductStatus = (typeof PRODUCT_STATUSES)[number];
 
-export const ASK_ABOUT: { key: ProductKey; label: string }[] = [
-  { key: "credit_card", label: "Tarjeta de crédito" },
-  { key: "personal_loan", label: "Préstamo personal" },
-];
+// Gender belongs to each language: "Tarjeta" is feminine in Spanish, "Cartão" masculine in Portuguese.
+export type ProductCopy = {
+  types: Record<ProductType, ProductName>;
+  statuses: Record<ProductStatus, Record<Gender, string>>;
+  maskedEnding: Record<Gender, string>;
+  askAbout: Record<ProductKey, string>;
+};
+
+export const ASK_ABOUT: ProductKey[] = ["credit_card", "personal_loan"];
 
 export type ProductLabels = { name: string; status: string; maskedEnding: string };
 
-export function productLabels(product: Product): ProductLabels {
-  const known = PRODUCT_TYPES.get(product.product_type);
+export function productLabels(product: Product, copy: ProductCopy): ProductLabels {
+  const known = isOneOf(PRODUCT_TYPES, product.product_type) ? copy.types[product.product_type] : undefined;
   const gender = known?.gender ?? "masculine";
   return {
     name: known?.label ?? product.product_type,
-    status: PRODUCT_STATUSES.get(product.product_status)?.[gender] ?? product.product_status,
-    maskedEnding: MASKED_ENDING[gender],
+    status: isOneOf(PRODUCT_STATUSES, product.product_status)
+      ? copy.statuses[product.product_status][gender]
+      : product.product_status,
+    maskedEnding: copy.maskedEnding[gender],
   };
+}
+
+function isOneOf<Value extends string>(values: readonly Value[], value: string): value is Value {
+  return values.some((known) => known === value);
 }

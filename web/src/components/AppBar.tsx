@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 
+import { useMessages } from "../i18n/messages";
+import { LanguageSwitch } from "./LanguageSwitch";
+
 type AppBarProps = {
   firstName?: string;
   onSignOut?: () => void;
@@ -7,6 +10,7 @@ type AppBarProps = {
 };
 
 export function AppBar({ firstName, onSignOut, tools }: AppBarProps) {
+  const t = useMessages();
   return (
     <header className="appbar glass">
       <div className="appbar-in">
@@ -14,17 +18,16 @@ export function AppBar({ firstName, onSignOut, tools }: AppBarProps) {
           <span className="orb" aria-hidden="true" />
           Alba
         </span>
-        {(tools || onSignOut) && (
-          <div className="appbar-actions">
-            {tools}
-            {firstName && <span className="name-pill glass">{firstName}</span>}
-            {onSignOut && (
-              <button type="button" className="btn text" onClick={onSignOut}>
-                Salir
-              </button>
-            )}
-          </div>
-        )}
+        <div className="appbar-actions">
+          {tools}
+          <LanguageSwitch />
+          {firstName && <span className="name-pill glass">{firstName}</span>}
+          {onSignOut && (
+            <button type="button" className="btn text" onClick={onSignOut}>
+              {t.signOut}
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );

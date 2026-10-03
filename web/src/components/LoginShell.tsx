@@ -3,16 +3,14 @@ import { Link, Navigate } from "react-router";
 
 import { api } from "../api/client";
 import { useLoad } from "../api/useLoad";
+import { useMessages } from "../i18n/messages";
 import { HOME_PATH, LOGIN_PATH, type Role } from "../routes";
 import { useSession } from "../session/session";
 import { AppBar } from "./AppBar";
 
 const loadConfig = () => api.GET("/config");
 
-const OTHER_LOGIN: Record<Role, { to: string; label: string }> = {
-  customer: { to: LOGIN_PATH.consultant, label: "Acceso para asesores" },
-  consultant: { to: LOGIN_PATH.customer, label: "Acceso para clientes" },
-};
+const OTHER_LOGIN: Record<Role, string> = { customer: LOGIN_PATH.consultant, consultant: LOGIN_PATH.customer };
 
 type LoginShellProps = {
   role: Role;
@@ -28,14 +26,13 @@ export function LoginShell({ role, title, lede, notice, panelTitle, demo, childr
   const panelTitleId = useId();
   const session = useSession();
   const config = useLoad(loadConfig);
+  const t = useMessages();
 
   if (session.status === "active" && session.session.role === role) {
     return <Navigate to={HOME_PATH[role]} replace />;
   }
 
   const showDemo = config.status === "ready" && config.data.demo_login;
-  const other = OTHER_LOGIN[role];
-
   return (
     <>
       <AppBar tools={showDemo ? demo : undefined} />
@@ -44,7 +41,7 @@ export function LoginShell({ role, title, lede, notice, panelTitle, demo, childr
           <h1 className="display">{title}</h1>
           <p className="lede">{lede}</p>
           <p className="notice">{notice}</p>
-          {config.status === "error" && <p className="caption muted">No pudimos leer la configuración del demo.</p>}
+          {config.status === "error" && <p className="caption muted">{t.login.demoConfigFailed}</p>}
         </div>
         <div className="login-form">
           <section className="panel glass" aria-labelledby={panelTitleId}>
@@ -55,8 +52,8 @@ export function LoginShell({ role, title, lede, notice, panelTitle, demo, childr
             </div>
             {children}
           </section>
-          <Link className="btn text centered" to={other.to}>
-            {other.label}
+          <Link className="btn text centered" to={OTHER_LOGIN[role]}>
+            {t.login[role].otherLogin}
           </Link>
         </div>
       </main>

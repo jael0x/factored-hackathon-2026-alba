@@ -1,5 +1,6 @@
 import type { components } from "../api/schema";
 import { amountParts, lastFour } from "../format";
+import { useMessages } from "../i18n/messages";
 import { productLabels } from "../products";
 
 type ProductCardProps = {
@@ -7,7 +8,7 @@ type ProductCardProps = {
 };
 
 export function ProductCard({ product }: ProductCardProps) {
-  const labels = productLabels(product);
+  const labels = productLabels(product, useMessages().products);
   const ending = lastFour(product.product_number);
   const { whole, cents } = amountParts(product.current_balance);
   return (

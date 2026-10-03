@@ -1,16 +1,13 @@
 import { useNavigate } from "react-router";
 
+import { useMessages } from "../i18n/messages";
 import { LOGIN_PATH, type Role } from "../routes";
 import { signOut } from "../session/session";
 import { AppBar } from "./AppBar";
 
-const SIGN_IN_WITH: Record<Role, string> = {
-  customer: "Entra de nuevo con tu documento.",
-  consultant: "Entra de nuevo con tu correo y tu código de empleado.",
-};
-
 export function SessionEnded({ role }: { role: Role }) {
   const navigate = useNavigate();
+  const t = useMessages();
 
   const signInAgain = () => {
     signOut();
@@ -22,10 +19,12 @@ export function SessionEnded({ role }: { role: Role }) {
       <AppBar />
       <main className="page">
         <section className="center-card solid enter" role="alert">
-          <h1 className="heading">Tu sesión terminó</h1>
-          <p className="caption muted">La sesión dura 15 minutos y no se renueva sola. {SIGN_IN_WITH[role]}</p>
+          <h1 className="heading">{t.sessionEnded.title}</h1>
+          <p className="caption muted">
+            {t.sessionEnded.lasts} {t.sessionEnded.signInWith[role]}
+          </p>
           <button type="button" className="btn primary" onClick={signInAgain}>
-            Volver a entrar
+            {t.sessionEnded.again}
           </button>
         </section>
       </main>
