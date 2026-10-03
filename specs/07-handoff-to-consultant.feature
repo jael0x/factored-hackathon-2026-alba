@@ -30,10 +30,10 @@ Feature: Handoff to a consultant
     And no certificate is shown
 
     Examples:
-      | message                       | reason                   |
-      | quiero hablar con una persona | customer_requested_human |
-      | quiero una hipoteca nueva     | out_of_scope             |
-      | I would like a credit card    | language_unsupported     |
+      | message                        | reason                   |
+      | quiero hablar con una persona  | customer_requested_human |
+      | quiero una hipoteca nueva      | out_of_scope             |
+      | je voudrais une carte bancaire | language_unsupported     |
 
   Scenario: A reply that states an outcome is withheld
     Given the assistant drafts a reply to Juan that says he "precalifica"

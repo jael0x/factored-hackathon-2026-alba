@@ -30,6 +30,12 @@ Feature: Consultant close
     Then the only actions are to close as pre-qualified or as not pre-qualified
     And there is no field to reply to Alicia
 
+  Scenario: The outcome is written in the customer's language, not the consultant's
+    Given Alicia chose English in the language switch before her case was referred
+    And César reads the review queue in Spanish
+    When César closes Alicia's case as "PREQUALIFIED"
+    Then Alicia's automatic message is written in English
+
   Scenario Outline: Closing the case sends the customer the outcome
     When César closes Alicia's case as "<outcome>"
     Then Alicia receives the automatic message for "<outcome>"

@@ -80,11 +80,16 @@ Feature: Pre-qualification decision
       | 619   | REFER            |
       | 620   | PREQUALIFIED     |
 
-  Scenario: A request in Portuguese gets a Portuguese certificate
-    Given Juan wrote "quero um cartão de crédito"
-    And the assistant asked him in Portuguese whether to start the pre-qualification
-    When Juan writes "sim"
-    Then Juan sees his certificate in Portuguese
+  Scenario Outline: The certificate is written in the language the customer chose
+    Given Juan Alberto Romero González chose <language> in the language switch
+    And the assistant asked him in <language> whether to start the pre-qualification for a credit card
+    When Juan writes "<yes>"
+    Then Juan sees his certificate in <language>
+
+    Examples:
+      | language   | yes |
+      | Portuguese | sim |
+      | English    | yes |
 
   Scenario: A message delivered twice does not produce a second decision
     Given Juan's confirmation "sí" produced a certificate
