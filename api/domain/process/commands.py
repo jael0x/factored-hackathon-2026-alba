@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Literal, get_args
+from typing import Literal
 
 from api.contract_models import DecidedBy, EndReason, IncomeCurrency, ProcessState, ProductKey, ReasonCode, TemplateId
 from api.domain.process.lifecycle import HUMAN_ACTIVE
@@ -24,7 +24,6 @@ CONVERSATION_SHOW_REPLY: CommandName = "conversation.show_reply"
 TEMPLATE_SEND: CommandName = "template.send"
 POLICY_RUN: CommandName = "policy.run"
 DECISION_RENDER: CommandName = "decision.render"
-COMMAND_NAMES: frozenset[CommandName] = frozenset(get_args(CommandName))
 
 NEEDS_INCOME: TemplateId = "needs_income"
 REFER_NOTICE: TemplateId = "refer_notice"
