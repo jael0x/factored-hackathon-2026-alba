@@ -101,7 +101,7 @@ api/
       listing.py          # which products the customer sees: not Closed, and not a loan at 0
     search.py             # exactly one search criterion, for both demo searches
     closed_sets.py        # parse_member: a stored or loaded value narrowed into its closed set
-    policy/               # credit rules, when that component is built
+    policy/               # credit rules
       engine.py           # pure function
       alba-credit-v1.yaml # rules and thresholds
       templates.py        # certificate, ES and PT
