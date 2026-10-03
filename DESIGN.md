@@ -208,6 +208,7 @@ The surface follows `messages.author`:
 - Choosing a row sends a customer message through the same endpoint as typing ("Quiero una tarjeta de crédito"). It does not set `product` on the process: the classified turn does.
 - Consent is a template message, `confirm_prequalify`, that the customer answers in the thread ("sí", "no, gracias"). It is not a button or a sheet.
 - After `which_product` or `confirm_prequalify`, reply rows would need a typed field the API does not return yet. Until then the customer types the answer. See **Open**.
+- Until `POST /messages` is built (`IMPLEMENTATION.md` W4), the rows on `/` show disabled: 45% opacity, not clickable.
 
 ### Certificate (`/case/:id`)
 
@@ -269,8 +270,12 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 ### Home (`/`)
 
 - A greeting in display size with the customer's first name, then the product cards in a two-column grid, in the order the API returns them.
-- A product card is white. Top line: product type and masked number ("Cuenta de ahorro · ••••5725"). Then the amount in amount size with its code, then a meta line (status, rate, days past due).
-- A masked number reads to screen readers as "terminada en 5725".
+- A product card is white. Top line: the product's Spanish name and its number masked to the last four ("Cuenta de ahorro", "••••5725"). Then the amount in amount size with its code, then the status as a caption. `GET /products` carries no rate and no days past due, so the card has no slot for them.
+- `web/src/products.ts` names the eight `product_type` values ("Cuenta Ahorro" is "Cuenta de ahorro") and the three `product_status` values that reach the screen, in the gender of the product: "Activa", "Bloqueada", "Suspendida" for a cuenta, tarjeta, or inversión; "Activo", "Bloqueado", "Suspendido" for a préstamo or seguro. A value outside that map shows as the file has it.
+- Closed products and paid loans never reach the screen: `GET /products` leaves them out (`ARCHITECTURE.md`, "HTTP contract").
+- A masked number reads to screen readers as "terminada en 5725" ("terminado en" for a préstamo or seguro).
+- A customer with no products reads "Todavía no tienes productos con nosotros." under the greeting.
+- While loading, the greeting and two card blocks pulse.
 - The product rows follow the cards.
 
 ### Session ended, loading, errors

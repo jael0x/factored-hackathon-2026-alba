@@ -1105,14 +1105,16 @@ spec('tools', 'to-profile', {
   src: 'ARCHITECTURE.md, "File tree", "Gold"',
 });
 spec('tools', 'to-products', {
-  name: 'products.py', tech: 'home screen', status: 'partial',
-  summary: 'The session customer\'s products, in the row\'s currency.',
+  name: 'products.py', tech: 'home screen', status: 'defined',
+  summary: 'The session customer\'s products, in the row\'s currency. Built Oct 1.',
   fixed: [
-    'Only the session customer\'s products, through the index on `products (customer_id)`.',
+    'Only the session customer\'s products, through the index on `products (customer_id)`, ordered by `product_id`. A `customer_id` that is not the session\'s gets an empty list without a query.',
+    'Six fields: `product_id`, `product_type` and `product_status` as stored, `product_number`, `currency`, and `current_balance`. No `days_past_due`, `credit_limit`, or `interest_rate`.',
+    'Closed products and loans at 0 (paid) are left out. Their status in `products` is not changed.',
     'Amounts in the row\'s `products.currency`. Balances of customers in Mexico stay in USD; they are not converted to MXN.',
   ],
-  open: [['New', 'The response shape and which product fields the home screen shows.']],
-  src: 'ARCHITECTURE.md, "Auth and screens", "Indexes"',
+  tests: ['Juan asking for Alicia\'s id gets an empty list.', 'A loan at 0 is left out; a card at 0 is not.', 'A customer with no products gets an empty list.'],
+  src: 'ARCHITECTURE.md, "Auth and screens", "HTTP contract", "Indexes"',
 });
 spec('tools', 'to-catalog', {
   name: 'catalog.py', tech: 'two products', status: 'partial',
@@ -1217,14 +1219,17 @@ spec('pg-login', 'lg-consultant', {
 });
 
 spec('pg-home', 'hm-products', {
-  name: 'Product list', tech: 'products.currency', status: 'partial',
-  summary: 'Only this customer\'s products. No conversion.',
+  name: 'Product list', tech: 'products.currency', status: 'defined',
+  summary: 'Only this customer\'s products, named in Spanish. No conversion. Built Oct 1.',
   fixed: [
+    'White cards in the API\'s order: the Spanish name of the type, the number masked to its last four, the amount with its currency code, and the status in the product\'s gender ("Activa", "Activo"). No rate and no days past due.',
     'Amounts in the row\'s `products.currency`. Balances of customers in Mexico are shown in USD, not converted to MXN.',
-    'Juan sees savings 1,559.57 USD and a mortgage of 109,159.57 USD, 0 days past due, no credit card.',
+    'Closed products and paid loans are not shown. A customer with nothing to show reads "Todavía no tienes productos con nosotros."',
+    'Juan sees a Cuenta de ahorro of 1,559.57 USD and a Préstamo hipotecario of 109,159.57 USD, and no Tarjeta de crédito.',
+    'The "Preguntar por" rows follow the cards. They show disabled until `POST /messages` is built.',
   ],
-  open: [['New', 'Which product fields are shown, and how the customer starts a request from this page.']],
-  src: 'ARCHITECTURE.md, "Auth and screens", "Juan\'s flow"',
+  tests: ['Juan sees his own products.', 'A closed product is not shown.', 'A paid loan is not shown.', 'A customer without products is told there are none.'],
+  src: 'ARCHITECTURE.md, "Auth and screens", "Juan\'s flow"; DESIGN.md, "Home"',
 });
 
 spec('pg-case', 'cs-thread', {
@@ -1438,9 +1443,10 @@ spec('ld-bronze', 'br-manifest', {
 
 spec('ld-silver', 'sv-rules', {
   name: 'Typing rules', tech: 'no cleaning', status: 'defined',
-  summary: 'Types applied. Nothing imputed, converted, translated, or dropped.',
+  summary: 'Types applied. Nothing converted, translated, or dropped. Only an empty balance is filled, with 0.',
   fixed: [
     'Empty `days_past_due` stays null. `currency` copied as is. Product names not translated.',
+    'An empty `current_balance` loads as 0, the only imputed value. The column is `NOT NULL`.',
     'Empty scores (22,492) and incomes (30,033) are not imputed: they are the R04 and R06 paths.',
     'No deduplication by name. `Inactive`, `Suspended`, and `Closed` customers are kept (14,914, 4,407, 2,979).',
   ],

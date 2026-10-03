@@ -272,6 +272,8 @@ paths:
         Requires role customer. A consultant token is forbidden.
         customer_id is optional. If it is absent, or equal to the token sub, the response is that customer's products.
         If it is any other id, the response is an empty list. Balances are not converted.
+        Products whose product_status is Closed are left out, and so are loans (Préstamo Personal,
+        Préstamo Hipotecario) whose balance is 0, which are paid. Their status in the data is not changed.
         Order is product_id ascending.
         days_past_due, credit_limit, and interest_rate are not on this response.
       parameters:

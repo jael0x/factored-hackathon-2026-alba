@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from api.infrastructure.config.settings import require_jwt_secret, settings
 from api.infrastructure.db.pool import open_pool
 from api.presentation.http.errors import install_error_handlers
-from api.presentation.http.routes import config, consultants, customers, health, session
+from api.presentation.http.routes import config, consultants, customers, health, products, session
 
 
 @asynccontextmanager
@@ -25,6 +25,7 @@ install_error_handlers(app)
 app.include_router(session.router)
 app.include_router(session.consultant_router)
 app.include_router(customers.router)
+app.include_router(products.router)
 app.include_router(consultants.router)
 app.include_router(config.router)
 app.include_router(health.router)

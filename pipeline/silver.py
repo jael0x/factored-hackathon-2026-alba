@@ -29,6 +29,8 @@ TABLE_NAME: dict[str, str] = {
 
 INTEGER_COLUMNS = frozenset({"credit_score", "days_past_due"})
 
+EMPTY_AS_ZERO_COLUMNS = frozenset({"current_balance"})
+
 
 def _empty_to_none(value: str | None) -> str | None:
     if value is None:
@@ -40,7 +42,7 @@ def _empty_to_none(value: str | None) -> str | None:
 def coerce_cell(column: str, value: str | None) -> str | int | None:
     cleaned = _empty_to_none(value)
     if cleaned is None:
-        return None
+        return 0 if column in EMPTY_AS_ZERO_COLUMNS else None
     if column in INTEGER_COLUMNS:
         return int(float(cleaned))
     return cleaned
