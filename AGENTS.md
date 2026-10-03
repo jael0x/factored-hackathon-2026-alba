@@ -74,13 +74,13 @@ A person who reviews a handed-off case is a consultant (`ARCHITECTURE.md`, "Orac
 - Identifiers in `db/` and `pipeline/` keep the dataset's name: the `service_agents` table and `service_agents.csv`, the columns `agent_id` and `agent_status`, `AGENTS_COLUMNS`, and the `AGT-` ids. Comments there say consultant.
 - Everywhere else the word is consultant: Python and TypeScript names, routes (`/consultant/...`, `/consultants/search`), the JWT role, wire fields (`consultant_id`), event names, rule ids, idempotency keys, comments, docs, specs, and `diagrams/c4.html`.
 - SQL is the only code that names the dataset columns. `api/infrastructure/db/consultants.py` reads `agent_id` and `agent_status` and returns a `ConsultantIdentity`; nothing above it sees those names.
-- Spanish screens say "asesor", in `web/` and in `mocks/index.html`.
+- On screen the consultant is "asesor" in Spanish, "consultant" in English, and "consultor" in Portuguese (`web/src/i18n/`). `mocks/index.html` is Spanish and says "asesor".
 
 ## No magic strings
 
 Identifiers from a closed set are constants or unions, defined once. Call sites use the constant. They do not repeat the raw literal.
 
-Closed sets in this repo, each defined in `ARCHITECTURE.md`: event names, command names, process states (`ai_active`, `human_active`, `ended`), end reasons (`prequalified`, `not_prequalified`), outcomes (`PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, `NEEDS_INFO`), policy rule ids (`R01` to `R06`, `R09`), process rule ids (`open_process` …), `process_key`, intent names (including `confirm_prequalify`, `decline_prequalify`), product keys (`credit_card`, `personal_loan`), template locales (`es`, `pt`), template ids (`needs_income`, `refer_notice`, `which_product`, `confirm_prequalify`), reason codes (`customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`), idempotency-key prefixes.
+Closed sets in this repo, each defined in `ARCHITECTURE.md`: event names, command names, process states (`ai_active`, `human_active`, `ended`), end reasons (`prequalified`, `not_prequalified`), outcomes (`PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, `NEEDS_INFO`), policy rule ids (`R01` to `R06`, `R09`), process rule ids (`open_process` …), `process_key`, intent names (including `confirm_prequalify`, `decline_prequalify`), product keys (`credit_card`, `personal_loan`), locales (`es`, `en`, `pt`: the switch's choice, for screens, email, replies, and templates), turn languages (`es`, `en`, `pt`, `other`: what the model read), template ids (`needs_income`, `refer_notice`, `which_product`, `confirm_prequalify`), reason codes (`customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`), idempotency-key prefixes.
 
 Wrong: `if event_name == "analysis.completed"` in a second file. Right: `EVENT_NAME.ANALYSIS_COMPLETED` from the one module that defines names.
 
@@ -150,6 +150,7 @@ Prefer a better name or an extracted function over a comment.
 - Every fetch has loading, error, and success. Handle all three when the fetch is written, not as a later polish.
 - Config that decides a field's behavior lives on the policy spec, not on a frontend list that sniffs ids.
 - An internal reason code is not customer copy. The customer reads the template. The consultant packet may show the rule id and the facts.
+- Interface text lives in `web/src/i18n/`, one file per language. `es.ts` sets the keys, and `en.ts` and `pt.ts` are typed against it, so a missing or extra label fails `tsc`. A component reads its labels from `useMessages()` and holds no text of its own. Dataset literals (`Créditos`, a country name) are shown as stored.
 
 ## Database
 
@@ -215,7 +216,7 @@ Prefer a better name or an extracted function over a comment.
 
 ## Writing docs
 
-- Docs are in English. Customer-facing copy (templates, the mock) is Spanish or Portuguese. Dataset literals keep their stored spelling.
+- Docs are in English. Customer-facing copy (screens, the login email, templates, and the certificate) is written in Spanish, English, and Portuguese (`PLAN.md` D21); the mock is Spanish. Dataset literals keep their stored spelling.
 - Straight quotes. No em-dashes: use a colon, a comma, or parentheses.
 - Every number about the data names its source and sample (file, date, n). A claim the data does not show is labeled inferred.
 - One home per fact. The contract lives in `ARCHITECTURE.md`. Evidence, open decisions, and the schedule live in `PLAN.md`. Other files link to them instead of copying.

@@ -6,6 +6,7 @@ This file sets how Alba looks and moves on screen. It governs the `web/` app (th
 
 Decided with Jael:
 
+- Oct 2, 2026: a language switch (ES, EN, PT) in the app bar of every screen (`PLAN.md` D21). Spanish stays the language this file quotes; the other two are in `web/src/i18n/`. On phones the customer's name pill gives way to the switch.
 - Sep 28, 2026: glass for the conversation, a different surface for the record (Principle 1). One sans family; Georgia is dropped. This file also governs `diagrams/c4.html`. The product web ships light only for the Oct 5 demo; the C4 page keeps a dark set.
 - Sep 30, 2026 (later): consultants get their own login page with the same layout, steps, and Demo popover. Each login links to the other with a centered text button under the form.
 - Sep 30, 2026: the login is two columns (title, description, and the always-visible notice on the left; the form on the right), vertically centered. The demo search is a popover under a dashed "Demo" button in the app bar, hidden until pressed. The code step stacks its actions.
@@ -137,7 +138,7 @@ Mono is for identifiers only: `customer_id`, rule ids, event names, state names,
 - Weight 300 only at 28px and above.
 - Nothing below 12px, including code, which is `max(12px, 0.9em)`.
 - `font-variant-numeric: tabular-nums` on amounts, tables, codes, and timers.
-- One number format everywhere, as the contract and the mock write it: comma thousands, dot decimals, two decimals on money, the code after a space (`306,753.45 MXN`). Scores are integers. Dates are written out in Spanish (`17 de junio de 2026`).
+- One number format everywhere, as the contract and the mock write it: comma thousands, dot decimals, two decimals on money, the code after a space (`306,753.45 MXN`). Scores are integers. The amount format is the same in Spanish, English, and Portuguese. Dates are written out in the chosen language (`17 de junio de 2026`, `June 17, 2026`, `17 de junho de 2026`).
 
 ## Space, shape, elevation
 
@@ -167,7 +168,8 @@ Screens fill the browser like the real app. There is no device frame.
 
 ### App bar and sidebar
 
-- Customer app bar: glass, 64px, sticky. The orb (24px) and "Alba" in label weight 600 on the left. On the right, the first name in a glass pill and a text button "Salir". The login shows the brand only, plus the "Demo" button when `DEMO_LOGIN=1` (see Login).
+- Customer app bar: glass, 64px, sticky. The orb (24px) and "Alba" in label weight 600 on the left. On the right, the language switch, the first name in a glass pill, and a text button "Salir". The login shows the brand and the switch, plus the "Demo" button before them when `DEMO_LOGIN=1` (see Login). Under 640px the name pill hides, since the greeting names the customer, so the bar fits a 360px phone.
+- Language switch: a glass pill holding three buttons, `ES`, `EN`, `PT`, each 44px, caption size weight 500. The chosen one is white with `--solid-shadow` and ink text; the others are `--muted` on the glass. It is a group named "Idioma" ("Language", "Idioma"), the buttons are toggle buttons (`aria-pressed`), and each button's name is its language in that language ("Español", "English", "Português") with `lang` set to match. Choosing one changes every label at once, with no reload.
 - Consultant sidebar: glass, full height. The brand at the top; one nav item, "Casos en revisión", with an ink count badge; the consultant's name, specialty, and employee id at the bottom.
 
 ### Composer (`/case/:id`)
@@ -191,7 +193,7 @@ The surface follows `messages.author`:
 | `template` | Left | White, `--solid-shadow` | Alba, with the orb |
 
 - Bubbles are 520px wide at most. The author name is a caption above the bubble, sentence case.
-- The thread carries `lang="pt"` when the process `language` is `pt`.
+- The thread carries `lang` set to the case's `locale`, so a thread kept from before a switch change is still read in its own language.
 - A new message fades in and rises 8px over `--t-enter`. The thread is a polite live region.
 - The screen renders `messages` rows only. A turn whose `reply_ok` is false never reaches it (`ARCHITECTURE.md`, "Events").
 
@@ -270,8 +272,8 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 ### Home (`/`)
 
 - A greeting in display size with the customer's first name, then the product cards in a two-column grid, in the order the API returns them.
-- A product card is white. Top line: the product's Spanish name and its number masked to the last four ("Cuenta de ahorro", "••••5725"). Then the amount in amount size with its code, then the status as a caption. `GET /products` carries no rate and no days past due, so the card has no slot for them.
-- `web/src/products.ts` names the eight `product_type` values ("Cuenta Ahorro" is "Cuenta de ahorro") and the three `product_status` values that reach the screen, in the gender of the product: "Activa", "Bloqueada", "Suspendida" for a cuenta, tarjeta, or inversión; "Activo", "Bloqueado", "Suspendido" for a préstamo or seguro. A value outside that map shows as the file has it.
+- A product card is white. Top line: the product's name in the chosen language and its number masked to the last four ("Cuenta de ahorro", "••••5725"). Then the amount in amount size with its code, then the status as a caption. `GET /products` carries no rate and no days past due, so the card has no slot for them.
+- `web/src/products.ts` lists the eight `product_type` values and the three `product_status` values that reach the screen, and `web/src/i18n/` names them in each language, in the gender that language gives the product. In Spanish: "Cuenta Ahorro" is "Cuenta de ahorro"; "Activa", "Bloqueada", "Suspendida" for a cuenta, tarjeta, or inversión; "Activo", "Bloqueado", "Suspendido" for a préstamo or seguro. Gender changes between languages: a tarjeta is feminine in Spanish and a cartão masculine in Portuguese ("Cartão de crédito", "Ativo"). English has none ("Active"). A value outside that list shows as the file has it.
 - Closed products and paid loans never reach the screen: `GET /products` leaves them out (`ARCHITECTURE.md`, "HTTP contract").
 - A masked number reads to screen readers as "terminada en 5725" ("terminado en" for a préstamo or seguro).
 - A customer with no products reads "Todavía no tienes productos con nosotros." under the greeting.
@@ -361,7 +363,7 @@ Contrast, WCAG 2.x formula, computed Sep 29, 2026 for the values in this file. G
 - Tones always carry a text label.
 - Focus is always visible (see Buttons).
 - New messages and the typing indicator are announced through a polite live region.
-- The document is `lang="es"`. A Portuguese thread carries `lang="pt"`.
+- The document's `lang` follows the language switch. A thread carries its case's `locale` as `lang`.
 
 ## Icons and imagery
 
@@ -371,7 +373,7 @@ Contrast, WCAG 2.x formula, computed Sep 29, 2026 for the values in this file. G
 
 ## Interface copy
 
-Interface labels are Spanish. They are the ones this file names; a screen not built yet takes its labels from `mocks/index.html`. The login labels in `web/src/pages/Login.tsx` and `web/src/pages/ConsultantLogin.tsx` follow the Login and Consultant login sections above. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the consultant-close message) are not in this file: they live in `api/domain/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
+Interface labels are written in Spanish, English, and Portuguese, in `web/src/i18n/` (`es.ts`, `en.ts`, `pt.ts`), and follow the language switch. The Spanish labels are the ones this file names; a screen not built yet takes its Spanish labels from `mocks/index.html`, and its English and Portuguese ones are written with it. English and Portuguese copy is team-written (`PLAN.md` D21). The login labels in `web/src/i18n/` follow the Login and Consultant login sections above. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the consultant-close message) are not in this file: they live in `api/domain/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
 
 ## Open
 
@@ -379,8 +381,7 @@ Each item needs a contract change before it is built. None is worked around in t
 
 1. **Reply rows after `which_product` or `confirm_prequalify`.** The screen needs a typed field saying which template was sent last. A `messages` row has `author` and `body`, and no `template_id`.
 2. **City, segment, and document type on the demo search rows.** The mock shows them; `CustomerSearchHit` carries the name, country, and document number only.
-3. **Portuguese interface labels.** The contract localizes templates, not interface labels.
-4. **How uncertainty shows on the certificate.** `PLAN.md` §2 marks it "Partial". This file gives the certificate no slot for it until that is decided.
+3. **How uncertainty shows on the certificate.** `PLAN.md` §2 marks it "Partial". This file gives the certificate no slot for it until that is decided.
 
 ## Before a screen is called done
 
