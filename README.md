@@ -4,7 +4,7 @@ Alba is a customer-service demo for the synthetic LATAM bank of the Factored AI 
 
 It is not a production bank and it moves no money. "Alba" is the name of this interface. Customers, products, scores, incomes, and consultants come from the organizer dataset, snapshot of June 17, 2026.
 
-**Status (Oct 1, 2026): customer and consultant logins and the customer home built.** `docker compose up` brings up Postgres, the one-shot `load` container (bronze, silver, gold), the API with both logins and the customer's products, Mailpit for the login codes, the two login pages, and the home with the customer's products. Chat, policy, and the consultant queue and case are not built yet. `mocks/index.html` remains the screen walkthrough. Submission is due Mon Oct 5.
+**Status (Oct 3, 2026): customer and consultant logins, the customer home, and the pure engine parts built.** `docker compose up` brings up Postgres, the one-shot `load` container (bronze, silver, gold), the API with both logins and the customer's products, Mailpit for the login codes, the two login pages, and the home with the customer's products. The policy engine, the event store, and the process rules are in `api/domain/` with their tests, but no route or worker runs them yet. Chat, the templates, and the consultant queue and case are not built yet. `mocks/index.html` remains the screen walkthrough. Submission is due Mon Oct 5.
 
 Stack: FastAPI and PostgreSQL 16 in one Docker Compose stack, with GPT-6 Luna (`gpt-6-luna`) on the OpenAI API for the conversation (when wired). Details in `ARCHITECTURE.md`.
 
