@@ -35,7 +35,7 @@ def test_an_active_consultant_gets_a_code_at_their_email(harness: Harness) -> No
     assert len(code) == 6 and code.isdigit()
 
 
-@pytest.mark.parametrize("locale", ["es", "en", "pt"])
+@pytest.mark.parametrize("locale", ["es", "pt"])
 def test_the_consultant_code_email_is_written_in_the_chosen_language(harness: Harness, locale: Locale) -> None:
     harness.request_code(login_of(CESAR), locale)
     assert [sent.locale for sent in harness.mail.sent] == [locale]

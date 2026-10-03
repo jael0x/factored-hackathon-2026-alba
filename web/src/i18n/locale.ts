@@ -5,7 +5,7 @@ import type { components } from "../api/schema";
 export type Locale = components["schemas"]["Locale"];
 
 // Each option is named in its own language, whatever the current one is.
-export const LOCALE_NAMES: Record<Locale, string> = { es: "Español", en: "English", pt: "Português" };
+export const LOCALE_NAMES: Record<Locale, string> = { es: "Español", pt: "Português" };
 
 export const LOCALES = Object.keys(LOCALE_NAMES) as Locale[];
 

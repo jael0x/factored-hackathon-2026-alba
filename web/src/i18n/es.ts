@@ -26,7 +26,7 @@ const signInWith: Record<Role, string> = {
   consultant: "Entra de nuevo con tu correo y tu código de empleado.",
 };
 
-// Spanish sets the keys: en.ts and pt.ts are typed as Messages, so a missing or extra label fails tsc.
+// Spanish sets the keys: pt.ts is typed as Messages, so a missing or extra label fails tsc.
 export const es = {
   language: "Idioma",
   signOut: "Salir",

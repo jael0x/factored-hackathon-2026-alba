@@ -88,8 +88,8 @@ Feature: Pre-qualification decision
 
     Examples:
       | language   | yes |
+      | Spanish    | sí  |
       | Portuguese | sim |
-      | English    | yes |
 
   Scenario: A message delivered twice does not produce a second decision
     Given Juan's confirmation "sí" produced a certificate

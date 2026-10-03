@@ -151,7 +151,7 @@ def test_a_flag_must_be_a_boolean(field: str, value: object) -> None:
     [
         ("intent", "mortgage"),
         ("product", "mortgage"),
-        ("language", "fr"),
+        ("language", "en"),
         ("declared_income_currency", "USD"),
     ],
 )

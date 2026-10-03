@@ -648,9 +648,10 @@ components:
     Locale:
       type: string
       description: >
-        The language chosen with the switch in the app bar (PLAN.md D21). Alba writes in it:
-        the screens, the login email, replies, templates, and the certificate.
-      enum: [es, en, pt]
+        The language chosen with the switch in the app bar (PLAN.md D21, D22). Alba writes in it:
+        the screens, the login email, replies, templates, and the certificate. Spanish and Portuguese only,
+        as the brief asks.
+      enum: [es, pt]
 
     ProcessState:
       type: string
@@ -668,8 +669,10 @@ components:
       type: string
       description: >
         What the model read in the customer's text. It only decides whether Alba can read the message:
-        other hands the case to a person. Alba writes in the message's locale, not in this language.
-      enum: [es, en, pt, other]
+        other, English included, hands the case to a person (PLAN.md D22). Alba writes in the message's locale,
+        not in this language. A turn whose language differs from its locale is kept as it is and counted in
+        the multilingual-ambiguity evaluation.
+      enum: [es, pt, other]
 
     Outcome:
       type: string

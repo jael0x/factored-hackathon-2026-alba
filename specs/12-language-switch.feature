@@ -1,6 +1,6 @@
 Feature: Language switch
   As a bank customer or consultant
-  I want to read Alba in Spanish, English, or Portuguese
+  I want to read Alba in Spanish or Portuguese
   So that I understand every screen, email, and answer in my own language
 
   Scenario: A first visit follows the browser's language
@@ -11,20 +11,20 @@ Feature: Language switch
     And Portuguese is the chosen language in the switch
 
   Scenario: A browser in another language gets Spanish
-    Given a visitor's browser prefers French
+    Given a visitor's browser prefers English
     And the visitor has never chosen a language on Alba
     When the visitor opens the customer login
     Then the title reads "Entra a tu cuenta"
 
   Scenario: The chosen language is kept for the next visit
-    Given a visitor whose browser prefers Spanish chose English on the customer login
+    Given a visitor whose browser prefers Spanish chose Portuguese on the customer login
     When the visitor comes back to the customer login the next day
-    Then the title reads "Sign in to your account"
+    Then the title reads "Entre na sua conta"
 
   Scenario: Changing the language keeps the visitor on the same screen
     Given Juan Alberto Romero González is reading his home page in Spanish
-    When Juan chooses English in the switch
-    Then the greeting reads "Hi, Juan Alberto"
+    When Juan chooses Portuguese in the switch
+    Then the greeting reads "Olá, Juan Alberto"
     And Juan is still signed in on his home page
 
   Scenario Outline: Product names and statuses follow the chosen language
@@ -36,7 +36,6 @@ Feature: Language switch
     Examples:
       | language   | name             | status |
       | Spanish    | Cuenta de ahorro | Activa |
-      | English    | Savings account  | Active |
       | Portuguese | Conta poupança   | Ativa  |
 
   Scenario: A status agrees with the gender the language gives the product
@@ -58,25 +57,30 @@ Feature: Language switch
     Examples:
       | language   | subject           |
       | Spanish    | Tu código de Alba |
-      | English    | Your Alba code    |
       | Portuguese | Seu código Alba   |
 
   Scenario: A consultant's login code email is written in the chosen language
-    Given the chosen language is English
+    Given the chosen language is Portuguese
     When a visitor asks for a code with César González Sánchez's email and employee code
-    Then the email to César's address has the subject "Your Alba code"
+    Then the email to César's address has the subject "Seu código Alba"
 
   Scenario: The assistant answers in the chosen language, not the language typed
-    Given Juan Alberto Romero González chose English in the language switch
+    Given Juan Alberto Romero González chose Portuguese in the language switch
     And Juan has no open case
     When Juan writes "quiero una tarjeta de crédito"
-    Then the assistant asks him in English whether to start the pre-qualification for a credit card
+    Then the assistant asks him in Portuguese whether to start the pre-qualification for a credit card
 
   Scenario: Changing the language during a case changes the next answer
     Given Juan wrote "quiero un crédito" with Spanish chosen
     And the assistant asked him in Spanish which product he means
     When Juan chooses Portuguese in the switch and writes "cartão de crédito"
     Then the assistant asks him in Portuguese whether to start the pre-qualification for a credit card
+
+  Scenario: A message in English goes to a person whatever the switch says
+    Given Juan Alberto Romero González chose Spanish in the language switch
+    And Juan has no open case
+    When Juan writes "I want a credit card"
+    Then his case enters the review queue with reason "language_unsupported"
 
   Scenario: A code request without a language sends no email
     When a visitor asks for a code with Juan's document number and no language

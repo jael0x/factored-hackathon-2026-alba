@@ -133,7 +133,7 @@ def test_the_same_send_twice_writes_one_event(url: str) -> None:
 
 @pytest.mark.parametrize(
     ("customer_id", "text", "locale"),
-    [(JUAN, "no", "es"), (ALICIA, "sí", "es"), (JUAN, "sí", "en")],
+    [(JUAN, "no", "es"), (ALICIA, "sí", "es"), (JUAN, "sí", "pt")],
     ids=["other text", "other customer", "other language"],
 )
 def test_a_reused_message_id_for_another_fact_is_refused(url: str, customer_id: str, text: str, locale: Locale) -> None:

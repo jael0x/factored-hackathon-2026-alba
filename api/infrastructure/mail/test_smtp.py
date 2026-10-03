@@ -14,7 +14,6 @@ SENDER = "Alba <no-reply@alba.local>"
     ("locale", "subject", "validity"),
     [
         ("es", "Tu código de Alba", "Vale 10 minutos"),
-        ("en", "Your Alba code", "valid for 10 minutes"),
         ("pt", "Seu código Alba", "vale por 10 minutos"),
     ],
 )

@@ -333,7 +333,7 @@ def every_turn() -> list[StoredEvent]:
 
 
 def test_every_classified_turn_matches_exactly_one_rule() -> None:
-    assert len(EVERY_TURN) == 1920
+    assert len(EVERY_TURN) == 1440
     matches = [matching_rules(event) for event in every_turn()]
     assert [match for match in matches if len(match) != 1] == []
     assert {match[0] for match in matches} == {rule.rule_id for rule in TURN_RULES}

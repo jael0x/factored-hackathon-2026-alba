@@ -25,14 +25,6 @@ LOGIN_CODE_EMAILS: dict[Locale, LoginCodeEmail] = {
             "Si no lo pediste, ignora este correo.",
         ),
     ),
-    "en": LoginCodeEmail(
-        subject="Your Alba code",
-        opening="Your Alba code is {code}.",
-        rules=(
-            "It is valid for 10 minutes and works only once. Do not share it with anyone.",
-            "If you did not ask for it, ignore this email.",
-        ),
-    ),
     "pt": LoginCodeEmail(
         subject="Seu código Alba",
         opening="Seu código Alba é {code}.",

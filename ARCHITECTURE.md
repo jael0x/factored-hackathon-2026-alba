@@ -159,8 +159,8 @@ web/
   src/pages/Login.tsx           # customer login; shares LoginShell, IdentityForm, CodeStep with the consultant login
   src/pages/ConsultantLogin.tsx # email and employee code, then the code
   src/products.ts               # the product types and statuses of products.csv the home names, and the shape of their copy
-  src/i18n/                     # es.ts sets the interface labels; en.ts and pt.ts must match it; locale.ts keeps the switch's choice
-  src/components/LanguageSwitch.tsx # ES, EN, PT in the app bar of every screen
+  src/i18n/                     # es.ts sets the interface labels; pt.ts must match it; locale.ts keeps the switch's choice
+  src/components/LanguageSwitch.tsx # ES, PT in the app bar of every screen
   src/pages/Home.tsx            # greeting, product cards, and the Preguntar por rows
   src/pages/ConsultantHome.tsx  # greeting from GET /consultant/me until the queue is built
   src/pages/Case.tsx            # customer: chat, plus the certificate if it exists
@@ -246,7 +246,7 @@ Staying in `ai_active` is not a move: nothing is written for it. The three moves
 
 `started` is not persisted. The process `INSERT` is born in `ai_active`, and the `process.started` event records it.
 
-The process row also holds `product` (`credit_card` | `personal_loan` | null), null until a turn sets it, and `locale` (`es` | `en` | `pt`), the language the customer chose with the switch (`PLAN.md` D21). `process.start` stores the opening message's `locale`, and each turn stores its own message's, so `locale` is never null and a switch changed mid-case applies from the next message on.
+The process row also holds `product` (`credit_card` | `personal_loan` | null), null until a turn sets it, and `locale` (`es` | `pt`), the language the customer chose with the switch (`PLAN.md` D21, D22). `process.start` stores the opening message's `locale`, and each turn stores its own message's, so `locale` is never null and a switch changed mid-case applies from the next message on.
 
 A customer has at most one process with `state <> 'ended'`. A partial unique index guarantees it. `process.start` inserts with `ON CONFLICT` on that index. If its own `process.started` key already exists, it returns that process and writes nothing, even if the case has ended since. If another case is open, for example when two first messages arrive before the case exists, it writes nothing and the message joins that case: its turn names the open process, and the message reaches the thread through the turn's `caused_by_event_id`.
 
@@ -324,7 +324,7 @@ If the model sends no product and the process already has one, the turn's `produ
 
 `conversation.generate` also stamps two facts on the turn, because rules cannot query (`PLAN.md` D13, D14). Both are read only from this process's events whose `seq` is lower than the triggering message's, so a retry writes the same payload, and a message written before a question was sent is not an answer to it. The model does not see or set them.
 
-- `product_asked_count`: how many times the customer was already asked which product. It counts the `conversation.template_sent` events with `template_id = which_product`, plus the `conversation.turn_classified` events with intent `clarify`, `product` null, `reply_ok` true, and `language` `es`, `en`, or `pt` (a clarification that was shown).
+- `product_asked_count`: how many times the customer was already asked which product. It counts the `conversation.template_sent` events with `template_id = which_product`, plus the `conversation.turn_classified` events with intent `clarify`, `product` null, `reply_ok` true, and `language` `es` or `pt` (a clarification that was shown).
 - `income_requested`: true when the latest `analysis.completed` has outcome `NEEDS_INFO` and the same `product` as this turn (after the stored product is copied), and no `conversation.template_sent` with `template_id = confirm_prequalify` and no `conversation.turn_classified` with intent `decline_prequalify` comes after it. Otherwise false, including when there is no analysis.
 
 ## Process rules
@@ -338,18 +338,18 @@ A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function o
 | `open_process` | `conversation.message_received` | the `process_id` column is null | `process.start` with the message's `locale` |
 | `generate_while_ai` | `conversation.message_received` | the `process_state` column is `ai_active` | `conversation.generate` |
 | `record_only_when_human` | `conversation.message_received` | the `process_state` column is `human_active` | none. The message is already in the event |
-| `ask_confirm_prequalify` | `conversation.turn_classified` | `reply_ok` and `language` is `es`, `en`, or `pt` and `intent` is `prequalify_card` or `prequalify_loan` | `template.send` for `confirm_prequalify`. The product is already on the process: `conversation.generate` stored it with the turn. Stays `ai_active`. The policy is not called |
-| `run_policy` | `conversation.turn_classified` | `reply_ok` and `language` is `es`, `en`, or `pt` and `intent` is `confirm_prequalify` and `product` is set | `policy.run` with that `product` and the turn's declared amount, null when none |
-| `decline_prequalify` | `conversation.turn_classified` | `reply_ok` and `language` is `es`, `en`, or `pt` and `intent` is `decline_prequalify` | `conversation.show_reply`. Stays `ai_active`. The policy is not called |
-| `run_policy_income` | `conversation.turn_classified` | `reply_ok` and `language` is `es`, `en`, or `pt` and `intent` is `provide_income` and `product` is set and `income_requested` | `policy.run` with that `product` and the declared amount |
-| `ask_consent_for_income` | `conversation.turn_classified` | `reply_ok` and `language` is `es`, `en`, or `pt` and `intent` is `provide_income` and `product` is set and not `income_requested` | `template.send` for `confirm_prequalify`. Stays `ai_active`. The policy is not called, and the amount is not used |
-| `ask_which_product` | `conversation.turn_classified` | `reply_ok` and `language` is `es`, `en`, or `pt` and `intent` is `provide_income` or `confirm_prequalify` and `product` is null and `product_asked_count` is under 2 | `template.send` for `which_product`. Stays `ai_active`. The policy is not called |
-| `hand_off_no_product` | `conversation.turn_classified` | `reply_ok` and `language` is `es`, `en`, or `pt` and `intent` is `clarify`, `provide_income`, or `confirm_prequalify` and `product` is null and `product_asked_count` is 2 or more | `process.transition` to `human_active`, `reason_code = out_of_scope` |
-| `hand_off_human` | `conversation.turn_classified` | `reply_ok` and `language` is `es`, `en`, or `pt` and `intent` is `human_request` | `process.transition` to `human_active`, `reason_code = customer_requested_human` |
-| `hand_off_scope` | `conversation.turn_classified` | `reply_ok` and `language` is `es`, `en`, or `pt` and `intent` is `out_of_scope` | `process.transition` to `human_active`, `reason_code = out_of_scope` |
+| `ask_confirm_prequalify` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `prequalify_card` or `prequalify_loan` | `template.send` for `confirm_prequalify`. The product is already on the process: `conversation.generate` stored it with the turn. Stays `ai_active`. The policy is not called |
+| `run_policy` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `confirm_prequalify` and `product` is set | `policy.run` with that `product` and the turn's declared amount, null when none |
+| `decline_prequalify` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `decline_prequalify` | `conversation.show_reply`. Stays `ai_active`. The policy is not called |
+| `run_policy_income` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `provide_income` and `product` is set and `income_requested` | `policy.run` with that `product` and the declared amount |
+| `ask_consent_for_income` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `provide_income` and `product` is set and not `income_requested` | `template.send` for `confirm_prequalify`. Stays `ai_active`. The policy is not called, and the amount is not used |
+| `ask_which_product` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `provide_income` or `confirm_prequalify` and `product` is null and `product_asked_count` is under 2 | `template.send` for `which_product`. Stays `ai_active`. The policy is not called |
+| `hand_off_no_product` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `clarify`, `provide_income`, or `confirm_prequalify` and `product` is null and `product_asked_count` is 2 or more | `process.transition` to `human_active`, `reason_code = out_of_scope` |
+| `hand_off_human` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `human_request` | `process.transition` to `human_active`, `reason_code = customer_requested_human` |
+| `hand_off_scope` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `out_of_scope` | `process.transition` to `human_active`, `reason_code = out_of_scope` |
 | `hand_off_language` | `conversation.turn_classified` | `reply_ok` and `language` is `other` | `process.transition` to `human_active`, `reason_code = language_unsupported` |
 | `hand_off_reply` | `conversation.turn_classified` | `reply_ok` is false | `process.transition` to `human_active`, with the turn's `reason_code`. `reply_text` is not shown |
-| `show_reply` | `conversation.turn_classified` | `reply_ok` and `language` is `es`, `en`, or `pt` and `intent` is `clarify`, `product_info`, or `chit_chat`, except a `clarify` with `product` null and `product_asked_count` 2 or more | `conversation.show_reply`. The policy is not called |
+| `show_reply` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `clarify`, `product_info`, or `chit_chat`, except a `clarify` with `product` null and `product_asked_count` 2 or more | `conversation.show_reply`. The policy is not called |
 | `render_needs_info` | `analysis.completed` | `outcome == "NEEDS_INFO"` | `template.send` for `needs_income`. Stays `ai_active` |
 | `render_refer_notice` | `analysis.completed` | `outcome == "REFER"` | `template.send` for `refer_notice`. The notice does not include the score and does not say whether the customer pre-qualifies |
 | `take_thread` | `analysis.completed` | `payload.outcome == "REFER"` | `process.transition` to `human_active`, `reason_code = policy_refer`; that command writes `conversation.thread_taken` |
@@ -382,7 +382,7 @@ The worker takes `pending` rows with `FOR UPDATE SKIP LOCKED`, increments `attem
 | `conversation.show_reply` | inserts `messages` with `author = assistant` and the turn's `reply_text` | call the model |
 | `template.send` | writes `conversation.template_sent`. `template_id` is `needs_income`, `refer_notice`, `which_product`, or `confirm_prequalify`. Locale comes from the triggering event's `locale` | call the model, end the process. The sentences are not written in this contract yet |
 | `policy.run` | reads the profile by the event's `customer_id`, runs the engine, writes `analysis.completed`, and copies `locale` from the triggering turn | write the certificate |
-| `decision.render` | reads `locale` from the triggering event, picks the ES, EN, or PT template, writes `prequalification.decided` | call the model. The consultant-path sentences are not written in this contract yet |
+| `decision.render` | reads `locale` from the triggering event, picks the ES or PT template, writes `prequalification.decided` | call the model. The consultant-path sentences are not written in this contract yet |
 
 Order inside `policy.run`: read profile → engine → insert the event. Whether the engine returns `PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, or `NEEDS_INFO`, the worker interprets nothing more. The rules above react to the new event.
 
@@ -451,9 +451,9 @@ R07 and R08 do not exist in the code. An income threshold or a `k * income` limi
 
 `facts` cites the column of the rule that closed, with its value and `as_of`. When R06 returned `self_declared`, that income is also cited, ahead of the closing fact: `{name: "income_local", value: the amount, source: "self_declared", as_of: the profile's as_of}`. A stated amount while `income_local` is present is ignored: R06 returns `passed`, its `input` records both numbers, and no `self_declared` fact is written. File income is cited as `customer_credit_profile.income_local`. `holds_product` is cited with source `products`. The other facts use the profile column.
 
-Templates in `templates.py`, three locales: `es`, `en`, and `pt`, the `locale` the customer chose with the switch. The English and Portuguese are text written by the team; the dataset has neither. The template receives the `Decision` and builds the paragraph. The model does not see this step.
+Templates in `templates.py`, two locales: `es` and `pt`, the `locale` the customer chose with the switch. The Portuguese is text written by the team; the dataset does not have it. The template receives the `Decision` and builds the paragraph. The model does not see this step.
 
-Outcome phrases the template may emit, and the model is forbidden to emit on its own: `precalifica`, `no precalifica`, `pré-qualificado`, `não pré-qualifica`, and in English any word that contains `pre-qualif` or `prequalif` (pre-qualified, pre-qualifies, prequalification).
+Outcome phrases the template may emit, and the model is forbidden to emit on its own: `precalifica`, `no precalifica`, `pré-qualificado`, and `não pré-qualifica`.
 
 ## How the model is called
 
@@ -486,11 +486,11 @@ What goes into the prompt. This is everything that leaves the service for OpenAI
 - The message text, as the customer typed it. Whether ID-like numbers in it are masked first is open (`PLAN.md` D11).
 - The process state.
 - Booleans: `income_on_file`, `score_on_file`, `has_active_card`, `has_active_personal_loan`. Not the amounts, the score, the days past due, the full name, the document, the email, or the address.
-- The catalog: two products, names in Spanish, English, and Portuguese, no rates.
+- The catalog: two products, names in Spanish and Portuguese, no rates.
 - The `locale` to write `reply_text` in, from the message.
 - The instruction not to state eligibility or a limit. If `reply_text` contains those phrases, the turn is written with `reply_ok` false and `reason_code = reply_forbidden`. The text is not shown. `hand_off_reply` escalates.
 
-`conversation.generate` stores the JSON and writes the turn. It does not choose the next command. The rules on `conversation.turn_classified` do. A clarification ("tarjeta o préstamo") may be `reply_text`. `language` is set by the model on every turn (`es`, `en`, `pt`, or `other`). It only says whether Alba can read the message: `es`, `en`, and `pt` continue, and `other` hands the case to a person with `language_unsupported`. It does not choose what Alba writes in. `reply_text`, the templates, and the certificate use the `locale` the customer chose with the switch, which each message carries (`PLAN.md` D21): a customer on `en` who writes "quiero una tarjeta" gets English. English and Portuguese template sentences are team-written; the dataset has neither. English eval utterances are team-written, Portuguese ones team-written or machine-translated, and both are disclosed as a limitation (`PLAN.md` D6, D21).
+`conversation.generate` stores the JSON and writes the turn. It does not choose the next command. The rules on `conversation.turn_classified` do. A clarification ("tarjeta o préstamo") may be `reply_text`. `language` is set by the model on every turn (`es`, `pt`, or `other`). It only says whether Alba can read the message: `es` and `pt` continue, and `other`, English included, hands the case to a person with `language_unsupported` (`PLAN.md` D22). It does not choose what Alba writes in. `reply_text`, the templates, and the certificate use the `locale` the customer chose with the switch, which each message carries (`PLAN.md` D21): a customer on `pt` who writes "quiero una tarjeta" gets Portuguese. A turn whose `language` differs from its `locale` is kept as written and counted in the multilingual-ambiguity evaluation. Portuguese template sentences are team-written; the dataset does not have them. Portuguese eval utterances are team-written or machine-translated and disclosed as a limitation (`PLAN.md` D6).
 
 `prequalify_card` and `prequalify_loan` do not run the policy. They store the product and trigger `confirm_prequalify` (template). Only `confirm_prequalify` with a product set enqueues `policy.run`. `decline_prequalify` shows the model's `reply_text` and leaves the case open.
 
@@ -526,7 +526,7 @@ A customer logs in with their document number, and a one-time code sent to the e
 - Claims: `sub` = `customer_id`, `role` = `customer`, `exp` 15 minutes. The JSON repeats `sub` and `role` next to `token`.
 - `login_codes` stores a hash of the code, never the code. The code is not logged.
 
-The email is written in `api/infrastructure/mail/smtp.py` in the request's `locale` (`es`, `en`, or `pt`), which is the language the switch shows: the code and its 10-minute validity. A request without a known `locale` is a 422. It goes out by SMTP. The compose stack sends only to Mailpit, a local mail catcher, and anyone trying the demo reads the code in its inbox at http://localhost:8025. Nothing leaves the machine. The dataset's addresses use real domains (gmail.com, yahoo.com, and others), so the stack must never point SMTP at a real provider while it holds this dataset.
+The email is written in `api/infrastructure/mail/smtp.py` in the request's `locale` (`es` or `pt`), which is the language the switch shows: the code and its 10-minute validity. A request without a known `locale` is a 422. It goes out by SMTP. The compose stack sends only to Mailpit, a local mail catcher, and anyone trying the demo reads the code in its inbox at http://localhost:8025. Nothing leaves the machine. The dataset's addresses use real domains (gmail.com, yahoo.com, and others), so the stack must never point SMTP at a real provider while it holds this dataset.
 
 Email is the channel, not the identifier. 24,203 addresses are shared by 2 to 31 customers, 79,930 rows in all, Juliana's and Mariana's among them (`PLAN.md` §4.3). `document_number` is unique. The 2,984 customers with no email (2.0%) cannot log in: their request gets the same answer and no code. That one answer tells anyone who gets no code to register an email at a branch (`DESIGN.md`, "Login"); it does not single them out. That is a stated limitation.
 
@@ -540,7 +540,7 @@ Consultants log in on their own page, `/consultant/login` (`PLAN.md` D18, decide
 
 The consultant's email is the same message as the customer's, in the same three languages. Each login page links to the other: "Acceso para asesores" on `/login`, "Acceso para clientes" on `/consultant/login` (in Spanish). One browser tab holds one session; logging in on the other page replaces it.
 
-Language (`PLAN.md` D21, built Oct 2). Every screen's app bar, both login pages included, has a switch with Spanish, English, and Portuguese. Every interface label follows it, and so do the product names and statuses on the home. A first visit takes the browser's language when it is one of the three, else Spanish. The choice is kept in the browser (`localStorage`), not on the server, and sets `<html lang>`. Amounts keep one format in every language (`1,559.57 USD`). The switch also decides the language Alba writes in: each message carries it as `locale` ("Process", "How the model is called").
+Language (`PLAN.md` D21, built Oct 2). Every screen's app bar, both login pages included, has a switch with Spanish and Portuguese (`PLAN.md` D22). Every interface label follows it, and so do the product names and statuses on the home. A first visit takes the browser's language when it is one of the two, else Spanish. The choice is kept in the browser (`localStorage`), not on the server, and sets `<html lang>`. Amounts keep one format in every language (`1,559.57 USD`). The switch also decides the language Alba writes in: each message carries it as `locale` ("Process", "How the model is called").
 
 Expired JWT: 401. The customer sees that the session ended. It is not silently renewed during the case being shown.
 
@@ -607,7 +607,7 @@ The trace includes events with this `process_id`, plus each message with a null 
 
 PostgreSQL 16. `load` is the only process that reads S3. The API and `policy.run` read Postgres.
 
-`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. `004_event_sequence.sql` adds `events.seq`. `005_products_balance_required.sql` sets an empty `products.current_balance` to 0 and makes the column `NOT NULL`. `006_process_locale.sql` renames `processes.language` to `locale`, makes it `NOT NULL`, and limits it to `es`, `en`, and `pt`. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
+`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. `004_event_sequence.sql` adds `events.seq`. `005_products_balance_required.sql` sets an empty `products.current_balance` to 0 and makes the column `NOT NULL`. `006_process_locale.sql` renames `processes.language` to `locale`, makes it `NOT NULL`, and limits it to `es`, `en`, and `pt`. `007_process_locale_es_pt.sql` narrows that to `es` and `pt` (`PLAN.md` D22) and moves any local `en` case to `es`. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
 
 ### Read tables
 

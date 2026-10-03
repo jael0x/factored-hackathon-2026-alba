@@ -45,10 +45,9 @@ CLARIFY_INTENT: Intent = "clarify"
 CHIT_CHAT_INTENT: Intent = "chit_chat"
 
 SPANISH: TurnLanguage = "es"
-ENGLISH: TurnLanguage = "en"
 PORTUGUESE: TurnLanguage = "pt"
 OTHER_LANGUAGE: TurnLanguage = "other"
-TEMPLATE_LANGUAGES: frozenset[TurnLanguage] = frozenset({SPANISH, ENGLISH, PORTUGUESE})
+TEMPLATE_LANGUAGES: frozenset[TurnLanguage] = frozenset({SPANISH, PORTUGUESE})
 
 WITHHELD_REASONS: frozenset[ReasonCode] = frozenset({REPLY_FORBIDDEN, MODEL_OUTPUT_INVALID})
 

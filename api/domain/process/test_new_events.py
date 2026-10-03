@@ -47,8 +47,8 @@ def test_a_message_to_a_handed_off_case_carries_that_state() -> None:
 
 
 def test_a_message_carries_the_language_chosen_with_the_switch() -> None:
-    event = message_received(JUAN, "quiero una tarjeta", CLIENT_MESSAGE_ID, "en", MessageStamp(None, "ai_active"))
-    assert event.payload["locale"] == "en"
+    event = message_received(JUAN, "quiero una tarjeta", CLIENT_MESSAGE_ID, "pt", MessageStamp(None, "ai_active"))
+    assert event.payload["locale"] == "pt"
 
 
 def test_process_started_is_born_ai_active_and_points_at_its_message() -> None:
