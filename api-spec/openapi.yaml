@@ -1262,6 +1262,8 @@ components:
             - reply_text
             - reply_ok
             - reason_code
+            - product_asked_count
+            - income_requested
           properties:
             event_name:
               type: string
@@ -1289,6 +1291,11 @@ components:
               allOf:
                 - $ref: "#/components/schemas/ReasonCode"
               nullable: true
+            product_asked_count:
+              type: integer
+              minimum: 0
+            income_requested:
+              type: boolean
 
     TraceTemplateSent:
       allOf:

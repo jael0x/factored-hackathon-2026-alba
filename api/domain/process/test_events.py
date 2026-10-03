@@ -69,7 +69,7 @@ def test_action_keys_follow_the_contract_table() -> None:
         turn_key(EVENT_ID),
         template_key("needs_income", EVENT_ID),
         open_process_key("CLI-9EDEKZ8OUNUR", "credit_prequalification", EVENT_ID),
-        policy_key(PROCESS_ID, "alba-credit-v1", "credit_card"),
+        policy_key(PROCESS_ID, "alba-credit-v1", "credit_card", EVENT_ID),
         transition_key(PROCESS_ID, "human_active", EVENT_ID),
         consultant_close_key(PROCESS_ID),
         end_key(PROCESS_ID),
@@ -78,7 +78,7 @@ def test_action_keys_follow_the_contract_table() -> None:
         "turn:22222222-2222-4222-8222-222222222222",
         "template:needs_income:22222222-2222-4222-8222-222222222222",
         "process:CLI-9EDEKZ8OUNUR:credit_prequalification:22222222-2222-4222-8222-222222222222",
-        "policy:11111111-1111-4111-8111-111111111111:alba-credit-v1:credit_card",
+        "policy:11111111-1111-4111-8111-111111111111:alba-credit-v1:credit_card:22222222-2222-4222-8222-222222222222",
         "transition:11111111-1111-4111-8111-111111111111:human_active:22222222-2222-4222-8222-222222222222",
         "consultant_close:11111111-1111-4111-8111-111111111111",
         "end:11111111-1111-4111-8111-111111111111",
@@ -110,3 +110,11 @@ def test_a_repeated_fact_repeats_its_key() -> None:
     assert transition_key(PROCESS_ID, "human_active", EVENT_ID) == transition_key(
         UUID(str(PROCESS_ID)), "human_active", UUID(str(EVENT_ID))
     )
+
+
+def test_a_second_run_from_another_turn_gets_its_own_key() -> None:
+    income_turn_id = UUID("44444444-4444-4444-8444-444444444444")
+    consent_run = policy_key(PROCESS_ID, "alba-credit-v1", "credit_card", EVENT_ID)
+    income_run = policy_key(PROCESS_ID, "alba-credit-v1", "credit_card", income_turn_id)
+    assert consent_run != income_run
+    assert consent_run == policy_key(UUID(str(PROCESS_ID)), "alba-credit-v1", "credit_card", UUID(str(EVENT_ID)))

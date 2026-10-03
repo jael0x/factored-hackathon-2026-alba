@@ -65,7 +65,7 @@ Gaps against the contract in what is built (item M0):
     - `api/presentation/worker/`: command names;
     - `api/domain/process/rules.py`: process rule ids.
   - Event names and idempotency keys, done Oct 1 (D19): `EventName` is a wire enum in `openapi.yaml`, referenced by `TraceEventBase.event_name`; `test_event_names_are_the_trace_discriminator` checks it equals the discriminator mapping. `api/domain/process/events.py` holds the ten constants, the key builders (a two-event action keys each event `{action key}:{event_name}`), and the actor of each event, so the pure rules can import them.
-  - The additions from D13 and D15 wait for those decisions.
+  - D13 and D14 (Oct 2) add the process rule ids `ask_consent_for_income` and `hand_off_no_product`; they are defined with the other rule ids in E3. The additions from D15 wait for that decision.
 - [x] **I2. HTTP route contract.** Done in e0e3532: `api-spec/openapi.yaml` and `ARCHITECTURE.md` "HTTP contract" (15 paths, roles, error codes, the `Case`, the packet, and the trace).
   - **Thread source (settled):** customer lines come from the process's `conversation.message_received` events, plus the opening message reached through `process.started.caused_by_event_id`. Assistant and template lines come from `messages` rows.
   - **Updates (settled):** `POST /messages` returns the `Case` after the worker finishes that cycle's commands, so the page does not poll.
@@ -91,11 +91,13 @@ Gaps against the contract in what is built (item M0):
   - Depends on I1.
 - [ ] **E3. Rules.** `api/rules.py`: the rules as pure functions over the event, in table order. Each rule has a test that it fires and a test that it does not.
   - Specs: `03` scenarios 1, 2, 4; `04` all; `07` the handoff outline and "The assistant stops replying once a person has the case".
-  - Depends on E2. **Blocked** by D12, D14, D16 (1); `03` scenario 3 by D13.
+  - Specs, from D13 and D14 (Oct 2): `03` the second and third requests with no product; `04` an income instead of the consent answer, and a yes with an income; `07` another language with no product.
+  - A test enumerates every combination of `reply_ok`, `language`, `intent`, `product`, `product_asked_count`, and `income_requested`, and asserts that exactly one `conversation.turn_classified` rule matches each.
+  - Depends on E2. D12, D13, D14, and D16 (1) closed Oct 2.
 - [ ] **E4. Worker and commands.** `api/worker.py`, a loop in the API process:
   - takes `pending` commands with `FOR UPDATE SKIP LOCKED`;
   - makes at most 3 attempts, then moves the case to `human_active` with `tool_failed`;
-  - runs the eight handlers;
+  - runs the eight handlers; `conversation.generate` stamps `product_asked_count` and `income_requested` on the turn from this process's earlier events (D13, D14), and `policy.run` uses the key with the triggering turn (D12);
   - takes the model call as an injected function, so tests pass turns as JSON;
   - lets the `POST /messages` handler wait until the commands enqueued from its event are done, because the response is the `Case` after that cycle. The handler waits; it does not run commands itself.
 
@@ -132,7 +134,7 @@ Gaps against the contract in what is built (item M0):
   - Mariana: `NOT_PREQUALIFIED` by R02.
 
   This is the contract's oracle test.
-  - Depends on E1 to E8. **Blocked** by D12.
+  - Depends on E1 to E8. D12 closed Oct 2.
 
 ## Model and eval (M)
 
@@ -153,7 +155,7 @@ Gaps against the contract in what is built (item M0):
 
   The prompt is built from the four booleans, the state, the catalog, and the text, and is versioned so eval runs can cite it. pytest never calls OpenAI.
   - Specs: `07` "A reply that states an outcome is withheld".
-  - Depends on I3 and M2. **Blocked** by D11 for masking only, and by D13 if its option (a) is chosen.
+  - Depends on I3 and M2. **Blocked** by D11 for masking only. D13 chose option (c), so the prompt carries no count of earlier questions.
 - [ ] **M4. Held-out set.** Team-labeled utterances in ES-MX, ES-CO, ES-AR, and PT, with the expected intent, product, language, and route. Portuguese is team-written or machine-translated and disclosed. Frozen with its sha256 before M3's prompt tuning. **Blocked** by D7 for its size.
 - [ ] **M5. B0 keyword baseline.** Pure, the same `ConversationTurn` output shape, runs offline. Depends on I3.
 - [ ] **M6. Harness and metrics.** Intent level first: B0 against the model on M4. Then route level through the API once E9 passes: the §7 metrics of `PLAN.md` with denominators and intervals, written to `eval/reports/`. **Blocked** by D7 for B1, case counts, and spend.
@@ -179,7 +181,7 @@ Every screen follows `DESIGN.md` and `mocks/index.html`, and handles loading, er
 
 ## Spec work from the Sep 29 review
 
-- After each of D12 to D16 is decided: update `03`, `04`, `06`, `07`, and `08` to match, in the change that writes the decision into the contract.
+- After each of D12 to D16 is decided: update `03`, `04`, `06`, `07`, and `08` to match, in the change that writes the decision into the contract. D12, D13, D14, and D16 (1) done Oct 2 (`03`, `04`, `07`; `06` needed no change).
 - Scenarios missing for behavior the contract already defines. Each is added in the item that builds the behavior:
   - two invalid model outputs send the case to a person with `model_output_invalid` (`07`, M3);
   - the consultant login (email and employee code, `Active` consultants only, D18): written Sep 30 as `11-consultant-login.feature`, since `01` had reached 15 scenarios;
