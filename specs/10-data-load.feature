@@ -61,6 +61,12 @@ Feature: Data load
     Then those customers keep an empty score or an empty income
     And the load does not fail
 
+  Scenario: A missing balance loads as zero
+    Given a product in the source file has no balance
+    When the load finishes
+    Then that product has a balance of 0
+    And the load does not fail
+
   Scenario: The load report counts the customers without a score
     Given 22,492 customers have no credit score in the source file
     When the load finishes
