@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
-from api.contract_models import EndReason, PolicyVersion, ProcessKey, ProcessState, ReasonCode
+from api.contract_models import EndReason, Locale, PolicyVersion, ProcessKey, ProcessState, ReasonCode
 from api.domain.process.events import (
     PROCESS_STATE_CHANGED,
     end_key,
@@ -42,7 +42,7 @@ class Events(Protocol):
 class Processes(Protocol):
     def find_open(self, customer_id: str, process_key: ProcessKey) -> ProcessRow | None: ...
 
-    def insert_open(self, customer_id: str, process_key: ProcessKey) -> UUID | None: ...
+    def insert_open(self, customer_id: str, process_key: ProcessKey, locale: Locale) -> UUID | None: ...
 
     def lock(self, process_id: UUID) -> ProcessRow | None: ...
 
@@ -91,20 +91,20 @@ class OpenProcessVanished(Exception):
 
 
 def record_customer_message(
-    events: Events, processes: Processes, customer_id: str, text: str, client_message_id: UUID
+    events: Events, processes: Processes, customer_id: str, text: str, client_message_id: UUID, locale: Locale
 ) -> AppendResult:
     open_case = processes.find_open(customer_id, CREDIT_PREQUALIFICATION)
-    return events.append(message_received(customer_id, text, client_message_id, stamp_message(open_case)))
+    return events.append(message_received(customer_id, text, client_message_id, locale, stamp_message(open_case)))
 
 
-def start_process(events: Events, processes: Processes, customer_id: str, cause: Cause) -> StartResult:
+def start_process(events: Events, processes: Processes, customer_id: str, locale: Locale, cause: Cause) -> StartResult:
     replayed = events.process_started_by(open_process_key(customer_id, CREDIT_PREQUALIFICATION, cause.event_id))
     if replayed is not None:
         return AlreadyStarted(replayed)
-    process_id = processes.insert_open(customer_id, CREDIT_PREQUALIFICATION)
+    process_id = processes.insert_open(customer_id, CREDIT_PREQUALIFICATION, locale)
     if process_id is None:
         return AlreadyOpen(read_open(processes, customer_id).process_id)
-    events.append(process_started(ProcessRow(process_id, customer_id, AI_ACTIVE), cause))
+    events.append(process_started(ProcessRow(process_id, customer_id, AI_ACTIVE), locale, cause))
     return Started(process_id)
 
 
