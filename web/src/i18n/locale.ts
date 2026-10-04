@@ -7,7 +7,7 @@ export type Locale = components["schemas"]["Locale"];
 // Each option is named in its own language, whatever the current one is.
 export const LOCALE_NAMES: Record<Locale, string> = { es: "Español", pt: "Português" };
 
-export const LOCALES = Object.keys(LOCALE_NAMES) as Locale[];
+export const LOCALES: Locale[] = Object.keys(LOCALE_NAMES).filter(isLocale);
 
 const DEFAULT_LOCALE: Locale = "es";
 
@@ -18,7 +18,7 @@ let locale: Locale = readStored() ?? fromBrowser(window.navigator.languages);
 document.documentElement.lang = locale;
 
 function isLocale(value: string | null): value is Locale {
-  return LOCALES.some((option) => option === value);
+  return value !== null && Object.hasOwn(LOCALE_NAMES, value);
 }
 
 // Blocked site storage throws on access. The choice is a convenience, so the browser's language stands in for it.
