@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -6,6 +7,9 @@ const usePolling = process.env.VITE_USE_POLLING === "1";
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: "jsdom",
+  },
   server: {
     host: true,
     port: 5173,

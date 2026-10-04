@@ -21,6 +21,12 @@ Feature: Language switch
     When the visitor comes back to the customer login the next day
     Then the title reads "Entre na sua conta"
 
+  Scenario: A browser that blocks site storage still switches the language
+    Given a visitor whose browser prefers Spanish and blocks site storage
+    When the visitor chooses Portuguese on the customer login
+    Then the title reads "Entre na sua conta"
+    And after a reload the title reads "Entra a tu cuenta"
+
   Scenario: Changing the language keeps the visitor on the same screen
     Given Juan Alberto Romero González is reading his home page in Spanish
     When Juan chooses Portuguese in the switch

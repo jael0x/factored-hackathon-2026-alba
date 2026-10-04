@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 
 import type { components } from "../api/schema";
 import { isRole } from "../routes";
+import { tabItems } from "../storage";
 
 export type Session = components["schemas"]["Session"];
 
@@ -16,16 +17,24 @@ const listeners = new Set<() => void>();
 let state: SessionState = readStored();
 
 function readStored(): SessionState {
-  const raw = window.sessionStorage.getItem(STORAGE_KEY);
+  const raw = tabItems.read(STORAGE_KEY);
   if (raw === null) {
     return { status: "signed_out" };
   }
-  const parsed: unknown = JSON.parse(raw);
+  const parsed = parseJson(raw);
   if (!isSession(parsed)) {
-    window.sessionStorage.removeItem(STORAGE_KEY);
+    tabItems.remove(STORAGE_KEY);
     return { status: "signed_out" };
   }
   return { status: "active", session: parsed };
+}
+
+function parseJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 function isSession(value: unknown): value is Session {
@@ -46,17 +55,17 @@ function publish(next: SessionState): void {
 }
 
 export function startSession(session: Session): void {
-  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  tabItems.write(STORAGE_KEY, JSON.stringify(session));
   publish({ status: "active", session });
 }
 
 export function signOut(): void {
-  window.sessionStorage.removeItem(STORAGE_KEY);
+  tabItems.remove(STORAGE_KEY);
   publish({ status: "signed_out" });
 }
 
 export function endExpiredSession(): void {
-  window.sessionStorage.removeItem(STORAGE_KEY);
+  tabItems.remove(STORAGE_KEY);
   publish({ status: "ended" });
 }
 

@@ -131,7 +131,7 @@ Prefer a better name or an extracted function over a comment.
 
 **Early return.** Invalid cases leave at the top. The happy path stays at low indentation. Do not nest more than two or three levels.
 
-**Catch-log-continue is not resilience.** A `try/except` that logs and proceeds after a failed load, a failed JSON parse, or a missing model drops the fail-loud path. Fail the command. Name what is missing. Do not invent a decision so the screen still moves. The one exception is a per-viewer convenience that decides nothing, such as the saved language choice in `web/src/i18n/locale.ts`: when the browser blocks storage it falls back to a default, and a comment says why.
+**Catch-log-continue is not resilience.** A `try/except` that logs and proceeds after a failed load, a failed JSON parse, or a missing model drops the fail-loud path. Fail the command. Name what is missing. Do not invent a decision so the screen still moves. The one exception is what the browser keeps for one viewer and that decides nothing: the language choice and the session across a reload, both kept through `web/src/storage.ts`. When the browser blocks storage, a read is empty and a write is dropped, so the page goes on from memory; a stored value that does not parse is cleared, as if nothing had been stored. A comment in `storage.ts` says why. The server still decides every session and every outcome.
 
 ## Types
 

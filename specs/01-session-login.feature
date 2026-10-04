@@ -63,6 +63,12 @@ Feature: Session login
     Then Juan sees that his session ended
     And no new session opens for him
 
+  Scenario: A browser that blocks site storage keeps the session for the page
+    Given Juan Alberto Romero González's browser blocks site storage
+    When Juan opens a session with a valid code
+    Then Juan sees his home page
+    And after a reload Juan sees the customer login
+
   Scenario Outline: With the demo login on, a visitor finds a customer by name or customer id
     Given the demo login is on
     When a visitor searches customers for "<query>"
