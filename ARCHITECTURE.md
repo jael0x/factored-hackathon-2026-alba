@@ -101,6 +101,7 @@ api/
       listing.py          # which products the customer sees: not Closed, and not a loan at 0
     search.py             # exactly one search criterion, for both demo searches
     closed_sets.py        # parse_member: a stored or loaded value narrowed into its closed set
+    locale.py             # the Locale constants and the set they form
     policy/               # credit rules
       engine.py           # pure function
       alba-credit-v1.yaml # rules and thresholds
@@ -691,6 +692,7 @@ The Postgres volume keeps gold. A second `up` does not reload if `load_batches` 
 | `hygiene` | a tracked file is under `data/`, is a PDF, or is a `.env` other than `.env.example`, or gitleaks finds a secret in the commits the pull request or push adds |
 
 - **One script.** `scripts/check.sh` is the Python gate. The `test` compose service and the `python` job run the same file, so a green local run means a green job.
+- **Closed sets are defined once.** `api/tests/test_closed_sets.py` fails when a module under `api/` other than a test writes a closed-set value as a raw literal, when one value has two constants, when a `Literal` set is declared outside its owner, or when the load's income currencies differ from `IncomeCurrency`. An exemption names the file, the function, and the value, and one that no longer matches a use fails too.
 - **Coverage is branch coverage** over `api/` and `pipeline/`. `api/contract_models.py`, test files, and `pipeline/__main__.py` are left out.
 - **Floors only go up.** The two floors live in `scripts/check.sh`, set on Oct 1, 2026 to the measured coverage rounded down. A change that raises coverage raises the floor there in the same change. Lowering a floor is a contract change.
 - **New code is fully covered.** The changed-lines check holds every pull request to 100%, independent of the floors. The target for `api/domain/` is 100%; the remaining gaps are in `api/domain/policy/engine.py` (policy-file validation and invariant guards).

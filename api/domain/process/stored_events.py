@@ -18,6 +18,7 @@ from api.contract_models import (
     TurnLanguage,
 )
 from api.domain.closed_sets import parse_member
+from api.domain.locale import LOCALES
 from api.domain.process.events import (
     ANALYSIS_COMPLETED,
     CONSULTANT_CLOSED,
@@ -55,7 +56,6 @@ WITHHELD_REASONS: frozenset[ReasonCode] = frozenset({REPLY_FORBIDDEN, MODEL_OUTP
 EVENT_NAMES: frozenset[EventName] = frozenset(get_args(EventName))
 INTENTS: frozenset[Intent] = frozenset(get_args(Intent))
 TURN_LANGUAGES: frozenset[TurnLanguage] = frozenset(get_args(TurnLanguage))
-LOCALES: frozenset[Locale] = frozenset(get_args(Locale))
 PRODUCT_KEYS: frozenset[ProductKey] = frozenset(get_args(ProductKey))
 INCOME_CURRENCIES: frozenset[IncomeCurrency] = frozenset(get_args(IncomeCurrency))
 OUTCOMES: frozenset[Outcome] = frozenset(get_args(Outcome))

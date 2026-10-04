@@ -61,12 +61,13 @@ Gaps against the contract in what is built (item M0):
 
 ## Interfaces (do first)
 
-- [ ] **I1. Closed sets in code.** Every closed set from `AGENTS.md` "No magic strings" is defined once.
+- [x] **I1. Closed sets in code.** Every closed set from `AGENTS.md` "No magic strings" is defined once.
   - Sets the wire carries are generated as named `Literal` aliases at the end of `api/contract_models.py` from `api-spec/openapi.yaml` (decided Sep 30). Python code imports them and does not declare them again. These are: role, state, end reason, product, locale, language, outcome, close outcome, currency, reason code, intent, template id, `decided_by`, policy rule id, actor, message author, policy version, process key, and event name.
   - Sets the wire does not carry live in the module that owns them in the contract's file tree:
     - `api/domain/process/commands.py`: command names and their payloads (since Oct 2, E3: the domain rules emit them, and the domain cannot import the worker);
     - `api/domain/process/rules.py`: process rule ids.
   - Event names and idempotency keys, done Oct 1 (D19): `EventName` is a wire enum in `openapi.yaml`, referenced by `TraceEventBase.event_name`; `test_event_names_are_the_trace_discriminator` checks it equals the discriminator mapping. `api/domain/process/events.py` holds the ten constants, the key builders (a two-event action keys each event `{action key}:{event_name}`), and the actor of each event, so the pure rules can import them.
+  - Closed Oct 4: `api/tests/test_closed_sets.py` holds the rule (`ARCHITECTURE.md`, "Quality gate"). `Locale` got its constants in `api/domain/locale.py`, the login email reads them, and the web narrows a stored role through `HOME_PATH` instead of repeating the two roles.
   - D13 and D14 (Oct 2) add the process rule ids `ask_consent_for_income` and `hand_off_no_product`; they are defined with the other rule ids in E3. The additions from D15 wait for that decision.
 - [x] **I2. HTTP route contract.** Done in e0e3532: `api-spec/openapi.yaml` and `ARCHITECTURE.md` "HTTP contract" (15 paths, roles, error codes, the `Case`, the packet, and the trace).
   - **Thread source (settled):** customer lines come from the process's `conversation.message_received` events, plus the opening message reached through `process.started.caused_by_event_id`. Assistant and template lines come from `messages` rows.

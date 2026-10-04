@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import type { components } from "../api/schema";
+import { isRole } from "../routes";
 
 export type Session = components["schemas"]["Session"];
 
@@ -35,7 +36,7 @@ function isSession(value: unknown): value is Session {
   return (
     typeof candidate.token === "string" &&
     typeof candidate.sub === "string" &&
-    (candidate.role === "customer" || candidate.role === "consultant")
+    isRole(candidate.role)
   );
 }
 
