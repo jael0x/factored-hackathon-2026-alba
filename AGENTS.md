@@ -131,7 +131,7 @@ Prefer a better name or an extracted function over a comment.
 
 **Early return.** Invalid cases leave at the top. The happy path stays at low indentation. Do not nest more than two or three levels.
 
-**Catch-log-continue is not resilience.** A `try/except` that logs and proceeds after a failed load, a failed JSON parse, or a missing model drops the fail-loud path. Fail the command. Name what is missing. Do not invent a decision so the screen still moves.
+**Catch-log-continue is not resilience.** A `try/except` that logs and proceeds after a failed load, a failed JSON parse, or a missing model drops the fail-loud path. Fail the command. Name what is missing. Do not invent a decision so the screen still moves. The one exception is a per-viewer convenience that decides nothing, such as the saved language choice in `web/src/i18n/locale.ts`: when the browser blocks storage it falls back to a default, and a comment says why.
 
 ## Types
 
@@ -158,7 +158,7 @@ Prefer a better name or an extracted function over a comment.
 - A list or a count starts from the small set: this session's process, this `customer_id`'s gold row, `commands` where `status = pending`. A `LATERAL` or a per-row function over all `customers` or all `products` is an N+1. Copying the previous query is not a pass.
 - Parameterized SQL only. Never concatenate request input into a statement.
 - `events` are append-only. A new fact points at the previous one with `caused_by_event_id`. Do not hard-delete history.
-- Migrations are one-way and safe while old code might still be running. No destructive drop in the same step that introduces the replacement.
+- Migrations are one-way. No destructive drop in the same step that introduces the replacement. The compose `load` service applies them before the API starts from the same checkout, so code from before a migration never runs against it here: "safe" means the code of the same change works on the new schema. A migration that has run anywhere is never edited; change it with a new migration.
 - A migration keeps its filename once it has run anywhere: `schema_migrations` is keyed by it, and a renamed file runs again. If one must be renamed, map the new name to the old one in `FORMER_NAMES` in `pipeline/migrate.py`, with a test.
 - The schema is the contract. `NOT NULL` means the app does not hunt for nulls. A nullable column means the app handles null. Empty income stays null. Do not impute. The one exception is `products.current_balance`: an empty balance loads as 0 (`ARCHITECTURE.md`, "Data"). Do not convert Mexico balances out of USD.
 - If you create or replace a view, the same migration sets `security_invoker = true`. Otherwise the view runs as the owner and skips privileges.

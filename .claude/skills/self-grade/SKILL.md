@@ -22,7 +22,7 @@ Evidence follows the `AGENTS.md` rule: a grade of A or above cites an artifact f
    - `pytest` (or `docker compose --profile test run --rm test`). Name which tests cover the change and confirm their files sit under `testpaths` in `pytest.ini`.
    - `npm run typecheck` in `web/` if anything under `web/` changed.
    - `python api-spec/generate.py` if `api-spec/openapi.yaml` changed, then confirm `git diff` on the generated files matches.
-   - ruff and mypy are not configured yet (`IMPLEMENTATION.md` I4). Say so in row P1. Do not claim them.
+   - `ruff check .`, `ruff format --check .`, and `mypy` (all run by `scripts/check.sh`). Record their output in row P1.
 5. **Grade every row** with the table format below.
 6. **Fix every F.** Do not ask. Fix it through the owner.
 7. **Re-grade after the fixes.** Repeat until no F remains.
@@ -130,7 +130,7 @@ Every row appears. If a row does not apply, mark it N/A. Row numbers 1 to 19 fol
 | D1 | Needed columns only, starts from the small set, no N+1 | | |
 | D2 | Parameterized SQL only | | |
 | D3 | `events` append-only, `caused_by_event_id` set | | |
-| D4 | Migration one-way and safe beside old code | | |
+| D4 | Migration one-way, works with the same change's code, never edited after it ran | | |
 | D5 | Schema is the contract (no imputing, no USD conversion) | | |
 | D6 | Views set `security_invoker = true` | | |
 | D7 | Idempotency keys derived, no clock or random | | |
