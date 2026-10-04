@@ -20,6 +20,8 @@ docker compose up --build
 
 Open http://localhost:5173/ (API health at http://localhost:8000/health). `load` downloads the four CSVs into `data/raw/` if missing, applies migrations, and builds gold. Login codes are emailed to Mailpit, a local mail catcher: read them at http://localhost:8025. Nothing is sent outside your machine. Default compose sets `DEMO_LOGIN=1`, which adds a "Demo" button to the login header; it opens a test-customer search right below it that fills the document field. Consultants log in at http://localhost:5173/consultant/login ("Acceso para asesores" under the customer form) with their email and employee code; there the Demo button searches active consultants and fills both fields. There is no cloud deploy for the submission; optional host steps will live in `docs/ops.md`.
 
+If `load` stops on `events_locale_check`, the database holds an English case from before `PLAN.md` D22 (Oct 2 to 3). Reset it with `docker compose down -v`, then `docker compose up` again; the data reloads from `data/raw/`.
+
 `api` and `web` mount the source tree and reload when a file is saved. A Python or TypeScript edit does not need another image build. A new package in `api/requirements.txt` or `web/package.json` does: `docker compose up --build api` or `web`. The first `up --build` after this change rebuilds `web`, because that image now runs Vite instead of nginx.
 
 ### Tests

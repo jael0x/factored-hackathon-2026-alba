@@ -6,7 +6,7 @@ type TextFieldProps = {
   onChange: (value: string) => void;
 } & Pick<InputHTMLAttributes<HTMLInputElement>, "type" | "autoComplete" | "autoCapitalize">;
 
-export function TextField({ label, value, onChange, ...input }: TextFieldProps) {
+export function TextField({ label, value, onChange, autoComplete = "off", ...input }: TextFieldProps) {
   const id = useId();
   return (
     <div>
@@ -16,6 +16,7 @@ export function TextField({ label, value, onChange, ...input }: TextFieldProps) 
       <input
         id={id}
         className="field"
+        autoComplete={autoComplete}
         spellCheck={false}
         value={value}
         onChange={(event) => onChange(event.target.value)}

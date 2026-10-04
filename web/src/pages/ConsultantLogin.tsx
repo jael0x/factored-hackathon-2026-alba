@@ -2,24 +2,20 @@ import { useState } from "react";
 
 import { api } from "../api/client";
 import type { components } from "../api/schema";
-import { CodeStep, type CodeSent } from "../components/CodeStep";
 import type { DemoSource } from "../components/DemoSearch";
 import { DemoSearchPopover } from "../components/DemoSearchPopover";
-import { IdentityForm } from "../components/IdentityForm";
 import { LoginShell } from "../components/LoginShell";
+import { LoginSteps, type SentTo } from "../components/LoginSteps";
 import { TextField } from "../components/TextField";
 import { fullName } from "../format";
 import type { Messages } from "../i18n/es";
-import { useLocale, type Locale } from "../i18n/locale";
+import type { Locale } from "../i18n/locale";
 import { useMessages } from "../i18n/messages";
-import { HOME_PATH } from "../routes";
 import { codeExpiry, sessionAnswer } from "../session/login";
 
 type ConsultantHit = components["schemas"]["ConsultantSearchHit"];
 
 type ConsultantIdentity = { email: string; employeeCode: string };
-
-type Sent = CodeSent & ConsultantIdentity;
 
 const searchConsultants = async (q: string) => {
   const { data } = await api.GET("/consultants/search", { params: { query: { q } } }).catch(() => ({ data: undefined }));
@@ -60,11 +56,10 @@ const openSession = ({ email, employeeCode }: ConsultantIdentity, code: string) 
 export function ConsultantLogin() {
   const [email, setEmail] = useState("");
   const [employeeCode, setEmployeeCode] = useState("");
-  const [sent, setSent] = useState<Sent | null>(null);
-  const locale = useLocale();
+  const [sent, setSent] = useState<SentTo<ConsultantIdentity> | null>(null);
   const t = useMessages();
   const copy = t.login.consultant;
-  const typed: ConsultantIdentity = { email: email.trim(), employeeCode: employeeCode.trim() };
+  const typed = { email: email.trim(), employeeCode: employeeCode.trim() };
 
   const pick = (hit: ConsultantHit) => {
     setEmail(hit.email);
@@ -75,10 +70,7 @@ export function ConsultantLogin() {
   return (
     <LoginShell
       role="consultant"
-      title={copy.title}
-      lede={copy.lede}
-      notice={copy.notice}
-      panelTitle={sent ? t.login.yourCode : copy.panelTitle}
+      codeSent={sent !== null}
       demo={
         <DemoSearchPopover
           source={consultantDemo(t.demo.consultants)}
@@ -87,36 +79,21 @@ export function ConsultantLogin() {
         />
       }
     >
-      {sent ? (
-        <CodeStep
-          identity={[
-            { label: copy.email, value: sent.email },
-            { label: copy.employeeCode, value: sent.employeeCode },
-          ]}
-          sent={sent}
-          changeLabel={copy.change}
-          home={HOME_PATH.consultant}
-          requestCode={() => requestCode(sent, locale)}
-          openSession={(code) => openSession(sent, code)}
-          onResent={(next) => setSent({ ...sent, ...next })}
-          onChangeIdentity={() => setSent(null)}
-        />
-      ) : (
-        <IdentityForm
-          ready={typed.email !== "" && typed.employeeCode !== ""}
-          requestCode={() => requestCode(typed, locale)}
-          onSent={(expiresInSeconds) => setSent({ ...typed, expiresInSeconds, resent: false })}
-        >
-          <TextField label={copy.email} type="email" autoComplete="email" value={email} onChange={setEmail} />
-          <TextField
-            label={copy.employeeCode}
-            autoComplete="off"
-            autoCapitalize="characters"
-            value={employeeCode}
-            onChange={setEmployeeCode}
-          />
-        </IdentityForm>
-      )}
+      <LoginSteps
+        role="consultant"
+        typed={typed.email === "" || typed.employeeCode === "" ? null : typed}
+        sent={sent}
+        onSentChange={setSent}
+        identityRows={(identity) => [
+          { label: copy.email, value: identity.email },
+          { label: copy.employeeCode, value: identity.employeeCode },
+        ]}
+        requestCode={requestCode}
+        openSession={openSession}
+      >
+        <TextField label={copy.email} type="email" autoComplete="email" value={email} onChange={setEmail} />
+        <TextField label={copy.employeeCode} autoCapitalize="characters" value={employeeCode} onChange={setEmployeeCode} />
+      </LoginSteps>
     </LoginShell>
   );
 }
