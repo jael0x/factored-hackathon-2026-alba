@@ -4,6 +4,7 @@ from email.message import EmailMessage
 from typing import Protocol
 
 from api.contract_models import Locale
+from api.domain.locale import PORTUGUESE_LOCALE, SPANISH_LOCALE
 from api.infrastructure.config.settings import settings
 
 SMTP_TIMEOUT_SECONDS = 10
@@ -17,7 +18,7 @@ class LoginCodeEmail:
 
 
 LOGIN_CODE_EMAILS: dict[Locale, LoginCodeEmail] = {
-    "es": LoginCodeEmail(
+    SPANISH_LOCALE: LoginCodeEmail(
         subject="Tu código de Alba",
         opening="Tu código de Alba es {code}.",
         rules=(
@@ -25,7 +26,7 @@ LOGIN_CODE_EMAILS: dict[Locale, LoginCodeEmail] = {
             "Si no lo pediste, ignora este correo.",
         ),
     ),
-    "pt": LoginCodeEmail(
+    PORTUGUESE_LOCALE: LoginCodeEmail(
         subject="Seu código Alba",
         opening="Seu código Alba é {code}.",
         rules=(
