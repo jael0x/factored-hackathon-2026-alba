@@ -74,8 +74,8 @@ A consultant is a bank employee who reviews the cases the assistant hands off. T
 | Auth | Customers: document number plus a one-time code emailed to the address on file. Consultants: email and employee code plus the same kind of code. Mailpit receives every code in the compose stack. Then an own JWT, HS256, 15 minutes, issued by this API |
 | Pipeline | Python, in the `load` container. Reads local CSVs. DuckDB only if the aggregate needs it; the result lands in Postgres |
 | LLM | OpenAI API, model `gpt-6-luna` (GPT-6 Luna). The adapter `api/infrastructure/llm/conversation.py` makes one call with Structured Outputs (the `ConversationTurn` JSON schema) and returns `ConversationTurn`. The policy does not use this adapter |
-| Tests | pytest in the API. Vitest only if the client has logic; business logic does not live in the client |
-| Quality gate | ruff (lint and format), mypy strict, pytest with branch coverage, `tsc` and the Vite build. GitHub Actions runs it on every pull request to `main` and every push to `main`. See **Quality gate** |
+| Tests | pytest in the API. Vitest with jsdom for the client's own logic (browser storage, the session, the language choice); business logic does not live in the client |
+| Quality gate | ruff (lint and format), mypy strict, pytest with branch coverage, `tsc`, Vitest, and the Vite build. GitHub Actions runs it on every pull request to `main` and every push to `main`. See **Quality gate** |
 | Running processes | A loop inside the API process that takes `commands` rows with `status = pending`. No Kafka, no Redis, no Inngest |
 
 ## File tree
@@ -154,7 +154,8 @@ api/
     oracle_customers.json # the four profiles and César
 web/
   src/api/client.ts             # openapi-fetch client, typed by schema.d.ts; adds the bearer token, ends the session on 401
-  src/session/session.ts        # the session in sessionStorage; never renewed
+  src/session/session.ts        # the session in sessionStorage; never renewed; kept in memory for the tab when storage is blocked
+  src/storage.ts                # the only module that touches browser storage; a blocked area reads empty and drops writes
   src/styles/tokens.css         # DESIGN.md tokens
   src/api/schema.d.ts           # generated from api-spec/openapi.yaml
   src/pages/Login.tsx           # customer login; shares LoginShell, IdentityForm, CodeStep with the consultant login
@@ -541,7 +542,7 @@ Consultants log in on their own page, `/consultant/login` (`PLAN.md` D18, decide
 
 The consultant's email is the same message as the customer's, in the same three languages. Each login page links to the other: "Acceso para asesores" on `/login`, "Acceso para clientes" on `/consultant/login` (in Spanish). One browser tab holds one session; logging in on the other page replaces it.
 
-Language (`PLAN.md` D21, built Oct 2). Every screen's app bar, both login pages included, has a switch with Spanish and Portuguese (`PLAN.md` D22). Every interface label follows it, and so do the product names and statuses on the home. A first visit takes the browser's language when it is one of the two, else Spanish. The choice is kept in the browser (`localStorage`), not on the server, and sets `<html lang>`. Amounts keep one format in every language (`1,559.57 USD`). The switch also decides the language Alba writes in: each message carries it as `locale` ("Process", "How the model is called").
+Language (`PLAN.md` D21, built Oct 2). Every screen's app bar, both login pages included, has a switch with Spanish and Portuguese (`PLAN.md` D22). Every interface label follows it, and so do the product names and statuses on the home. A first visit takes the browser's language when it is one of the two, else Spanish. The choice is kept in the browser (`localStorage`), not on the server, and sets `<html lang>`. When the browser blocks site storage, the choice holds until the page is reloaded, and then the browser's language stands in again. Amounts keep one format in every language (`1,559.57 USD`). The switch also decides the language Alba writes in: each message carries it as `locale` ("Process", "How the model is called").
 
 Expired JWT: 401. The customer sees that the session ended. It is not silently renewed during the case being shown.
 
@@ -687,11 +688,12 @@ The Postgres volume keeps gold. A second `up` does not reload if `load_batches` 
 | Job | Fails when |
 |---|---|
 | `python` | `scripts/check.sh` fails: `ruff check`, `ruff format --check`, `mypy` (strict), a test, total coverage under its floor, or `api/domain/` under its floor. On a pull request, also when a changed line in `api/` or `pipeline/` is not covered (`diff-cover` against the base branch, 100%) |
-| `web` | `npm run typecheck` or `npm run build` in `web/` fails |
+| `web` | `npm run typecheck`, `npm test`, or `npm run build` in `web/` fails |
 | `contract` | `python api-spec/generate.py` changes `api/contract_models.py` or `web/src/api/schema.d.ts` |
 | `hygiene` | a tracked file is under `data/`, is a PDF, or is a `.env` other than `.env.example`, or gitleaks finds a secret in the commits the pull request or push adds |
 
 - **One script.** `scripts/check.sh` is the Python gate. The `test` compose service and the `python` job run the same file, so a green local run means a green job.
+- **Browser storage has one owner.** `web/src/storage.test.ts` fails when a file under `web/src/` other than `storage.ts` (tests aside) names `localStorage` or `sessionStorage`.
 - **Closed sets are defined once.** `api/tests/test_closed_sets.py` fails when a module under `api/` other than a test writes a closed-set value as a raw literal, when one value has two constants, when a `Literal` set is declared outside its owner, or when the load's income currencies differ from `IncomeCurrency`. An exemption names the file, the function, and the value, and one that no longer matches a use fails too.
 - **Coverage is branch coverage** over `api/` and `pipeline/`. `api/contract_models.py`, test files, and `pipeline/__main__.py` are left out.
 - **Floors only go up.** The two floors live in `scripts/check.sh`, set on Oct 1, 2026 to the measured coverage rounded down. A change that raises coverage raises the floor there in the same change. Lowering a floor is a contract change.
@@ -699,7 +701,7 @@ The Postgres volume keeps gold. A second `up` does not reload if `load_batches` 
 - **Integration tests cannot pass by skipping.** Without Postgres, `migrated_database` skips. With `ALBA_REQUIRE_POSTGRES=1` (the `test` service and the `python` job) it fails.
 - **mypy is strict** and `pyproject.toml` holds its settings. `api/contract_models.py` is generated and excluded from ruff and mypy. Ruff targets Python 3.12 but skips the PEP 695 generic syntax so host runs on 3.11 still import.
 - **Third-party actions are pinned** to a commit SHA, the gitleaks binary to a SHA-256, and every tool to an exact version in `requirements-dev.txt`. The workflow has `contents: read` only.
-- **Not in the gate yet:** `tsc` inside the `test` service (that image has no Node; `IMPLEMENTATION.md` I4), mutation testing for `api/domain/`, and running `specs/*.feature`.
+- **Not in the gate yet:** `tsc` and Vitest inside the `test` service (that image has no Node; `IMPLEMENTATION.md` I4), mutation testing for `api/domain/`, and running `specs/*.feature`.
 
 ## Data: what is touched and what is not
 
