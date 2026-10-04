@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 
+import { useMessages } from "../i18n/messages";
 import type { SessionAnswer } from "../session/login";
 import { startSession } from "../session/session";
 
@@ -17,7 +18,7 @@ type CodeStepProps = {
   onChangeIdentity: () => void;
 };
 
-type CodeFailure = "none" | "rejected" | "unreachable" | "resend_failed";
+type CodeFailure = "none" | "rejected" | "unreachable" | "resendFailed";
 
 const CODE_PATTERN = /^[0-9]{6}$/;
 
@@ -36,6 +37,7 @@ export function CodeStep({
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<CodeFailure>("none");
+  const t = useMessages();
   const minutes = Math.round(sent.expiresInSeconds / 60);
 
   const submit = async (event: FormEvent) => {
@@ -58,7 +60,7 @@ export function CodeStep({
     const expiresInSeconds = await requestCode();
     setBusy(false);
     if (expiresInSeconds === null) {
-      setFailure("resend_failed");
+      setFailure("resendFailed");
       return;
     }
     setCode("");
@@ -74,12 +76,12 @@ export function CodeStep({
         </div>
       ))}
       <p className="caption muted" role="status">
-        {sent.resent ? "Pedimos otro código. Revisa tu correo." : "Revisa tu correo y escribe el código."}
+        {sent.resent ? t.code.resent : t.code.checkEmail}
       </p>
       <form className="stack" onSubmit={submit} noValidate>
         <div>
           <label className="field-label" htmlFor={fieldId}>
-            Código
+            {t.code.label}
           </label>
           <input
             id={fieldId}
@@ -91,19 +93,19 @@ export function CodeStep({
             value={code}
             onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
           />
-          <p className="caption muted field-note">El código vale {minutes} minutos.</p>
+          <p className="caption muted field-note">{t.code.validFor(minutes)}</p>
         </div>
         {failure !== "none" && (
           <p className="error-line" role="alert">
-            {failureText[failure]}
+            {t.code[failure]}
           </p>
         )}
         <button type="submit" className="btn primary block" disabled={busy || !CODE_PATTERN.test(code)}>
-          Abrir sesión
+          {t.code.open}
         </button>
       </form>
       <button type="button" className="btn secondary block" onClick={resend} disabled={busy}>
-        Pedir otro código
+        {t.code.resend}
       </button>
       <button type="button" className="btn text centered" onClick={onChangeIdentity} disabled={busy}>
         {changeLabel}
@@ -111,9 +113,3 @@ export function CodeStep({
     </div>
   );
 }
-
-const failureText: Record<Exclude<CodeFailure, "none">, string> = {
-  rejected: "El código no es válido o venció.",
-  unreachable: "No pudimos abrir la sesión. Inténtalo de nuevo.",
-  resend_failed: "No pudimos pedir otro código. Inténtalo de nuevo.",
-};

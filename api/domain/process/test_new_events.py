@@ -23,7 +23,7 @@ HANDED_OFF = ProcessRow(process_id=PROCESS_ID, customer_id=JUAN, state="human_ac
 
 
 def test_a_first_message_has_no_process_and_is_the_customers() -> None:
-    event = message_received(JUAN, "quiero una tarjeta", CLIENT_MESSAGE_ID, MessageStamp(None, "ai_active"))
+    event = message_received(JUAN, "quiero una tarjeta", CLIENT_MESSAGE_ID, "es", MessageStamp(None, "ai_active"))
     assert event == NewEvent(
         event_name="conversation.message_received",
         idempotency_key="msg:33333333-3333-4333-8333-333333333333",
@@ -32,18 +32,27 @@ def test_a_first_message_has_no_process_and_is_the_customers() -> None:
         process_state="ai_active",
         caused_by_event_id=None,
         caused_by_command_id=None,
-        payload={"text": "quiero una tarjeta", "client_message_id": "33333333-3333-4333-8333-333333333333"},
+        payload={
+            "text": "quiero una tarjeta",
+            "client_message_id": "33333333-3333-4333-8333-333333333333",
+            "locale": "es",
+        },
     )
     assert event.actor == "customer"
 
 
 def test_a_message_to_a_handed_off_case_carries_that_state() -> None:
-    event = message_received(JUAN, "hola", CLIENT_MESSAGE_ID, MessageStamp(PROCESS_ID, "human_active"))
+    event = message_received(JUAN, "hola", CLIENT_MESSAGE_ID, "es", MessageStamp(PROCESS_ID, "human_active"))
     assert (event.process_id, event.process_state) == (PROCESS_ID, "human_active")
 
 
+def test_a_message_carries_the_language_chosen_with_the_switch() -> None:
+    event = message_received(JUAN, "quiero una tarjeta", CLIENT_MESSAGE_ID, "pt", MessageStamp(None, "ai_active"))
+    assert event.payload["locale"] == "pt"
+
+
 def test_process_started_is_born_ai_active_and_points_at_its_message() -> None:
-    event = process_started(OPEN_CASE, CAUSE)
+    event = process_started(OPEN_CASE, "pt", CAUSE)
     assert event == NewEvent(
         event_name="process.started",
         idempotency_key=f"process:{JUAN}:credit_prequalification:{EVENT_ID}",
@@ -52,7 +61,7 @@ def test_process_started_is_born_ai_active_and_points_at_its_message() -> None:
         process_state="ai_active",
         caused_by_event_id=EVENT_ID,
         caused_by_command_id=COMMAND_ID,
-        payload={"process_key": "credit_prequalification", "customer_id": JUAN},
+        payload={"process_key": "credit_prequalification", "customer_id": JUAN, "locale": "pt"},
     )
     assert event.actor == "system"
 

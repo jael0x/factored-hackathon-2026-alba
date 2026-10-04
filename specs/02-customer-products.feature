@@ -3,6 +3,9 @@ Feature: Customer products
   I want to see my own products as the bank stores them
   So that I know what I already hold before I ask for credit
 
+  Background:
+    Given the chosen language is Spanish
+
   Scenario: Juan sees his own products
     Given Juan Alberto Romero González is signed in
     When Juan opens his home page

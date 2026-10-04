@@ -2,7 +2,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from uuid import UUID
 
-from api.contract_models import Actor, EndReason, EventName, PolicyVersion, ProcessState, ReasonCode
+from api.contract_models import Actor, EndReason, EventName, Locale, PolicyVersion, ProcessState, ReasonCode
 from api.domain.process.events import (
     EVENT_ACTOR,
     MESSAGE_RECEIVED,
@@ -68,7 +68,9 @@ class IdempotencyConflict(Exception):
         self.idempotency_key = idempotency_key
 
 
-def message_received(customer_id: str, text: str, client_message_id: UUID, stamp: MessageStamp) -> NewEvent:
+def message_received(
+    customer_id: str, text: str, client_message_id: UUID, locale: Locale, stamp: MessageStamp
+) -> NewEvent:
     return NewEvent(
         event_name=MESSAGE_RECEIVED,
         idempotency_key=message_key(client_message_id),
@@ -77,13 +79,13 @@ def message_received(customer_id: str, text: str, client_message_id: UUID, stamp
         process_state=stamp.process_state,
         caused_by_event_id=None,
         caused_by_command_id=None,
-        payload={"text": text, "client_message_id": str(client_message_id)},
+        payload={"text": text, "client_message_id": str(client_message_id), "locale": locale},
     )
 
 
-def process_started(process: ProcessRow, cause: Cause) -> NewEvent:
+def process_started(process: ProcessRow, locale: Locale, cause: Cause) -> NewEvent:
     key = open_process_key(process.customer_id, CREDIT_PREQUALIFICATION, cause.event_id)
-    payload = {"process_key": CREDIT_PREQUALIFICATION, "customer_id": process.customer_id}
+    payload = {"process_key": CREDIT_PREQUALIFICATION, "customer_id": process.customer_id, "locale": locale}
     return _process_event(PROCESS_STARTED, key, process, AI_ACTIVE, cause, payload)
 
 

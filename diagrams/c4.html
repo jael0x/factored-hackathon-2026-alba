@@ -263,7 +263,7 @@ node('customer', {
     'Alicia `CLI-440CO5FZIY6A`: `REFER`, R05, score 615.',
     'Mariana `CLI-ZGOY1V6ZC46J`: `NOT_PREQUALIFIED`, R02, 180 days past due.',
     'Logs in with the document number and the 6-digit code emailed to the address on file. The document alone does not open a session.',
-    'Spanish or Portuguese. Another language goes to a person (`language_unsupported`).',
+    'Spanish or Portuguese, chosen with the language switch. A message in any other language, English included, goes to a person (`language_unsupported`, D22).',
   ],
   src: 'ARCHITECTURE.md, "What gets built", "Oracle fixtures", "What the customer can be asked"',
 });
@@ -511,7 +511,7 @@ node('policy', {
 node('templates', {
   parent: 'api', kind: 'component', name: 'Templates', tech: 'api/domain/policy/templates.py',
   summary: 'The certificate and four notices, in `es` or `pt`. The model never writes this text.',
-  desc: ['The only place outcome wording and notices come from. The Portuguese text is written by the team; the dataset has none.'],
+  desc: ['The only place outcome wording and notices come from. The Portuguese text is written by the team; the dataset does not have it.'],
   files: ['api/domain/policy/templates.py'],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1", "Commands"',
 });
@@ -617,7 +617,7 @@ spec('routers', 'r-consultant-close', {
   summary: 'The consultant only action: `PREQUALIFIED` or `NOT_PREQUALIFIED`. No text.',
   fixed: [
     'Body: `outcome`, `PREQUALIFIED` or `NOT_PREQUALIFIED`. Any other body is rejected. There is no text field.',
-    'Writes `conversation.consultant_closed` with `outcome`, `consultant_id`, and `language` copied from the process.',
+    'Writes `conversation.consultant_closed` with `outcome`, `consultant_id`, and `locale` copied from the process. The certificate is in the customer\'s `locale`, whatever the consultant\'s switch shows.',
     'Key `consultant_close:{process_id}`. The same case cannot be closed twice.',
     'The consultant does not send messages and does not chat.',
   ],
@@ -647,7 +647,7 @@ spec('auth', 'a-code', {
     '`login_codes` holds a hash of the code (never the code), the customer or consultant, the 10-minute expiry, the count of wrong tries, and when it was used.',
     'A new request replaces any unused code for the same customer or consultant. The fifth wrong code spends it. A used code does not open a second session.',
     'Codes are kept per role: a customer code does not open a consultant session, and a consultant code does not open a customer session.',
-    'The code is not logged. The email is Spanish copy in `api/infrastructure/mail/smtp.py`, sent by SMTP to Mailpit only.',
+    'The code is not logged. The email is written in `api/infrastructure/mail/smtp.py` in the request\'s `locale` (`es` or `pt`), sent by SMTP to Mailpit only.',
     'A document number or a `customer_id` does not prove identity.',
   ],
   tests: ['Five wrong codes spend the code.'],
@@ -710,10 +710,11 @@ spec('events', 'e-names', {
 });
 spec('events', 'e-payloads', {
   name: 'Payload minimums', tech: 'per event', status: 'defined',
-  summary: 'Each event carries every fact a downstream rule needs, `language` included.',
+  summary: 'Each event carries every fact a downstream rule needs, `locale` included.',
   fixed: [
-    'Turn: `intent`, `product`, `language`, `declared_income_amount`, `declared_income_currency`, `reply_text`, `reply_ok`, `reason_code`, `product_asked_count`, `income_requested`. The last two are stamped by `conversation.generate` from earlier events of the process (D13, D14).',
-    '`analysis.completed` adds `language` to the policy fields. `prequalification.decided` carries `decided_by` (`policy` or `consultant`).',
+    'Message: `text`, `client_message_id`, and `locale`, the language chosen with the switch. `process.started` carries the `locale` the case was opened in.',
+    'Turn: `intent`, `product`, `language` (what the model read), `locale` (copied from the message), `declared_income_amount`, `declared_income_currency`, `reply_text`, `reply_ok`, `reason_code`, `product_asked_count`, `income_requested`. The last two are stamped by `conversation.generate` from earlier events of the process (D13, D14).',
+    '`analysis.completed` adds `locale` to the policy fields. `prequalification.decided` carries `decided_by` (`policy` or `consultant`).',
     '`rule_trace` is a list of `{rule_id, input, result}`. `facts` cite name, value, source column, and `as_of`.',
   ],
   src: 'ARCHITECTURE.md, "Events"',
@@ -773,7 +774,7 @@ spec('rules', 'ru-turn', {
     '`hand_off_no_product`: `clarify`, `provide_income`, or `confirm_prequalify` with no product and `product_asked_count` 2 or more, then `human_active` with `out_of_scope` (D13).',
     '`hand_off_human`, `hand_off_scope`, `hand_off_language`, `hand_off_reply`: to `human_active` with `customer_requested_human`, `out_of_scope`, `language_unsupported`, or the turn\'s own code.',
     '`show_reply`: `clarify`, `product_info`, or `chit_chat`, then `conversation.show_reply`, except a `clarify` that `hand_off_no_product` takes.',
-    'Every rule except `hand_off_reply` requires `reply_ok`. Every rule except `hand_off_language` and `hand_off_reply` requires `language` `es` or `pt` (D16 (1)).',
+    'Every rule except `hand_off_reply` requires `reply_ok`. Every rule except `hand_off_language` and `hand_off_reply` requires `language` `es` or `pt` (D16 (1), closed Oct 2).',
     'Every classified turn matches exactly one rule.',
   ],
   tests: ['Every rule has a test that it does not fire.', 'Every combination of `reply_ok`, `language`, `intent`, `product`, `product_asked_count`, and `income_requested` matches exactly one rule.'],
@@ -835,8 +836,8 @@ spec('worker', 'w-generate', {
   fixed: [
     'Persists the JSON and writes `conversation.turn_classified`. It does not enqueue `policy.run` or `process.transition`.',
     'If the message `process_id` is null, the turn takes the process this cycle just opened for that customer.',
-    'Stores `language` on the process, and `product` when set. If the model sends no product and the process has one, the turn uses the stored one.',
-    'The model sets `language` on every turn (`es`, `pt`, or `other`). That is how the template locale is chosen.',
+    'Stores the message\'s `locale` on the process, and `product` when set. If the model sends no product and the process has one, the turn uses the stored one.',
+    'The model sets `language` on every turn (`es`, `pt`, or `other`). It only decides whether Alba can read the message; `reply_text` is written in the message\'s `locale` (D21).',
   ],
   tests: ['Unit tests inject `ConversationTurn` JSON. They do not call OpenAI.'],
   src: 'ARCHITECTURE.md, "Events", "Commands"',
@@ -849,8 +850,8 @@ spec('worker', 'w-handlers', {
     '`process.end`: `state = ended`, writes `process.state_changed` and `process.ended` with the same `end_reason`.',
     '`conversation.show_reply`: inserts `messages` with `author = assistant` and the turn\'s `reply_text`.',
     '`template.send`: writes `conversation.template_sent`, locale from the triggering event.',
-    '`policy.run`: reads the profile by the event `customer_id`, runs the engine, writes `analysis.completed` with `language` from the turn.',
-    '`decision.render`: reads `language` from the triggering event, writes `prequalification.decided`.',
+    '`policy.run`: reads the profile by the event `customer_id`, runs the engine, writes `analysis.completed` with `locale` from the turn.',
+    '`decision.render`: reads `locale` from the triggering event, writes `prequalification.decided`.',
   ],
   src: 'ARCHITECTURE.md, "Commands"',
 });
@@ -893,10 +894,10 @@ spec('processes', 'p-states', {
 });
 spec('processes', 'p-row', {
   name: 'processes row', tech: 'projection of events', status: 'partial',
-  summary: 'The current state of one case, plus its product and language.',
+  summary: 'The current state of one case, plus its product and locale.',
   fixed: [
-    'Fields named in the contract: `customer_id`, `process_key`, `state`, `end_reason`, `product` (`credit_card`, `personal_loan`, or null), `language` (`es`, `pt`, or null).',
-    '`product` and `language` stay null until a turn sets them.',
+    'Fields named in the contract: `customer_id`, `process_key`, `state`, `end_reason`, `product` (`credit_card`, `personal_loan`, or null), `locale` (`es` or `pt`).',
+    '`product` stays null until a turn sets it. `locale` comes from the opening message and each turn updates it to its message\'s, so it is never null (`006_process_locale.sql`).',
   ],
   open: [['New', 'The full `processes` column list (id, timestamps) is not written.']],
   src: 'ARCHITECTURE.md, "Process", "Cycle"',
@@ -1009,10 +1010,11 @@ spec('policy', 'po-oracle', {
 
 spec('templates', 't-locales', {
   name: 'Locales', tech: 'es, pt', status: 'defined',
-  summary: 'Two locales, picked from the `language` on the triggering event.',
+  summary: 'Two locales, picked by the customer with the language switch (D21, D22).',
   fixed: [
-    'Two locales: `es` and `pt`. Portuguese templates are team-written; the dataset has none (D6).',
-    'The model sets `language` on every turn. `decision.render` and `template.send` read it from the triggering event. Nothing reads `llm_turns` for the locale.',
+    'Two locales: `es` and `pt`. Portuguese templates are team-written; the dataset does not have them.',
+    'Each message carries the switch\'s `locale`. The turn copies it, and `decision.render` and `template.send` read it from the triggering event. Nothing reads `llm_turns` for the locale, and the model\'s `language` never picks it.',
+    'A customer on Portuguese who writes in Spanish gets Portuguese. That turn is counted in the multilingual-ambiguity evaluation.',
   ],
   src: 'ARCHITECTURE.md, "Commands", "How the model is called"',
 });
@@ -1023,9 +1025,9 @@ spec('templates', 't-cert', {
     'Written to `prequalification.decided` with `locale`, `template_id`, `outcome`, `body`, `decided_by` (`policy` or `consultant`).',
     'Income in local currency, with the USD equivalent and the exchange-rate date beside it. No limit amount, no rate.',
     'On the consultant path the row in `messages` has `author = template`. The model does not draft it.',
-    'Only templates emit `precalifica`, `no precalifica`, `pré-qualificado`, `não pré-qualifica`.',
+    'Only templates emit `precalifica`, `no precalifica`, `pré-qualificado`, or `não pré-qualifica`.',
   ],
-  open: [['Copy', 'The certificate sentences in both locales, the consultant-path message, and the line that says the policy is synthetic.']],
+  open: [['Copy', 'The certificate sentences in the two locales, the consultant-path message, and the line that says the policy is synthetic.']],
   src: 'ARCHITECTURE.md, "Events", "Consultant close", "Auth and screens"',
 });
 spec('templates', 't-notices', {
@@ -1122,12 +1124,12 @@ spec('tools', 'to-products', {
 });
 spec('tools', 'to-catalog', {
   name: 'catalog.py', tech: 'two products', status: 'partial',
-  summary: 'Credit card and personal loan, Spanish and Portuguese names, no rates.',
+  summary: 'Credit card and personal loan, names in Spanish and Portuguese, no rates.',
   fixed: [
     'Two products, `credit_card` and `personal_loan`, with names in Spanish and Portuguese and no rates.',
     'Out of scope: a new mortgage, investments, a limit increase, a disputed transaction, a third party\'s balance.',
   ],
-  open: [['New', 'The catalog text in both languages.']],
+  open: [['New', 'The catalog text in the three languages.']],
   src: 'ARCHITECTURE.md, "How the model is called"',
 });
 
@@ -1147,6 +1149,24 @@ spec('config', 'c-db', {
   fixed: ['Parameterized SQL only. Select only the needed columns. Customer queries filter by `customer_id = jwt.sub`.'],
   open: [['New', 'Driver and connection pooling for the HTTP handlers and the worker loop in one process.']],
   src: 'AGENTS.md, "Database"',
+});
+node('pg-shell', {
+  parent: 'web', kind: 'component', name: 'App bar', tech: 'AppBar.tsx, i18n/',
+  summary: 'On every screen: the brand and the language switch, plus the name and "Salir" once signed in.',
+  src: 'DESIGN.md, "App bar and sidebar"; ARCHITECTURE.md, "Auth and screens"',
+});
+spec('pg-shell', 'sh-language', {
+  name: 'Language switch', tech: 'ES, PT', status: 'defined',
+  summary: 'Every label in Spanish or Portuguese, chosen in the app bar. Built Oct 2 (D21); English removed Oct 3 (D22).',
+  fixed: [
+    'Every interface label, the product names and statuses on the home, and the login code email follow the switch.',
+    'A first visit takes the browser\'s language when it is one of the two, else Spanish. The choice is kept in the browser and sets `<html lang>`.',
+    'Amounts keep one format in every language (`1,559.57 USD`). Each language gives a product its own gender: "Tarjeta de crédito, Activa" and "Cartão de crédito, Ativo".',
+    'Labels live in `web/src/i18n/`: `es.ts` sets the keys, and a missing or extra label in `pt.ts` fails `tsc`.',
+    'Once the chat exists, the switch also decides the language Alba writes in: each message carries it as `locale` (I5).',
+  ],
+  tests: ['The customer\'s login code email is written in the chosen language.', 'A code request without a language sends no email.'],
+  src: 'ARCHITECTURE.md, "Auth and screens"; DESIGN.md, "App bar and sidebar"; PLAN.md D21, D22',
 });
 node('pg-login', {
   parent: 'web', kind: 'component', name: 'Login', tech: 'Login.tsx, ConsultantLogin.tsx',
@@ -1182,7 +1202,7 @@ node('pg-trace', {
 view('web', {
   cols: 6, minCol: 140,
   place: [
-    ['customer', 0, 0, 2], ['consultant', 3, 0, 3],
+    ['customer', 0, 0, 2], ['pg-shell', 2, 0], ['consultant', 3, 0, 3],
     ['pg-home', 0, 1], ['pg-case', 1, 1], ['pg-login', 2, 1], ['pg-queue', 3, 1], ['pg-consultantcase', 4, 1], ['pg-trace', 5, 1],
     ['api', 0, 2, 6],
   ],
@@ -1224,15 +1244,15 @@ spec('pg-login', 'lg-consultant', {
 
 spec('pg-home', 'hm-products', {
   name: 'Product list', tech: 'products.currency', status: 'defined',
-  summary: 'Only this customer\'s products, named in Spanish. No conversion. Built Oct 1.',
+  summary: 'Only this customer\'s products, named in the chosen language. No conversion. Built Oct 1.',
   fixed: [
-    'White cards in the API\'s order: the Spanish name of the type, the number masked to its last four, the amount with its currency code, and the status in the product\'s gender ("Activa", "Activo"). No rate and no days past due.',
+    'White cards in the API\'s order: the name of the type in the chosen language, the number masked to its last four, the amount with its currency code, and the status in the gender that language gives the product ("Activa", "Activo"). No rate and no days past due.',
     'Amounts in the row\'s `products.currency`. Balances of customers in Mexico are shown in USD, not converted to MXN.',
     'Closed products and paid loans are not shown. A customer with nothing to show reads "Todavía no tienes productos con nosotros."',
     'Juan sees a Cuenta de ahorro of 1,559.57 USD and a Préstamo hipotecario of 109,159.57 USD, and no Tarjeta de crédito.',
     'The "Preguntar por" rows follow the cards. They show disabled until `POST /messages` is built.',
   ],
-  tests: ['Juan sees his own products.', 'A closed product is not shown.', 'A paid loan is not shown.', 'A customer without products is told there are none.'],
+  tests: ['Juan sees his own products.', 'A closed product is not shown.', 'A paid loan is not shown.', 'A customer without products is told there are none.', 'Product names and statuses follow the chosen language.'],
   src: 'ARCHITECTURE.md, "Auth and screens", "Juan\'s flow"; DESIGN.md, "Home"',
 });
 

@@ -40,17 +40,32 @@ def parse_turn(payload: Payload) -> object:
     return parse_stored_event(EVENT_ID, "conversation.turn_classified", PROCESS_ID, "ai_active", payload)
 
 
-def parse_message(process_id: UUID | None, state: str) -> object:
-    return parse_stored_event(EVENT_ID, "conversation.message_received", process_id, state, {})
+def parse_message(process_id: UUID | None, state: str, payload: Payload | None = None) -> object:
+    message_payload = {"locale": "es"} if payload is None else payload
+    return parse_stored_event(EVENT_ID, "conversation.message_received", process_id, state, message_payload)
 
 
 def test_a_first_message_has_no_process_and_the_birth_state() -> None:
-    assert parse_message(None, "ai_active") == MessageReceived(EVENT_ID, None, "ai_active")
+    assert parse_message(None, "ai_active") == MessageReceived(EVENT_ID, None, "ai_active", "es")
+
+
+def test_a_message_carries_the_locale_the_customer_chose() -> None:
+    assert parse_message(None, "ai_active", {"locale": "pt"}) == MessageReceived(EVENT_ID, None, "ai_active", "pt")
+
+
+@pytest.mark.parametrize(
+    ("payload", "error"),
+    [({}, "payload has no locale"), ({"locale": "en"}, "'en' is not one of")],
+    ids=["missing", "english"],
+)
+def test_a_message_without_a_supported_locale_is_refused(payload: Payload, error: str) -> None:
+    with pytest.raises(ValueError, match=error):
+        parse_message(None, "ai_active", payload)
 
 
 @pytest.mark.parametrize("state", ["ai_active", "human_active"])
 def test_a_message_in_an_open_case_carries_its_state(state: ProcessState) -> None:
-    assert parse_message(PROCESS_ID, state) == MessageReceived(EVENT_ID, PROCESS_ID, state)
+    assert parse_message(PROCESS_ID, state) == MessageReceived(EVENT_ID, PROCESS_ID, state, "es")
 
 
 @pytest.mark.parametrize(

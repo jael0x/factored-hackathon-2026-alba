@@ -1,0 +1,66 @@
+import { useSyncExternalStore } from "react";
+
+import type { components } from "../api/schema";
+
+export type Locale = components["schemas"]["Locale"];
+
+// Each option is named in its own language, whatever the current one is.
+export const LOCALE_NAMES: Record<Locale, string> = { es: "Español", pt: "Português" };
+
+export const LOCALES: Locale[] = Object.keys(LOCALE_NAMES).filter(isLocale);
+
+const DEFAULT_LOCALE: Locale = "es";
+
+const STORAGE_KEY = "alba.locale";
+
+const listeners = new Set<() => void>();
+let locale: Locale = readStored() ?? fromBrowser(window.navigator.languages);
+document.documentElement.lang = locale;
+
+function isLocale(value: string | null): value is Locale {
+  return value !== null && Object.hasOwn(LOCALE_NAMES, value);
+}
+
+// Blocked site storage throws on access. The choice is a convenience, so the browser's language stands in for it.
+function readStored(): Locale | null {
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    return isLocale(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+function store(next: Locale): void {
+  try {
+    store(next);
+  } catch {
+    return;
+  }
+}
+
+function fromBrowser(languages: readonly string[]): Locale {
+  for (const tag of languages) {
+    const primary = tag.split("-")[0].toLowerCase();
+    if (isLocale(primary)) {
+      return primary;
+    }
+  }
+  return DEFAULT_LOCALE;
+}
+
+export function setLocale(next: Locale): void {
+  store(next);
+  locale = next;
+  document.documentElement.lang = next;
+  listeners.forEach((listener) => listener());
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function useLocale(): Locale {
+  return useSyncExternalStore(subscribe, () => locale);
+}

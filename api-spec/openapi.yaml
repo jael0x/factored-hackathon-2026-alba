@@ -107,7 +107,7 @@ paths:
       summary: Email a 6-digit code to the customer with this document number.
       description: >
         When document_number matches a customer with an email on file, a code valid for 10 minutes
-        is stored as a hash and emailed to that address. A new request replaces any unused code
+        is stored as a hash and emailed to that address, written in locale. A new request replaces any unused code
         for the same customer. The response is the same whether or not the document matches and
         whether or not the customer has an email. It never carries the code, the address, or the name.
       requestBody:
@@ -194,7 +194,7 @@ paths:
       description: >
         Spaces around either field are ignored, the email is compared in lower case, and the employee code
         in upper case. When the pair matches a consultant whose service_agents.agent_status is Active, a code valid for
-        10 minutes is stored as a hash and emailed to that address. A new request replaces any unused code
+        10 minutes is stored as a hash and emailed to that address, written in locale. A new request replaces any unused code
         for the same consultant. The response is the same for every pair and every status.
         It never carries the code, the address, or the name.
       requestBody:
@@ -301,12 +301,13 @@ paths:
       operationId: sendMessage
       summary: Append the customer's message and return the case after that cycle's commands finish.
       description: >
-        Requires role customer. The body is text and client_message_id.
+        Requires role customer. The body is text, client_message_id, and locale, the language chosen with the switch.
+        Alba's reply, templates, and certificate for this case are written in the locale of the latest message.
         The customer does not send process_id or process_state. customer_id comes from the token.
         The handler appends conversation.message_received. It does not choose an outcome.
         The response is sent after the worker has finished the commands enqueued from that event.
-        The same client_message_id with the same text from the same customer returns this case again
-        and does not append a second event. The same client_message_id with another text, or from another
+        The same client_message_id with the same text and locale from the same customer returns this case again
+        and does not append a second event. The same client_message_id with another text or locale, or from another
         customer, is 409 message_id_reused and appends nothing.
         The first message of a new case still has a null process_id on the event.
         The returned case uses the process that cycle opened.
@@ -644,6 +645,14 @@ components:
       type: string
       enum: [customer, consultant]
 
+    Locale:
+      type: string
+      description: >
+        The language chosen with the switch in the app bar (PLAN.md D21, D22). Alba writes in it:
+        the screens, the login email, replies, templates, and the certificate. Spanish and Portuguese only,
+        as the brief asks.
+      enum: [es, pt]
+
     ProcessState:
       type: string
       enum: [ai_active, human_active, ended]
@@ -656,12 +665,13 @@ components:
       type: string
       enum: [credit_card, personal_loan]
 
-    TemplateLocale:
-      type: string
-      enum: [es, pt]
-
     TurnLanguage:
       type: string
+      description: >
+        What the model read in the customer's text. It only decides whether Alba can read the message:
+        other, English included, hands the case to a person (PLAN.md D22). Alba writes in the message's locale,
+        not in this language. A turn whose language differs from its locale is kept as it is and counted in
+        the multilingual-ambiguity evaluation.
       enum: [es, pt, other]
 
     Outcome:
@@ -812,11 +822,13 @@ components:
     RequestCustomerCode:
       type: object
       additionalProperties: false
-      required: [document_number]
+      required: [document_number, locale]
       properties:
         document_number:
           type: string
           minLength: 1
+        locale:
+          $ref: "#/components/schemas/Locale"
 
     CodeRequested:
       type: object
@@ -843,7 +855,7 @@ components:
     RequestConsultantCode:
       type: object
       additionalProperties: false
-      required: [email, employee_code]
+      required: [email, employee_code, locale]
       properties:
         email:
           type: string
@@ -851,6 +863,8 @@ components:
         employee_code:
           type: string
           minLength: 1
+        locale:
+          $ref: "#/components/schemas/Locale"
 
     OpenConsultantSessionRequest:
       type: object
@@ -942,7 +956,7 @@ components:
     SendMessageRequest:
       type: object
       additionalProperties: false
-      required: [text, client_message_id]
+      required: [text, client_message_id, locale]
       properties:
         text:
           type: string
@@ -951,6 +965,8 @@ components:
           type: string
           format: uuid
           description: One id per send. The idempotency key is msg:{client_message_id}.
+        locale:
+          $ref: "#/components/schemas/Locale"
 
     ThreadMessage:
       type: object
@@ -979,7 +995,7 @@ components:
       required: [locale, outcome, body, product, income_local, income_currency, income_usd, as_of]
       properties:
         locale:
-          $ref: "#/components/schemas/TemplateLocale"
+          $ref: "#/components/schemas/Locale"
         outcome:
           $ref: "#/components/schemas/CloseOutcome"
         body:
@@ -1013,7 +1029,7 @@ components:
         sent before the case existed that joined it). Assistant and template lines come from messages rows.
         A messages row with a null event_id is omitted. Order is the order the linked events were written
         (events.seq). certificate is null until prequalification.decided exists.
-      required: [process_id, state, end_reason, product, language, messages, certificate]
+      required: [process_id, state, end_reason, product, locale, messages, certificate]
       properties:
         process_id:
           type: string
@@ -1028,10 +1044,8 @@ components:
           allOf:
             - $ref: "#/components/schemas/ProductKey"
           nullable: true
-        language:
-          allOf:
-            - $ref: "#/components/schemas/TemplateLocale"
-          nullable: true
+        locale:
+          $ref: "#/components/schemas/Locale"
         messages:
           type: array
           items:
@@ -1044,7 +1058,7 @@ components:
     ConsultantQueueItem:
       type: object
       additionalProperties: false
-      required: [process_id, customer_id, first_name, last_name, product, reason_code, language]
+      required: [process_id, customer_id, first_name, last_name, product, reason_code, locale]
       properties:
         process_id:
           type: string
@@ -1061,10 +1075,8 @@ components:
           nullable: true
         reason_code:
           $ref: "#/components/schemas/ReasonCode"
-        language:
-          allOf:
-            - $ref: "#/components/schemas/TemplateLocale"
-          nullable: true
+        locale:
+          $ref: "#/components/schemas/Locale"
 
     ConsultantQueue:
       type: object
@@ -1098,7 +1110,7 @@ components:
         - policy_version
         - outcome
         - reason_code
-        - language
+        - locale
       properties:
         process_id:
           type: string
@@ -1143,10 +1155,8 @@ components:
           nullable: true
         reason_code:
           $ref: "#/components/schemas/ReasonCode"
-        language:
-          allOf:
-            - $ref: "#/components/schemas/TemplateLocale"
-          nullable: true
+        locale:
+          $ref: "#/components/schemas/Locale"
 
     CloseCaseRequest:
       type: object
@@ -1236,7 +1246,7 @@ components:
         - $ref: "#/components/schemas/TraceEventBase"
         - type: object
           additionalProperties: false
-          required: [event_name, text, client_message_id]
+          required: [event_name, text, client_message_id, locale]
           properties:
             event_name:
               type: string
@@ -1246,6 +1256,8 @@ components:
             client_message_id:
               type: string
               format: uuid
+            locale:
+              $ref: "#/components/schemas/Locale"
 
     TraceTurnClassified:
       allOf:
@@ -1257,6 +1269,7 @@ components:
             - intent
             - product
             - language
+            - locale
             - declared_income_amount
             - declared_income_currency
             - reply_text
@@ -1276,6 +1289,8 @@ components:
               nullable: true
             language:
               $ref: "#/components/schemas/TurnLanguage"
+            locale:
+              $ref: "#/components/schemas/Locale"
             declared_income_amount:
               type: number
               nullable: true
@@ -1308,7 +1323,7 @@ components:
               type: string
               enum: [conversation.template_sent]
             locale:
-              $ref: "#/components/schemas/TemplateLocale"
+              $ref: "#/components/schemas/Locale"
             template_id:
               $ref: "#/components/schemas/TemplateId"
             body:
@@ -1319,7 +1334,7 @@ components:
         - $ref: "#/components/schemas/TraceEventBase"
         - type: object
           additionalProperties: false
-          required: [event_name, outcome, consultant_id, language]
+          required: [event_name, outcome, consultant_id, locale]
           properties:
             event_name:
               type: string
@@ -1328,10 +1343,8 @@ components:
               $ref: "#/components/schemas/CloseOutcome"
             consultant_id:
               type: string
-            language:
-              allOf:
-                - $ref: "#/components/schemas/TemplateLocale"
-              nullable: true
+            locale:
+              $ref: "#/components/schemas/Locale"
 
     TraceThreadTaken:
       allOf:
@@ -1363,7 +1376,7 @@ components:
             - deciding_rule
             - rule_trace
             - facts
-            - language
+            - locale
           properties:
             event_name:
               type: string
@@ -1384,8 +1397,8 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/Fact"
-            language:
-              $ref: "#/components/schemas/TemplateLocale"
+            locale:
+              $ref: "#/components/schemas/Locale"
 
     TracePrequalificationDecided:
       allOf:
@@ -1398,7 +1411,7 @@ components:
               type: string
               enum: [prequalification.decided]
             locale:
-              $ref: "#/components/schemas/TemplateLocale"
+              $ref: "#/components/schemas/Locale"
             outcome:
               $ref: "#/components/schemas/CloseOutcome"
             body:
@@ -1411,7 +1424,7 @@ components:
         - $ref: "#/components/schemas/TraceEventBase"
         - type: object
           additionalProperties: false
-          required: [event_name, process_key, customer_id]
+          required: [event_name, process_key, customer_id, locale]
           properties:
             event_name:
               type: string
@@ -1420,6 +1433,8 @@ components:
               $ref: "#/components/schemas/ProcessKey"
             customer_id:
               type: string
+            locale:
+              $ref: "#/components/schemas/Locale"
 
     TraceProcessStateChanged:
       allOf:

@@ -30,10 +30,11 @@ Feature: Handoff to a consultant
     And no certificate is shown
 
     Examples:
-      | message                       | reason                   |
-      | quiero hablar con una persona | customer_requested_human |
-      | quiero una hipoteca nueva     | out_of_scope             |
-      | I would like a credit card    | language_unsupported     |
+      | message                        | reason                   |
+      | quiero hablar con una persona  | customer_requested_human |
+      | quiero una hipoteca nueva      | out_of_scope             |
+      | je voudrais une carte bancaire | language_unsupported     |
+      | I want a credit card           | language_unsupported     |
 
   Scenario: A message in another language that names no product is not asked which product
     Given Juan Alberto Romero González is signed in with no open case

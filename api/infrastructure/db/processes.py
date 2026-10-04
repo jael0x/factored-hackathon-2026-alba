@@ -3,13 +3,13 @@ from uuid import UUID
 import psycopg
 from psycopg import sql
 
-from api.contract_models import EndReason, ProcessKey, ProcessState
+from api.contract_models import EndReason, Locale, ProcessKey, ProcessState
 from api.domain.process.lifecycle import AI_ACTIVE, ENDED, ProcessRow, parse_state
 
 INSERT_OPEN = sql.SQL(
     """
-    INSERT INTO processes (customer_id, process_key, state)
-    VALUES (%s, %s, %s)
+    INSERT INTO processes (customer_id, process_key, state, locale)
+    VALUES (%s, %s, %s, %s)
     ON CONFLICT (customer_id, process_key) WHERE state <> {ended} DO NOTHING
     RETURNING id
     """
@@ -32,8 +32,8 @@ class PostgresProcesses:
         ).fetchone()
         return process_row(row) if row else None
 
-    def insert_open(self, customer_id: str, process_key: ProcessKey) -> UUID | None:
-        row = self._conn.execute(INSERT_OPEN, (customer_id, process_key, AI_ACTIVE)).fetchone()
+    def insert_open(self, customer_id: str, process_key: ProcessKey, locale: Locale) -> UUID | None:
+        row = self._conn.execute(INSERT_OPEN, (customer_id, process_key, AI_ACTIVE, locale)).fetchone()
         return row[0] if row else None
 
     def lock(self, process_id: UUID) -> ProcessRow | None:

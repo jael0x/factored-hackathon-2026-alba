@@ -74,13 +74,13 @@ A person who reviews a handed-off case is a consultant (`ARCHITECTURE.md`, "Orac
 - Identifiers in `db/` and `pipeline/` keep the dataset's name: the `service_agents` table and `service_agents.csv`, the columns `agent_id` and `agent_status`, `AGENTS_COLUMNS`, and the `AGT-` ids. Comments there say consultant.
 - Everywhere else the word is consultant: Python and TypeScript names, routes (`/consultant/...`, `/consultants/search`), the JWT role, wire fields (`consultant_id`), event names, rule ids, idempotency keys, comments, docs, specs, and `diagrams/c4.html`.
 - SQL is the only code that names the dataset columns. `api/infrastructure/db/consultants.py` reads `agent_id` and `agent_status` and returns a `ConsultantIdentity`; nothing above it sees those names.
-- Spanish screens say "asesor", in `web/` and in `mocks/index.html`.
+- On screen the consultant is "asesor" in Spanish and "consultor" in Portuguese (`web/src/i18n/`). `mocks/index.html` is Spanish and says "asesor".
 
 ## No magic strings
 
 Identifiers from a closed set are constants or unions, defined once. Call sites use the constant. They do not repeat the raw literal.
 
-Closed sets in this repo, each defined in `ARCHITECTURE.md`: event names, command names, process states (`ai_active`, `human_active`, `ended`), end reasons (`prequalified`, `not_prequalified`), outcomes (`PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, `NEEDS_INFO`), policy rule ids (`R01` to `R06`, `R09`), process rule ids (`open_process` …), `process_key`, intent names (including `confirm_prequalify`, `decline_prequalify`), product keys (`credit_card`, `personal_loan`), template locales (`es`, `pt`), template ids (`needs_income`, `refer_notice`, `which_product`, `confirm_prequalify`), reason codes (`customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`), idempotency-key prefixes.
+Closed sets in this repo, each defined in `ARCHITECTURE.md`: event names, command names, process states (`ai_active`, `human_active`, `ended`), end reasons (`prequalified`, `not_prequalified`), outcomes (`PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, `NEEDS_INFO`), policy rule ids (`R01` to `R06`, `R09`), process rule ids (`open_process` …), `process_key`, intent names (including `confirm_prequalify`, `decline_prequalify`), product keys (`credit_card`, `personal_loan`), locales (`es`, `pt`: the switch's choice, for screens, email, replies, and templates), turn languages (`es`, `pt`, `other`: what the model read), template ids (`needs_income`, `refer_notice`, `which_product`, `confirm_prequalify`), reason codes (`customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`), idempotency-key prefixes.
 
 Wrong: `if event_name == "analysis.completed"` in a second file. Right: `EVENT_NAME.ANALYSIS_COMPLETED` from the one module that defines names.
 
@@ -131,7 +131,7 @@ Prefer a better name or an extracted function over a comment.
 
 **Early return.** Invalid cases leave at the top. The happy path stays at low indentation. Do not nest more than two or three levels.
 
-**Catch-log-continue is not resilience.** A `try/except` that logs and proceeds after a failed load, a failed JSON parse, or a missing model drops the fail-loud path. Fail the command. Name what is missing. Do not invent a decision so the screen still moves.
+**Catch-log-continue is not resilience.** A `try/except` that logs and proceeds after a failed load, a failed JSON parse, or a missing model drops the fail-loud path. Fail the command. Name what is missing. Do not invent a decision so the screen still moves. The one exception is a per-viewer convenience that decides nothing, such as the saved language choice in `web/src/i18n/locale.ts`: when the browser blocks storage it falls back to a default, and a comment says why.
 
 ## Types
 
@@ -150,6 +150,7 @@ Prefer a better name or an extracted function over a comment.
 - Every fetch has loading, error, and success. Handle all three when the fetch is written, not as a later polish.
 - Config that decides a field's behavior lives on the policy spec, not on a frontend list that sniffs ids.
 - An internal reason code is not customer copy. The customer reads the template. The consultant packet may show the rule id and the facts.
+- Interface text lives in `web/src/i18n/`, one file per language. `es.ts` sets the keys, and `pt.ts` is typed against it, so a missing or extra label fails `tsc`. A component reads its labels from `useMessages()` and holds no text of its own. Dataset literals (`Créditos`, a country name) are shown as stored.
 
 ## Database
 
@@ -157,7 +158,7 @@ Prefer a better name or an extracted function over a comment.
 - A list or a count starts from the small set: this session's process, this `customer_id`'s gold row, `commands` where `status = pending`. A `LATERAL` or a per-row function over all `customers` or all `products` is an N+1. Copying the previous query is not a pass.
 - Parameterized SQL only. Never concatenate request input into a statement.
 - `events` are append-only. A new fact points at the previous one with `caused_by_event_id`. Do not hard-delete history.
-- Migrations are one-way and safe while old code might still be running. No destructive drop in the same step that introduces the replacement.
+- Migrations are one-way. No destructive drop in the same step that introduces the replacement. The compose `load` service applies them before the API starts from the same checkout, so code from before a migration never runs against it here: "safe" means the code of the same change works on the new schema. A migration that has run anywhere is never edited; change it with a new migration.
 - A migration keeps its filename once it has run anywhere: `schema_migrations` is keyed by it, and a renamed file runs again. If one must be renamed, map the new name to the old one in `FORMER_NAMES` in `pipeline/migrate.py`, with a test.
 - The schema is the contract. `NOT NULL` means the app does not hunt for nulls. A nullable column means the app handles null. Empty income stays null. Do not impute. The one exception is `products.current_balance`: an empty balance loads as 0 (`ARCHITECTURE.md`, "Data"). Do not convert Mexico balances out of USD.
 - If you create or replace a view, the same migration sets `security_invoker = true`. Otherwise the view runs as the owner and skips privileges.
@@ -215,7 +216,7 @@ Prefer a better name or an extracted function over a comment.
 
 ## Writing docs
 
-- Docs are in English. Customer-facing copy (templates, the mock) is Spanish or Portuguese. Dataset literals keep their stored spelling.
+- Docs are in English. Customer-facing copy (screens, the login email, templates, and the certificate) is written in Spanish and Portuguese (`PLAN.md` D21, D22); the mock is Spanish. Dataset literals keep their stored spelling.
 - Straight quotes. No em-dashes: use a colon, a comma, or parentheses.
 - Every number about the data names its source and sample (file, date, n). A claim the data does not show is labeled inferred.
 - One home per fact. The contract lives in `ARCHITECTURE.md`. Evidence, open decisions, and the schedule live in `PLAN.md`. Other files link to them instead of copying.

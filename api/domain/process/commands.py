@@ -2,7 +2,16 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
-from api.contract_models import DecidedBy, EndReason, IncomeCurrency, ProcessState, ProductKey, ReasonCode, TemplateId
+from api.contract_models import (
+    DecidedBy,
+    EndReason,
+    IncomeCurrency,
+    Locale,
+    ProcessState,
+    ProductKey,
+    ReasonCode,
+    TemplateId,
+)
 from api.domain.process.lifecycle import HUMAN_ACTIVE
 
 CommandName = Literal[
@@ -40,6 +49,11 @@ class NoPayload:
 
 
 @dataclass(frozen=True)
+class StartPayload:
+    locale: Locale
+
+
+@dataclass(frozen=True)
 class TemplatePayload:
     template_id: TemplateId
 
@@ -67,7 +81,9 @@ class EndPayload:
     end_reason: EndReason
 
 
-CommandPayload = NoPayload | TemplatePayload | PolicyRunPayload | TransitionPayload | RenderPayload | EndPayload
+CommandPayload = (
+    NoPayload | StartPayload | TemplatePayload | PolicyRunPayload | TransitionPayload | RenderPayload | EndPayload
+)
 
 
 @dataclass(frozen=True)
@@ -76,9 +92,12 @@ class Command:
     payload: CommandPayload
 
 
-START_COMMAND = Command(PROCESS_START, NoPayload())
 GENERATE_COMMAND = Command(CONVERSATION_GENERATE, NoPayload())
 SHOW_REPLY_COMMAND = Command(CONVERSATION_SHOW_REPLY, NoPayload())
+
+
+def start_process(locale: Locale) -> Command:
+    return Command(PROCESS_START, StartPayload(locale))
 
 
 def send_template(template_id: TemplateId) -> Command:
