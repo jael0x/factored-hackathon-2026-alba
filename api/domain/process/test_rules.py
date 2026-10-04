@@ -12,13 +12,13 @@ from api.contract_models import EndReason, EventName, Intent, ProductKey, TurnLa
 from api.domain.process.commands import (
     GENERATE_COMMAND,
     SHOW_REPLY_COMMAND,
-    START_COMMAND,
     Command,
     end_process,
     hand_off,
     render_decision,
     run_policy,
     send_template,
+    start_process,
 )
 from api.domain.process.rules import (
     ANALYSIS_RULES,
@@ -60,8 +60,8 @@ def stored(event_name: str, payload: Mapping[str, object], process_id: UUID | No
     return parse_stored_event(EVENT_ID, event_name, process_id, "ai_active", payload)
 
 
-def message(process_id: UUID | None, state: str) -> StoredEvent:
-    return parse_stored_event(EVENT_ID, "conversation.message_received", process_id, state, {})
+def message(process_id: UUID | None, state: str, locale: str = "es") -> StoredEvent:
+    return parse_stored_event(EVENT_ID, "conversation.message_received", process_id, state, {"locale": locale})
 
 
 def turn(**overrides: object) -> StoredEvent:
@@ -114,9 +114,13 @@ def test_a_planned_command_carries_its_rule_event_and_key() -> None:
 
 def test_the_first_message_opens_the_case_then_classifies_it() -> None:
     assert fired(message(None, "ai_active")) == (
-        ("open_process", START_COMMAND),
+        ("open_process", start_process("es")),
         ("generate_while_ai", GENERATE_COMMAND),
     )
+
+
+def test_a_case_opens_in_the_locale_of_its_first_message() -> None:
+    assert fired(message(None, "ai_active", "pt"))[0] == ("open_process", start_process("pt"))
 
 
 def test_a_message_in_an_open_assistant_case_is_classified_only() -> None:
@@ -414,7 +418,7 @@ def test_juan_prequalifies_for_a_card() -> None:
             decided("PREQUALIFIED", "policy"),
         ]
     ) == [
-        (("open_process", START_COMMAND), ("generate_while_ai", GENERATE_COMMAND)),
+        (("open_process", start_process("es")), ("generate_while_ai", GENERATE_COMMAND)),
         (("ask_confirm_prequalify", send_template("confirm_prequalify")),),
         (("run_policy", run_policy("credit_card", None, None)),),
         (("render_decision", render_decision("policy")),),
@@ -530,7 +534,7 @@ def test_a_rule_that_emits_a_command_twice_is_refused() -> None:
         "open_process",
         "conversation.message_received",
         lambda _event: True,
-        lambda _event: (START_COMMAND, START_COMMAND),
+        lambda _event: (start_process("es"), start_process("es")),
     )
     event = message(None, "ai_active")
     assert isinstance(event, MessageReceived)

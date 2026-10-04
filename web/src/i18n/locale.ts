@@ -21,9 +21,22 @@ function isLocale(value: string | null): value is Locale {
   return LOCALES.some((option) => option === value);
 }
 
+// Blocked site storage throws on access. The choice is a convenience, so the browser's language stands in for it.
 function readStored(): Locale | null {
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  return isLocale(stored) ? stored : null;
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    return isLocale(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+function store(next: Locale): void {
+  try {
+    store(next);
+  } catch {
+    return;
+  }
 }
 
 function fromBrowser(languages: readonly string[]): Locale {
@@ -37,7 +50,7 @@ function fromBrowser(languages: readonly string[]): Locale {
 }
 
 export function setLocale(next: Locale): void {
-  window.localStorage.setItem(STORAGE_KEY, next);
+  store(next);
   locale = next;
   document.documentElement.lang = next;
   listeners.forEach((listener) => listener());

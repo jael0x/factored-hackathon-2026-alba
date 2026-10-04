@@ -14,7 +14,6 @@ from api.domain.process.commands import (
     NEEDS_INCOME,
     REFER_NOTICE,
     SHOW_REPLY_COMMAND,
-    START_COMMAND,
     WHICH_PRODUCT,
     Command,
     CommandName,
@@ -23,6 +22,7 @@ from api.domain.process.commands import (
     render_decision,
     run_policy,
     send_template,
+    start_process,
 )
 from api.domain.process.events import (
     ANALYSIS_COMPLETED,
@@ -159,6 +159,10 @@ def opens_no_process(message: MessageReceived) -> bool:
     return message.process_id is None
 
 
+def start_in_message_locale(message: MessageReceived) -> tuple[Command, ...]:
+    return (start_process(message.locale),)
+
+
 def stamped(state: ProcessState) -> Callable[[MessageReceived], bool]:
     def when(message: MessageReceived) -> bool:
         return message.process_state == state
@@ -252,7 +256,7 @@ def close_for_consultant(closed: ConsultantClosed) -> tuple[Command, ...]:
 
 
 MESSAGE_RULES: tuple[Rule[MessageReceived], ...] = (
-    Rule(OPEN_PROCESS, MESSAGE_RECEIVED, opens_no_process, emits(START_COMMAND)),
+    Rule(OPEN_PROCESS, MESSAGE_RECEIVED, opens_no_process, start_in_message_locale),
     Rule(GENERATE_WHILE_AI, MESSAGE_RECEIVED, stamped(AI_ACTIVE), emits(GENERATE_COMMAND)),
     Rule(RECORD_ONLY_WHEN_HUMAN, MESSAGE_RECEIVED, stamped(HUMAN_ACTIVE), emits()),
 )

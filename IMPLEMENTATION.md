@@ -102,7 +102,7 @@ Gaps against the contract in what is built (item M0):
   - Specs: `03` scenarios 1, 2, 4; `04` all; `07` the handoff outline and "The assistant stops replying once a person has the case".
   - Specs, from D13 and D14 (Oct 2): `03` the second and third requests with no product; `04` an income instead of the consent answer, and a yes with an income; `07` another language with no product.
   - A test enumerates every combination of `reply_ok`, `language`, `intent`, `product`, `product_asked_count`, and `income_requested`, and asserts that exactly one `conversation.turn_classified` rule matches each.
-  - Depends on E2. D12, D13, D14, and D16 (1) closed Oct 2. D16 (1) closed with I5: every turn rule but `hand_off_language` and `hand_off_reply` requires `language` in `es` or `pt`. Still to do: `open_process` passes the message's `locale` to `process.start` (today `process.start` has no payload).
+  - Depends on E2. D12, D13, D14, and D16 (1) closed Oct 2. D16 (1) closed with I5: every turn rule but `hand_off_language` and `hand_off_reply` requires `language` in `es` or `pt`. `open_process` passes the message's `locale` to `process.start` (`StartPayload`).
 - [ ] **E4. Worker and commands.** `api/worker.py`, a loop in the API process:
   - takes `pending` commands with `FOR UPDATE SKIP LOCKED`;
   - makes at most 3 attempts, then moves the case to `human_active` with `tool_failed`;

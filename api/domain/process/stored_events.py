@@ -10,6 +10,7 @@ from api.contract_models import (
     EventName,
     IncomeCurrency,
     Intent,
+    Locale,
     Outcome,
     ProcessState,
     ProductKey,
@@ -54,6 +55,7 @@ WITHHELD_REASONS: frozenset[ReasonCode] = frozenset({REPLY_FORBIDDEN, MODEL_OUTP
 EVENT_NAMES: frozenset[EventName] = frozenset(get_args(EventName))
 INTENTS: frozenset[Intent] = frozenset(get_args(Intent))
 TURN_LANGUAGES: frozenset[TurnLanguage] = frozenset(get_args(TurnLanguage))
+LOCALES: frozenset[Locale] = frozenset(get_args(Locale))
 PRODUCT_KEYS: frozenset[ProductKey] = frozenset(get_args(ProductKey))
 INCOME_CURRENCIES: frozenset[IncomeCurrency] = frozenset(get_args(IncomeCurrency))
 OUTCOMES: frozenset[Outcome] = frozenset(get_args(Outcome))
@@ -68,6 +70,7 @@ class MessageReceived:
     event_id: UUID
     process_id: UUID | None
     process_state: ProcessState
+    locale: Locale
 
 
 @dataclass(frozen=True)
@@ -128,7 +131,7 @@ def parse_stored_event(
 ) -> StoredEvent:
     name = parse_member(event_name, EVENT_NAMES, "event name")
     if name == MESSAGE_RECEIVED:
-        return parse_message(event_id, process_id, process_state)
+        return parse_message(event_id, process_id, process_state, payload)
     if name == TURN_CLASSIFIED:
         return parse_turn(event_id, payload)
     if name == ANALYSIS_COMPLETED:
@@ -144,13 +147,13 @@ def parse_stored_event(
     return NoRuleEvent(event_id, name)
 
 
-def parse_message(event_id: UUID, process_id: UUID | None, process_state: object) -> MessageReceived:
+def parse_message(event_id: UUID, process_id: UUID | None, process_state: object, payload: Payload) -> MessageReceived:
     state = parse_state(process_state)
     if state == ENDED:
         raise ValueError("a message is never stamped with an ended process")
     if process_id is None and state != AI_ACTIVE:
         raise ValueError(f"a message with no process is stamped {AI_ACTIVE}, not {state}")
-    return MessageReceived(event_id, process_id, state)
+    return MessageReceived(event_id, process_id, state, parse_member(field(payload, "locale"), LOCALES, "locale"))
 
 
 def parse_turn(event_id: UUID, payload: Payload) -> TurnClassified:
