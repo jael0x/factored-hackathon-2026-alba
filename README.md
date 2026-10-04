@@ -40,7 +40,7 @@ python -m pip install -r requirements-dev.txt
 sh scripts/check.sh
 ```
 
-The web app: `npm run typecheck && npm run build` in `web/`.
+The web app: `npm run typecheck && npm test && npm run build` in `web/`.
 
 CI runs the same checks on every pull request to `main` and every push to `main`. The jobs, coverage floors, and what fails them are in `ARCHITECTURE.md`, "Quality gate".
 
