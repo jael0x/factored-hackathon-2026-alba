@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useState } from "react";
 
 import { api } from "../api/client";
 import type { components } from "../api/schema";
@@ -7,6 +7,7 @@ import type { DemoSource } from "../components/DemoSearch";
 import { DemoSearchPopover } from "../components/DemoSearchPopover";
 import { IdentityForm } from "../components/IdentityForm";
 import { LoginShell } from "../components/LoginShell";
+import { TextField } from "../components/TextField";
 import { fullName } from "../format";
 import type { Messages } from "../i18n/es";
 import { useLocale, type Locale } from "../i18n/locale";
@@ -57,8 +58,6 @@ const openSession = ({ email, employeeCode }: ConsultantIdentity, code: string) 
   sessionAnswer(api.POST("/consultant/session", { body: { email, employee_code: employeeCode, code } }));
 
 export function ConsultantLogin() {
-  const emailId = useId();
-  const employeeCodeId = useId();
   const [email, setEmail] = useState("");
   const [employeeCode, setEmployeeCode] = useState("");
   const [sent, setSent] = useState<Sent | null>(null);
@@ -108,34 +107,14 @@ export function ConsultantLogin() {
           requestCode={() => requestCode(typed, locale)}
           onSent={(expiresInSeconds) => setSent({ ...typed, expiresInSeconds, resent: false })}
         >
-          <div>
-            <label className="field-label" htmlFor={emailId}>
-              {copy.email}
-            </label>
-            <input
-              id={emailId}
-              className="field"
-              type="email"
-              autoComplete="email"
-              spellCheck={false}
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </div>
-          <div>
-            <label className="field-label" htmlFor={employeeCodeId}>
-              {copy.employeeCode}
-            </label>
-            <input
-              id={employeeCodeId}
-              className="field"
-              autoComplete="off"
-              autoCapitalize="characters"
-              spellCheck={false}
-              value={employeeCode}
-              onChange={(event) => setEmployeeCode(event.target.value)}
-            />
-          </div>
+          <TextField label={copy.email} type="email" autoComplete="email" value={email} onChange={setEmail} />
+          <TextField
+            label={copy.employeeCode}
+            autoComplete="off"
+            autoCapitalize="characters"
+            value={employeeCode}
+            onChange={setEmployeeCode}
+          />
         </IdentityForm>
       )}
     </LoginShell>

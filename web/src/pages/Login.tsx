@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useState } from "react";
 
 import { api } from "../api/client";
 import type { components } from "../api/schema";
@@ -7,6 +7,7 @@ import type { DemoSource } from "../components/DemoSearch";
 import { DemoSearchPopover } from "../components/DemoSearchPopover";
 import { IdentityForm } from "../components/IdentityForm";
 import { LoginShell } from "../components/LoginShell";
+import { TextField } from "../components/TextField";
 import { fullName, lastFour } from "../format";
 import type { Messages } from "../i18n/es";
 import { useLocale, type Locale } from "../i18n/locale";
@@ -56,7 +57,6 @@ const openSession = (documentNumber: string, code: string) =>
   sessionAnswer(api.POST("/session", { body: { document_number: documentNumber, code } }));
 
 export function Login() {
-  const fieldId = useId();
   const [documentNumber, setDocumentNumber] = useState("");
   const [sent, setSent] = useState<Sent | null>(null);
   const locale = useLocale();
@@ -101,19 +101,12 @@ export function Login() {
           requestCode={() => requestCode(trimmed, locale)}
           onSent={(expiresInSeconds) => setSent({ documentNumber: trimmed, expiresInSeconds, resent: false })}
         >
-          <div>
-            <label className="field-label" htmlFor={fieldId}>
-              {copy.documentNumber}
-            </label>
-            <input
-              id={fieldId}
-              className="field"
-              autoComplete="off"
-              spellCheck={false}
-              value={documentNumber}
-              onChange={(event) => setDocumentNumber(event.target.value)}
-            />
-          </div>
+          <TextField
+            label={copy.documentNumber}
+            autoComplete="off"
+            value={documentNumber}
+            onChange={setDocumentNumber}
+          />
         </IdentityForm>
       )}
     </LoginShell>
