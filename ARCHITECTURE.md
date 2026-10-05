@@ -667,7 +667,7 @@ Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` exclude
 | `api` | starts when `load` finished successfully. Mounts `api/` and reloads on save | yes |
 | `web` | the frontend, Vite, proxies `/api` to the API. Mounts `web/` and reloads on save | yes |
 | `mailpit` | local mail catcher. The API's only SMTP target; its inbox is at http://localhost:8025 | yes |
-| `test` | profile `test`, not started by `up`. Waits for Postgres and runs `scripts/check.sh` with `ALBA_REQUIRE_POSTGRES=1` | no |
+| `test` | profile `test`, not started by `up`, rebuilt on every run. Waits for Postgres, runs `npm run check` in `web/`, then `scripts/check.sh` with `ALBA_REQUIRE_POSTGRES=1` | no |
 
 Who runs it: anyone with the repo, a `.env`, and Docker. The default local demo sets `DEMO_LOGIN=1` and sends every login code to Mailpit. There is no SMS and no real email. Reviewers run `docker compose up` and open the web URL from the compose file. Secrets stay in `.env`; they are not committed.
 
@@ -691,11 +691,12 @@ The Postgres volume keeps gold. A second `up` does not reload if `load_batches` 
 | Job | Fails when |
 |---|---|
 | `python` | `scripts/check.sh` fails: `ruff check`, `ruff format --check`, `mypy` (strict), a test, total coverage under its floor, or `api/domain/` under its floor. On a pull request, also when a changed line in `api/` or `pipeline/` is not covered (`diff-cover` against the base branch, 100%) |
-| `web` | `npm run typecheck`, `npm test`, or `npm run build` in `web/` fails |
+| `web` | `npm run check` in `web/` fails: `tsc --noEmit`, Vitest, or the Vite build |
 | `contract` | `python api-spec/generate.py` changes `api/contract_models.py` or `web/src/api/schema.d.ts` |
 | `hygiene` | a tracked file is under `data/`, is a PDF, or is a `.env` other than `.env.example`, or gitleaks finds a secret in the commits the pull request or push adds |
 
-- **One script.** `scripts/check.sh` is the Python gate. The `test` compose service and the `python` job run the same file, so a green local run means a green job.
+- **One definition per gate.** `scripts/check.sh` is the Python gate and `npm run check` in `web/` is the web gate. The `test` compose service runs both, the `python` job the first, and the `web` job the second, so a green local run means green jobs.
+- **The local gate checks this checkout.** The `test` service mounts no source, so `pull_policy: build` rebuilds its image on every run; a reused image would check the code it was built from. It installs the web packages with `npm ci` from the lockfile.
 - **Browser storage has one owner.** `web/src/storage.test.ts` fails when a file under `web/src/` other than `storage.ts` (tests aside) names `localStorage` or `sessionStorage`.
 - **Closed sets are defined once.** `api/tests/test_closed_sets.py` fails when a module under `api/` other than a test writes a closed-set value as a raw literal, when one value has two constants, when a `Literal` set is declared outside its owner, or when the load's income currencies differ from `IncomeCurrency`. An exemption names the file, the function, and the value, and one that no longer matches a use fails too.
 - **Coverage is branch coverage** over `api/` and `pipeline/`. `api/contract_models.py`, test files, and `pipeline/__main__.py` are left out.
@@ -703,8 +704,8 @@ The Postgres volume keeps gold. A second `up` does not reload if `load_batches` 
 - **New code is fully covered.** The changed-lines check holds every pull request to 100%, independent of the floors. The target for `api/domain/` is 100%; the remaining gaps are in `api/domain/policy/engine.py` (policy-file validation and invariant guards).
 - **Integration tests cannot pass by skipping.** Without Postgres, `migrated_database` skips. With `ALBA_REQUIRE_POSTGRES=1` (the `test` service and the `python` job) it fails.
 - **mypy is strict** and `pyproject.toml` holds its settings. `api/contract_models.py` is generated and excluded from ruff and mypy. Ruff targets Python 3.12 but skips the PEP 695 generic syntax so host runs on 3.11 still import.
-- **Third-party actions are pinned** to a commit SHA, the gitleaks binary to a SHA-256, and every tool to an exact version in `requirements-dev.txt`. The workflow has `contents: read` only.
-- **Not in the gate yet:** `tsc` and Vitest inside the `test` service (that image has no Node; `IMPLEMENTATION.md` I4), mutation testing for `api/domain/`, and running `specs/*.feature`.
+- **Third-party actions are pinned** to a commit SHA, the gitleaks binary to a SHA-256, and every tool to an exact version in `requirements-dev.txt`. Node is 22.23.3 in the `test` image and in both CI jobs that use it, and the `test` image pins its two base images by digest. The workflow has `contents: read` only.
+- **Not in the gate yet:** mutation testing for `api/domain/`, and running `specs/*.feature`.
 
 ## Data: what is touched and what is not
 
