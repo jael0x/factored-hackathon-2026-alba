@@ -1,5 +1,5 @@
 from pipeline.batches import all_hashes_loaded, new_batch_id, record_batches
-from pipeline.bronze import ensure_bronze
+from pipeline.bronze import aws_s3_copy, ensure_bronze, raw_dir
 from pipeline.checks import run_bronze_checks
 from pipeline.db import connect, wait_for_postgres
 from pipeline.gold import rebuild_gold
@@ -10,7 +10,7 @@ from pipeline.silver import reload_silver
 def main() -> None:
     wait_for_postgres()
     apply_migrations()
-    files = ensure_bronze()
+    files = ensure_bronze(raw_dir(), aws_s3_copy)
     run_bronze_checks(files)
 
     with connect() as conn:
