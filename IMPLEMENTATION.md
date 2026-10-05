@@ -173,10 +173,10 @@ The load gaps of item M0 closed Oct 5: `daily_exchange_rates.csv` has its snapsh
 
   This is the contract's oracle test.
   - Depends on E1 to E8. D12 closed Oct 2.
+  - Oct 5: Juan, Juliana (with her stated income), Alicia (to `human_active`), and Mariana run through HTTP and the worker in `api/tests/test_chat_integration.py`. Alicia's consultant close waits for the consultant half of E8.
 
 ## Model and eval (M)
 
-  - Oct 5: Juan, Juliana (with her stated income), Alicia (to `human_active`), and Mariana run through HTTP and the worker in `api/tests/test_chat_integration.py`. Alicia's consultant close waits for the consultant half of E8.
 - [x] **M0. Load gaps.** Measure the rows of `daily_exchange_rates.csv`, write the count into the contract, add it to `EXPECTED_ROW_COUNTS`. Add active products by type to the load report. Add tests for the two `10` scenarios that have none. No dependency.
   - Done Oct 5. The measured size is in `ARCHITECTURE.md`, "Data: what is touched and what is not". A source file with no expected size now stops the load, so a fifth file cannot skip the count, and `test_constants_unit.py` holds the source keys, sizes, tables, and columns to one list of names.
   - `pipeline/report.py` writes the report to the `load` log on every start, from the CSVs: the null counts moved there from `checks.py`, plus the active products of each `product_type` as stored, in name order. A report column missing from its file stops the load through `require_columns` (`pipeline/csv_header.py`), shared with silver; the old count read a missing column as empty.
