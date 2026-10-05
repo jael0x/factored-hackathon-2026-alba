@@ -106,11 +106,11 @@ Feature: Pre-qualification decision
     Then the app is told that message id was already used
     And Juan's conversation still shows "sí" once and no "no"
 
-  Scenario: Two starts for one product sent before the case opens join one case
+  Scenario: Of two starts for one product sent before the case opens, only the first opens a case
     Given Juan has no case for a credit card
     When the app sends two credit card starts before the first is answered
-    Then Juan has one open credit card case
-    And both messages are in that case's conversation
+    Then Juan has one credit card case with one decision
+    And the second start is told the product already has a case
 
   Scenario: A customer who does not pre-qualify can ask a person to review it
     Given Mariana Mónica Acosta Rojas's credit card request ended as not pre-qualified by the policy
@@ -128,3 +128,10 @@ Feature: Pre-qualification decision
     Given Juan pre-qualified for a credit card
     When Juan opens his certificate
     Then it offers no option to ask a person to review it
+
+  Scenario: A no cannot go to a person while another case of its product is open
+    Given Mariana's first credit card request ended as not pre-qualified by the policy
+    And her second credit card case is open
+    When Mariana opens the result of the first request
+    Then it offers no option to ask a person to review it
+    And a review requested for it anyway is refused because the product already has an open case

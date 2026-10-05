@@ -41,3 +41,10 @@ Feature: Cases per product
     When Juliana writes "quiero un préstamo personal" in the credit card case
     Then the assistant says she already has an open conversation about a personal loan
     And the credit card case keeps its product
+
+  Scenario: A message the assistant has not answered in time can be sent again
+    Given Juliana's credit card case is open
+    And the assistant has not answered her "gano 45,000 pesos al mes" after 30 seconds
+    When Juliana sends it again
+    Then the conversation shows that message once
+    And the assistant answers it once

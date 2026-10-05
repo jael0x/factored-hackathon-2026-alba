@@ -100,3 +100,10 @@ Feature: Consultant login
     Given the demo login is off
     When a visitor searches consultants for "César González"
     Then the search is not available
+
+  Scenario: With the demo login on, the code step fills the code sent to the email typed
+    Given the demo login is on
+    And a visitor asked for a code with César's email and employee code
+    When the code step opens
+    Then the code field holds the code emailed to César's address in the test mailbox
+    And no session opens until the visitor presses "Abrir sesión"
