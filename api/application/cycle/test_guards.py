@@ -20,10 +20,18 @@ from api.application.cycle.context import (
 from api.application.cycle.handlers import HANDLERS, require_handlers
 from api.application.cycle.moves import end_case, hand_off_case
 from api.application.cycle.notices import send_template
+from api.application.cycle.policy_run import run_policy
 from api.application.cycle.ports import EventRow, TurnRequest
 from api.application.cycle.render import render_decision
-from api.contract_models import MessageAuthor
-from api.domain.process.commands import CommandName, EndPayload, RenderPayload, TemplatePayload, TransitionPayload
+from api.contract_models import MessageAuthor, ProductKey
+from api.domain.process.commands import (
+    CommandName,
+    EndPayload,
+    PolicyRunPayload,
+    RenderPayload,
+    TemplatePayload,
+    TransitionPayload,
+)
 from api.domain.process.lifecycle import ProcessRow
 from api.domain.process.new_events import AlreadyAppended, AppendResult, Cause, NewEvent
 from api.domain.process.turns import ModelReading
@@ -69,8 +77,14 @@ class OneCase:
     def store_turn_facts(self, *_args: object) -> None:
         raise AssertionError("not called")
 
+    def open_products(self, *_args: object) -> frozenset[ProductKey]:
+        raise AssertionError("not called")
+
     def find_open(self, *_args: object) -> ProcessRow | None:
         return self.process
+
+    def read_for_message(self, customer_id: str, process_id: UUID) -> ProcessRow | None:
+        raise AssertionError("not called")
 
     def insert_open(self, *_args: object) -> UUID | None:
         raise AssertionError("not called")
@@ -125,6 +139,7 @@ def trigger(
     return Trigger(row, stored(row), Cause(EVENT_ID, COMMAND_ID))
 
 
+MESSAGE = {"text": "hola", "locale": "es", "product": None}
 ANALYSIS = {"outcome": "PREQUALIFIED", "product": "credit_card", "locale": "es", "policy_version": "alba-credit-v1"}
 
 
@@ -135,7 +150,14 @@ def test_a_trigger_of_the_wrong_kind_is_named() -> None:
 
 def test_an_event_with_no_process_cannot_be_acted_on() -> None:
     with pytest.raises(LookupError, match=f"event {EVENT_ID} names no process"):
-        process_id_of(trigger("conversation.message_received", {"text": "hola", "locale": "es"}, process_id=None))
+        process_id_of(trigger("conversation.message_received", MESSAGE, process_id=None))
+
+
+def test_a_policy_run_follows_only_a_consented_turn_or_a_started_case() -> None:
+    with pytest.raises(WrongTrigger, match="needs a shown turn or a started case, got AnalysisCompleted"):
+        run_policy(
+            cycle(Recorder()), trigger("analysis.completed", ANALYSIS), PolicyRunPayload("credit_card", None, None)
+        )
 
 
 def test_a_process_that_does_not_exist_is_named() -> None:
@@ -164,7 +186,7 @@ def test_a_policy_certificate_that_names_no_analysis_cannot_end_the_case() -> No
 
 def test_a_notice_follows_only_a_turn_or_an_analysis() -> None:
     closed = trigger("conversation.consultant_closed", {"outcome": "PREQUALIFIED", "locale": "es"})
-    with pytest.raises(WrongTrigger, match="needs a shown turn or an analysis, got ConsultantClosed"):
+    with pytest.raises(WrongTrigger, match="needs a shown turn, an analysis, or an appeal, got ConsultantClosed"):
         send_template(cycle(Recorder()), closed, TemplatePayload("refer_notice"))
 
 

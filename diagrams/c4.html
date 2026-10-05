@@ -603,10 +603,10 @@ spec('routers', 'r-customer-msg', {
   name: 'POST /messages', tech: 'customer message', status: 'defined',
   summary: 'Writes `conversation.message_received`. Idempotent on `client_message_id`.',
   fixed: [
-    '`POST /messages` body is `text` and `client_message_id`. The `customer_id` comes from the JWT. The customer does not send `process_id` or `process_state`.',
+    '`POST /messages` body is `text`, `client_message_id`, `locale`, and exactly one of `product` (a start) or `process_id` (D24). The `customer_id` comes from the JWT. The customer does not send `process_state`.',
     'Key `msg:{client_message_id}`. It does not wait for a process. Repeating the POST creates no new event and no new decision.',
     'The same id with another text or from another customer is 409 `message_id_reused` and appends nothing.',
-    'The response is the `Case`, sent after the worker finishes the commands enqueued from that event. The handler does not choose an outcome.',
+    'The response is the `Case`, sent after the worker finishes the commands enqueued from that event, or 503 `cycle_pending` after 30 s. No pooled connection is held while it waits. The handler does not choose an outcome.',
     'In `human_active` the message is stored and the model is not called.',
   ],
   tests: ['A second POST with the same `client_message_id` creates no event.'],
@@ -737,6 +737,7 @@ spec('events', 'e-dispatch', {
     'Insert the event, then `match_rules(event)` on the stored row read back through `parse_stored_event`, then `commands` rows on their keys.',
     'Every append in the cycle goes through `PlanningEvents`, so an event and its commands commit together, and a replayed event plans nothing new.',
     'Commands from one event are inserted in rule-table order (`commands.seq`) and run in that order: a customer\'s command waits while an earlier one of theirs is pending.',
+    'A start from the home\'s dialog (D24) is the message `POST /messages` writes through `PlanningEvents` too, with its `process.start`; its `process.started` plans `policy.run`, so every command after the start finds its case on its trigger.',
   ],
   src: 'ARCHITECTURE.md, "Process-native loop", "Process rules"',
 });
@@ -751,13 +752,13 @@ spec('rules', 'ru-shape', {
   src: 'ARCHITECTURE.md, "Process rules"',
 });
 spec('rules', 'ru-message', {
-  name: 'On a customer message', tech: '3 rules', status: 'defined',
-  summary: 'Open the case, call the model, or only record.',
+  name: 'On a customer message', tech: '4 rules', status: 'defined',
+  summary: 'A start opens the case and runs the policy; any other message calls the model or is only recorded (D24).',
   fixed: [
-    '`open_process`: the `process_id` column is null, then `process.start`.',
-    '`generate_while_ai`: the `process_state` column is `ai_active`, then `conversation.generate`.',
-    '`record_only_when_human`: the `process_state` column is `human_active`, then nothing.',
-    'The first message of a new case matches both `open_process` and `generate_while_ai`. `process.start` runs first, then `conversation.generate`.',
+    '`open_process`: a start (no `process_id`, a `product` from the home dialog), then `process.start` with that product.',
+    '`run_requested_policy`: on `process.started`, `policy.run` for the case\'s product, so only the start that opened the case runs it. The dialog was the consent; the model is not called.',
+    '`generate_while_ai`: not a start, and the `process_state` column is `ai_active`, then `conversation.generate`.',
+    '`record_only_when_human`: not a start, and the `process_state` column is `human_active`, then nothing.',
   ],
   tests: ['`human_active` does not call the model.'],
   src: 'ARCHITECTURE.md, "Process rules"',
@@ -817,6 +818,7 @@ spec('worker', 'w-loop', {
   fixed: [
     'Takes the lowest-`seq` `pending` row whose customer has no earlier pending command, with `FOR UPDATE SKIP LOCKED`. One attempt is one transaction; a failure rolls back to a savepoint and records `attempt_count` and `last_error`.',
     'At most 3 attempts, the next one at once. On the third failure the command and its event\'s later commands fail, and an `ai_active` case moves to `human_active` with `reason_code = tool_failed`. It does not retry in a loop.',
+    '`LLM_MODEL` picks the turn reader: B0 (`b0-keywords`, D23) on the compose stack, or the model, which fails until M3.',
     'One thread in the API process when `RUN_WORKER` is set: it wakes when work is enqueued and polls every second. `POST /messages` waits on `wait_for_cycle` and runs no command itself.',
   ],
   tests: ['Two workers never run one customer\'s commands side by side.', 'Three model failures send the case to a person with `tool_failed`.'],
@@ -835,7 +837,8 @@ spec('worker', 'w-generate', {
   name: 'conversation.generate', tech: 'model command', status: 'defined',
   summary: 'One model call, then `conversation.turn_classified`. It does not pick the next step.',
   fixed: [
-    'Persists the JSON and writes `conversation.turn_classified`. It does not enqueue `policy.run` or `process.transition`.',
+    'Persists the JSON in `llm_turns` and writes `conversation.turn_classified`. It does not enqueue `policy.run` or `process.transition`. Built Oct 4 on B0 (D23).',
+    'Stamps `product_asked_count` and `income_requested` from this case\'s earlier events (D13, D14).',
     'If the message `process_id` is null, the turn takes the process this cycle just opened for that customer.',
     'Stores the message\'s `locale` on the process, and `product` when set. If the model sends no product and the process has one, the turn uses the stored one.',
     'The model sets `language` on every turn (`es`, `pt`, or `other`). It only decides whether Alba can read the message; `reply_text` is written in the message\'s `locale` (D21).',
@@ -845,7 +848,7 @@ spec('worker', 'w-generate', {
 });
 spec('worker', 'w-handlers', {
   name: 'Other handlers', tech: '7 commands', status: 'defined',
-  summary: 'What each command does and must not do.',
+  summary: 'What each command does and must not do. All built: four on Oct 4, `policy.run`, `decision.render`, and `process.end` on Oct 5.',
   fixed: [
     '`process.start`: inserts `processes` and `process.started`. `process.transition`: changes `state`, writes `process.state_changed`, plus `conversation.thread_taken` into `human_active`.',
     '`process.end`: `state = ended`, writes `process.state_changed` and `process.ended` with the same `end_reason`.',
@@ -870,12 +873,12 @@ spec('worker', 'w-guard', {
 
 spec('processes', 'p-catalog', {
   name: 'Process catalog', tech: 'credit_prequalification', status: 'defined',
-  summary: 'One process, born `ai_active`, at most one open per customer.',
+  summary: 'One process, born `ai_active`, at most one open per customer and product.',
   fixed: [
-    'One row: `process_key = credit_prequalification`, initial state `ai_active`, opened by `open_process` on the first message of a customer with no open process.',
+    'One row: `process_key = credit_prequalification`, initial state `ai_active`, opened by `open_process` on a start from the home, which names its product (D24).',
     '`started` is not persisted. The row is born `ai_active` and `process.started` records it.',
-    'A customer has at most one process with `state <> ended`, guaranteed by a partial unique index.',
-    'A replayed start returns its process; a start while another case is open writes nothing, and the message joins that case (D20).',
+    'A customer has at most one process with `state <> ended` per product, guaranteed by a partial unique index on `(customer_id, process_key, product)`.',
+    'A replayed start returns its process; a start while its product has an open case writes nothing, runs no policy, and is 409 `case_already_open` once settled (D26).',
   ],
   src: 'ARCHITECTURE.md, "Process"',
 });
@@ -883,12 +886,13 @@ spec('processes', 'p-states', {
   name: 'States and transitions', tech: 'ai_active, human_active, ended', status: 'partial',
   summary: 'Six allowed transitions. Any other is an error and is not written.',
   fixed: [
+    '`ended` to `human_active`: only a customer\'s appeal of a no the policy decided, once (D25).',
     'In `ai_active` the assistant clarifies, asks for consent, asks for income, decides, or hands off.',
     '`ai_active` to `ai_active`: clarification or `NEEDS_INFO`. `ai_active` to `ended`: `prequalified` or `not_prequalified`.',
     '`ai_active` to `human_active`: policy `REFER`, request for a human, tool failure, unsupported language.',
     '`human_active`: nobody talks in the thread. The customer may write; the message is stored. The consultant closes with `prequalified` or `not_prequalified`.',
-    '`ended` is not reopened. Another message opens a new process.',
-    'Staying in `ai_active` writes nothing. A move locks the row, checks its own key, then the table in `api/domain/process/lifecycle.py`; an illegal move writes nothing.',
+    '`ended` reopens only by that appeal, and only while no other case of its product is open. A new start for the product opens a new process.',
+    'Staying in `ai_active` writes nothing. A move locks the row, checks its own key, then the table in `api/domain/process/lifecycle.py`; the reopen is outside the table and only an appeal makes it (`check_reopen`). An illegal move writes nothing.',
   ],
   open: [['New', 'The `ai_active` to `human_active` triggers omit `out_of_scope`, `reply_forbidden`, and `model_output_invalid`, which `hand_off_scope` and `hand_off_reply` also cause.']],
   src: 'ARCHITECTURE.md, "Process", "Process rules"',
@@ -1023,7 +1027,7 @@ spec('templates', 't-cert', {
   name: 'Certificate', tech: 'prequalification.decided', status: 'partial',
   summary: 'The `constancia`, from the policy or from the consultant close.',
   fixed: [
-    'Written to `prequalification.decided` with `locale`, `outcome`, `body`, `decided_by` (`policy` or `consultant`), keyed `decision:{process_id}`.',
+    'Written to `prequalification.decided` with `locale`, `outcome`, `body`, `decided_by` (`policy` or `consultant`), keyed `decision:{process_id}:{decided_by}`: an appealed case holds the policy\'s and a consultant\'s (D25).',
     'One sentence from `api/domain/policy/templates.py`: the outcome for the product, and that the pre-qualification is simulated. Income, its USD equivalent, and the date are the `facts` shown beside it. No limit amount, no rate, no name.',
     'On the consultant path the row in `messages` has `author = template`. The model does not draft it.',
     'Only templates emit `precalifica`, `no precalifica`, `pré-qualificado`, or `não pré-qualifica`.',
@@ -1033,13 +1037,14 @@ spec('templates', 't-cert', {
 });
 spec('templates', 't-notices', {
   name: 'Notices', tech: 'conversation.template_sent', status: 'defined',
-  summary: '`confirm_prequalify`, `needs_income`, `which_product`, `refer_notice`. Non-terminal.',
+  summary: '`confirm_prequalify`, `needs_income`, `which_product`, `refer_notice`, `product_case_open`. Non-terminal.',
   fixed: [
     '`confirm_prequalify` once the product is known: asks whether to start the pre-qualification. The policy waits for the answer.',
     '`needs_income` on `NEEDS_INFO`: asks for monthly income. The case stays `ai_active`.',
     '`which_product` when a stated income or a confirmation names no product. The policy waits.',
     '`refer_notice` on `REFER`: a person will review. No score, and no word on whether the customer pre-qualifies.',
     'The sentences, in `es` and `pt`, are in `api/domain/policy/templates.py`. The three that follow a known product name it and refuse to render without one.',
+    '`product_case_open` when a message names the other product and that product has its own open case (D24).',
   ],
   src: 'ARCHITECTURE.md, "Process rules", "Commands", "The other three flows"',
 });
@@ -1068,7 +1073,7 @@ spec('llm', 'l-call', {
   summary: 'One call, no streaming, Structured Outputs, then Pydantic validation.',
   fixed: [
     'One call, no streaming, Structured Outputs with the `ConversationTurn` JSON schema. It must also validate in Pydantic; one retry, then `model_output_invalid`.',
-    'Only this module imports the OpenAI SDK. `LLM_MODEL` defaults to `gpt-6-luna`.',
+    'Only this module imports the OpenAI SDK. `LLM_MODEL` defaults to `gpt-6-luna`; `b0-keywords` runs B0 as a named classifier, which the compose stack sets until a key exists (D23). The worker is given the reader `LLM_MODEL` names; a B0 turn writes no `llm_turns` row, which the adapter writes (M3).',
     'Missing key: `conversation.generate` fails saying so. Timeout, rate limit, or server error: a failed attempt under the limit of 3.',
     '`temperature` 0 if the model accepts it.',
   ],
@@ -1217,6 +1222,7 @@ spec('pg-login', 'lg-customer', {
   name: 'Customer login', tech: 'document, emailed code, JWT', status: 'defined',
   summary: 'Any customer with an email on file: 147,016 of the 150,000.',
   fixed: [
+    'With `DEMO_LOGIN=1`, and only then, the web server proxies Mailpit and the code step fills the code: a consultant\'s from the email typed, a customer\'s as the newest sent after the request. The API never returns it (D25).',
     'The customer types their document number, reads the 6-digit code in the email on file, and enters both. The screen says the same thing whether or not the document is on file.',
     'In the local demo the code is read in Mailpit. There is no SMS and no real email.',
     'With `DEMO_LOGIN=1` a test-user search and a random pick fill the document field. They do not skip the code.',
@@ -1245,7 +1251,7 @@ spec('pg-home', 'hm-products', {
     'Amounts in the row\'s `products.currency`. Balances of customers in Mexico are shown in USD, not converted to MXN.',
     'Closed products and paid loans are not shown. A customer with nothing to show reads "Todavía no tienes productos con nosotros."',
     'Juan sees a Cuenta de ahorro of 1,559.57 USD and a Préstamo hipotecario of 109,159.57 USD, and no Tarjeta de crédito.',
-    'The "Preguntar por" rows follow the cards. They show disabled until `POST /messages` is built.',
+    'The "Preguntar por" rows follow the cards, one per product: start through the consent dialog, "Continuar la conversación" for an open case, or "Ver resultado" for an ended one (D24).',
   ],
   tests: ['Juan sees his own products.', 'A closed product is not shown.', 'A paid loan is not shown.', 'A customer without products is told there are none.', 'Product names and statuses follow the chosen language.'],
   src: 'ARCHITECTURE.md, "Auth and screens", "Juan\'s flow"; DESIGN.md, "Home"',
@@ -1253,21 +1259,25 @@ spec('pg-home', 'hm-products', {
 
 spec('pg-case', 'cs-thread', {
   name: 'Thread', tech: 'messages', status: 'partial',
-  summary: 'Customer, assistant, and template messages. No consultant messages.',
+  summary: 'Customer, assistant, and template messages. No consultant messages. Built Oct 4 and 5 (W4, D24).',
   fixed: [
     '`messages` rows with `author` `customer`, `assistant`, or `template`.',
     'Each send carries a new `client_message_id`.',
     'After the handoff the customer can still write; nobody replies until the consultant closes and the template message arrives.',
     'While the page waits for the API after a send, it shows a typing indicator ("escribiendo…"). No fixed sleep is added.',
-    'The `POST /messages` response is the `Case` after the worker finishes that cycle, so the page does not poll.',
+    'The `POST /messages` response is the `Case` after the worker finishes that cycle, so the page does not poll. After 30 s it is 503 `cycle_pending`; the bubble stays and a retry sends the same id.',
+    'A "Preguntar por" row opens the start dialog; "Empezar" is the consent, and the case opens with the row\'s sentence and runs the policy at once (D24).',
+    'One open case per product. Each later message names its case; an ended case has no composer. `GET /cases` lets the home continue an open case or show a result (D17 closed).',
   ],
-  open: [['D17', 'No route lists a customer\'s cases. After a reload or a new login the page cannot find an open case or a certificate unless it kept the `process_id`.']],
+  tests: ['Juan starts from the home and gets his certificate without a model call.', 'Juliana is asked her income and prequalifies with it.', 'Naming a product that has its own open case points to it.'],
   src: 'ARCHITECTURE.md, "Process", "Events", "Cycle", "HTTP contract"',
 });
 spec('pg-case', 'cs-cert', {
   name: 'Certificate', tech: 'prequalification.decided', status: 'defined',
   summary: 'Shown when the decision event exists. Rendered by the API, not the client.',
   fixed: [
+    'It sits in the thread in place of its own template line; a no the policy decided offers a review by a person once, which reopens the case (D25). The offer shows when `Case.appealable` says so; the page does not decide it.',
+    'A policy certificate shows the income of the analysis its decision names in `caused_by_event_id`; a consultant\'s shows none (D25).',
     'Shown if `prequalification.decided` exists, from the policy or the consultant close. The page renders its `body`; it does not build certificate prose.',
     'A customer whose process ended `prequalified` or `not_prequalified` sees the certificate and never the queue.',
   ],
@@ -1428,7 +1438,7 @@ spec('ld-migrations', 'mg-tables', {
   fixed: [
     'Read: `customers`, `products`, `daily_exchange_rates`, `service_agents`. Gold: `customer_credit_profile`. Cycle: `events`, `processes`, `commands`, `login_codes`, `llm_turns`, `messages`. Plus `load_batches`.',
     'Indexes: `customers` on `document_number` and `(last_name, first_name)`; `products (customer_id)`; pending `commands (status)`; `events (process_id, created_at)`.',
-    'A partial unique index on `processes (customer_id, process_key) where state <> ended`.',
+    'A partial unique index on `processes (customer_id, process_key, product) where state <> ended` (010), and `events (caused_by_event_id)` and `messages (process_id)` (011).',
   ],
   src: 'ARCHITECTURE.md, "Database"',
 });

@@ -32,7 +32,9 @@ HANDED_OFF = ProcessRow(process_id=PROCESS_ID, customer_id=JUAN, state="human_ac
 
 
 def test_a_first_message_has_no_process_and_is_the_customers() -> None:
-    event = message_received(JUAN, "quiero una tarjeta", CLIENT_MESSAGE_ID, "es", MessageStamp(None, "ai_active"))
+    event = message_received(
+        JUAN, "quiero una tarjeta", CLIENT_MESSAGE_ID, "es", "credit_card", MessageStamp(None, "ai_active")
+    )
     assert event == NewEvent(
         event_name="conversation.message_received",
         idempotency_key="msg:33333333-3333-4333-8333-333333333333",
@@ -45,23 +47,24 @@ def test_a_first_message_has_no_process_and_is_the_customers() -> None:
             "text": "quiero una tarjeta",
             "client_message_id": "33333333-3333-4333-8333-333333333333",
             "locale": "es",
+            "product": "credit_card",
         },
     )
     assert event.actor == "customer"
 
 
 def test_a_message_to_a_handed_off_case_carries_that_state() -> None:
-    event = message_received(JUAN, "hola", CLIENT_MESSAGE_ID, "es", MessageStamp(PROCESS_ID, "human_active"))
-    assert (event.process_id, event.process_state) == (PROCESS_ID, "human_active")
+    event = message_received(JUAN, "hola", CLIENT_MESSAGE_ID, "es", None, MessageStamp(PROCESS_ID, "human_active"))
+    assert (event.process_id, event.process_state, event.payload["product"]) == (PROCESS_ID, "human_active", None)
 
 
 def test_a_message_carries_the_language_chosen_with_the_switch() -> None:
-    event = message_received(JUAN, "quiero una tarjeta", CLIENT_MESSAGE_ID, "pt", MessageStamp(None, "ai_active"))
+    event = message_received(JUAN, "quiero una tarjeta", CLIENT_MESSAGE_ID, "pt", None, MessageStamp(None, "ai_active"))
     assert event.payload["locale"] == "pt"
 
 
 def test_process_started_is_born_ai_active_and_points_at_its_message() -> None:
-    event = process_started(OPEN_CASE, "pt", CAUSE)
+    event = process_started(OPEN_CASE, "pt", "personal_loan", CAUSE)
     assert event == NewEvent(
         event_name="process.started",
         idempotency_key=f"process:{JUAN}:credit_prequalification:{EVENT_ID}",
@@ -70,7 +73,12 @@ def test_process_started_is_born_ai_active_and_points_at_its_message() -> None:
         process_state="ai_active",
         caused_by_event_id=EVENT_ID,
         caused_by_command_id=COMMAND_ID,
-        payload={"process_key": "credit_prequalification", "customer_id": JUAN, "locale": "pt"},
+        payload={
+            "process_key": "credit_prequalification",
+            "customer_id": JUAN,
+            "locale": "pt",
+            "product": "personal_loan",
+        },
     )
     assert event.actor == "system"
 
@@ -103,12 +111,12 @@ def test_a_handoff_writes_state_changed_and_thread_taken_with_the_new_state() ->
 
 
 def test_an_end_writes_both_events_with_the_same_end_reason() -> None:
-    action = end_key(PROCESS_ID)
+    action = end_key(PROCESS_ID, EVENT_ID)
     changed = state_changed(HANDED_OFF, "ended", "not_prequalified", action, Cause(EVENT_ID, None))
     ended = process_ended(HANDED_OFF, "not_prequalified", None, action, Cause(EVENT_ID, None))
     assert changed == NewEvent(
         event_name="process.state_changed",
-        idempotency_key=f"end:{PROCESS_ID}:process.state_changed",
+        idempotency_key=f"end:{PROCESS_ID}:{EVENT_ID}:process.state_changed",
         customer_id=JUAN,
         process_id=PROCESS_ID,
         process_state="ended",
@@ -118,7 +126,7 @@ def test_an_end_writes_both_events_with_the_same_end_reason() -> None:
     )
     assert ended == NewEvent(
         event_name="process.ended",
-        idempotency_key=f"end:{PROCESS_ID}:process.ended",
+        idempotency_key=f"end:{PROCESS_ID}:{EVENT_ID}:process.ended",
         customer_id=JUAN,
         process_id=PROCESS_ID,
         process_state="ended",
@@ -160,6 +168,7 @@ def test_a_shown_turn_carries_the_reading_the_stamps_and_the_locale_of_its_messa
             "reason_code": None,
             "product_asked_count": 1,
             "income_requested": True,
+            "open_case_product": None,
         },
     )
 
@@ -217,10 +226,10 @@ def test_an_analysis_carries_the_decision_the_product_and_the_locale() -> None:
     )
 
 
-def test_a_certificate_is_keyed_once_per_case_and_carries_who_decided() -> None:
+def test_a_certificate_is_keyed_once_per_decider_and_carries_who_decided() -> None:
     assert prequalification_decided(HANDED_OFF, "pt", "NOT_PREQUALIFIED", "Você não…", "consultant", CAUSE) == NewEvent(
         event_name="prequalification.decided",
-        idempotency_key=f"decision:{PROCESS_ID}",
+        idempotency_key=f"decision:{PROCESS_ID}:consultant",
         customer_id=JUAN,
         process_id=PROCESS_ID,
         process_state="human_active",

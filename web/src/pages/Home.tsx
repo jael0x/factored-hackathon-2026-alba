@@ -7,18 +7,24 @@ import { AppBar } from "../components/AppBar";
 import { ErrorCard } from "../components/ErrorCard";
 import { ProductCard } from "../components/ProductCard";
 import { ProductRows } from "../components/ProductRows";
+import { StartDialog } from "../components/StartDialog";
+import type { components } from "../api/schema";
+import { newSend } from "../chat";
+import { useLocale } from "../i18n/locale";
 import { useMessages } from "../i18n/messages";
-import { LOGIN_PATH } from "../routes";
+import { CASE_PATH, LOGIN_PATH, casePath } from "../routes";
 import { signOut } from "../session/session";
 
 const PLACEHOLDER_CARDS = 2;
 
+type ProductKey = components["schemas"]["ProductKey"];
+
 async function loadHome() {
-  const [me, products] = await Promise.all([api.GET("/me"), api.GET("/products")]);
-  if (me.data === undefined || products.data === undefined) {
+  const [me, products, cases] = await Promise.all([api.GET("/me"), api.GET("/products"), api.GET("/cases")]);
+  if (me.data === undefined || products.data === undefined || cases.data === undefined) {
     return {};
   }
-  return { data: { customer: me.data, products: products.data.products } };
+  return { data: { customer: me.data, products: products.data.products, cases: cases.data.cases } };
 }
 
 export function Home() {
@@ -26,6 +32,14 @@ export function Home() {
   const [attempt, setAttempt] = useState(0);
   const home = useLoad(loadHome, attempt);
   const t = useMessages();
+  const locale = useLocale();
+
+  const [starting, setStarting] = useState<ProductKey | null>(null);
+
+  const begin = (key: ProductKey) => {
+    setStarting(null);
+    navigate(CASE_PATH, { state: { opening: newSend(t.chat.opening[key], locale, key) } });
+  };
 
   const leave = () => {
     signOut();
@@ -61,10 +75,11 @@ export function Home() {
                 ))}
               </div>
             )}
-            <ProductRows />
+            <ProductRows cases={home.data.cases} onStart={setStarting} onOpen={(id) => navigate(casePath(id))} />
           </div>
         )}
       </main>
+      <StartDialog product={starting} onBegin={begin} onCancel={() => setStarting(null)} />
     </>
   );
 }

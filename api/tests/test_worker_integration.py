@@ -1,7 +1,7 @@
 from collections.abc import Callable, Iterator
 from decimal import Decimal
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 import pytest
@@ -9,11 +9,14 @@ from fastapi.testclient import TestClient
 from psycopg_pool import ConnectionPool
 
 from api.application.cycle.attempt import Done, Failed, Retried
-from api.application.cycle.ports import TurnRequest
+from api.application.cycle.ports import ReadTurn
+from api.application.processes import InCase, StartCase
+from api.contract_models import Locale, ProductKey
 from api.domain.policy.templates import certificate_for_close, certificate_for_policy, render_notice
-from api.domain.process.commands import GENERATE_COMMAND
-from api.domain.process.lifecycle import MessageStamp, ProcessRow, parse_state
-from api.domain.process.new_events import AlreadyAppended, consultant_closed, message_received
+from api.domain.process.commands import GENERATE_COMMAND, hand_off
+from api.domain.process.events import ANALYSIS_COMPLETED
+from api.domain.process.lifecycle import CUSTOMER_REQUESTED_HUMAN, MessageStamp, ProcessRow, parse_state
+from api.domain.process.new_events import AlreadyAppended, appeal_requested, consultant_closed, message_received
 from api.domain.process.rules import PlannedCommand, command_key
 from api.domain.process.turns import ShownReading, TurnReading, WithheldReading
 from api.infrastructure.config.settings import settings
@@ -22,10 +25,11 @@ from api.infrastructure.db.events import PostgresEventLog, PostgresEvents
 from api.infrastructure.db.json_codec import configure_json
 from api.infrastructure.db.processes import PostgresProcesses
 from api.infrastructure.db.profile import PostgresProfiles
+from api.infrastructure.llm.keywords import B0_MODEL, read_keyword_turn
 from api.infrastructure.llm.schema import reading_of
 from api.main import app
 from api.presentation.worker import loop
-from api.presentation.worker.loop import Worker, model_not_built, run_next, run_until_idle
+from api.presentation.worker.loop import Worker, model_not_built, read_turn_for, run_next, run_until_idle
 from api.tests.cycle_harness import (
     ALICIA,
     JUAN,
@@ -46,6 +50,10 @@ pytestmark = pytest.mark.integration
 
 WORKER_TEST_DB = "alba_worker_test"
 CARD = "quiero una tarjeta de crédito"
+OPENING: dict[ProductKey, str] = {
+    "credit_card": "Quiero saber si precalifico para una tarjeta de crédito.",
+    "personal_loan": "Quiero saber si precalifico para un préstamo personal.",
+}
 LOAN = "quiero un préstamo personal"
 HUMAN = "quiero hablar con una persona"
 INCOME = "gano 45,000 pesos al mes"
@@ -54,12 +62,9 @@ CESAR = "AGT-OJ9N4FGYV9"
 AS_OF = "2026-06-17"
 MODEL_DOWN = "ModelDown: the model did not answer"
 
-OPENING = [
-    "conversation.message_received",
-    "process.started",
-    "conversation.turn_classified",
-    "conversation.template_sent",
-]
+# A case starts from a product on the home, with the consent already given (PLAN.md D24): the policy runs at once.
+START = ["conversation.message_received", "process.started", "analysis.completed"]
+NOTICE = [*START, "conversation.template_sent"]
 ANSWER = ["conversation.message_received", "conversation.turn_classified"]
 POLICY_END = ["prequalification.decided", "process.state_changed", "process.ended"]
 HANDOFF = ["process.state_changed", "conversation.thread_taken"]
@@ -143,32 +148,41 @@ def facts(score: int, income: Decimal | None, currency: str, usd: Decimal | None
     ]
 
 
-def converse(pool: ConnectionPool, customer_id: str, model: ScriptedModel, *texts: str) -> None:
+def start(
+    pool: ConnectionPool,
+    customer_id: str,
+    product: ProductKey = "credit_card",
+    locale: Locale = "es",
+    message_id: UUID | None = None,
+) -> UUID:
+    return send(pool, customer_id, OPENING[product], StartCase(product), locale, message_id)
+
+
+def say(url: str, pool: ConnectionPool, customer_id: str, text: str) -> UUID:
+    return send(pool, customer_id, text, InCase(open_case_of(url, customer_id).process_id))
+
+
+def converse(url: str, pool: ConnectionPool, customer_id: str, model: ReadTurn, *texts: str) -> None:
     for text in texts:
-        send(pool, customer_id, text)
+        say(url, pool, customer_id, text)
         run_until_idle(pool, model)
 
 
-def test_juan_prequalifies_for_a_card_through_the_worker(url: str, pool: ConnectionPool) -> None:
-    model = scripted("es-quiero-una-tarjeta-de-credito", "es-si")
-    send(pool, JUAN, CARD)
-    assert run_until_idle(pool, model) == [Done(1), Done(1), Done(1)]
-    assert names(url, JUAN) == OPENING
-    assert cases(url, JUAN) == [("ai_active", None, "credit_card", "es")]
+def started(pool: ConnectionPool, customer_id: str, product: ProductKey = "credit_card") -> None:
+    start(pool, customer_id, product)
+    run_until_idle(pool, scripted())
 
-    converse(pool, JUAN, model, "sí")
-    assert names(url, JUAN) == [*OPENING, *ANSWER, "analysis.completed", *POLICY_END]
+
+def test_juan_prequalifies_for_a_card_from_the_home_without_a_model_call(url: str, pool: ConnectionPool) -> None:
+    model = scripted()
+    start(pool, JUAN)
+    assert run_until_idle(pool, model) == [Done(1), Done(1), Done(1), Done(1)]
+    assert names(url, JUAN) == [*START, *POLICY_END]
     assert cases(url, JUAN) == [("ended", "prequalified", "credit_card", "es")]
-    assert thread(url, JUAN) == [
-        ("template", render_notice("confirm_prequalify", "es", "credit_card")),
-        ("template", certificate_for_policy("PREQUALIFIED", "es", "credit_card")),
-    ]
+    assert thread(url, JUAN) == [("template", certificate_for_policy("PREQUALIFIED", "es", "credit_card"))]
     assert queue(url) == [
         done("process.start", "open_process"),
-        done("conversation.generate", "generate_while_ai"),
-        done("template.send", "ask_confirm_prequalify"),
-        done("conversation.generate", "generate_while_ai"),
-        done("policy.run", "run_policy"),
+        done("policy.run", "run_requested_policy"),
         done("decision.render", "render_decision"),
         done("process.end", "end_after_decision"),
     ]
@@ -177,39 +191,20 @@ def test_juan_prequalifies_for_a_card_through_the_worker(url: str, pool: Connect
     file_income = "customer_credit_profile.income_local"
     assert analysis["facts"] == facts(812, Decimal("306753.45"), "MXN", Decimal("17988.33"), file_income)
     assert payloads(url, JUAN, "process.ended") == [{"end_reason": "prequalified", "policy_version": "alba-credit-v1"}]
-    assert model.calls == [
-        TurnRequest(CARD, "es", "ai_active", True, True, False, False),
-        TurnRequest("sí", "es", "ai_active", True, True, False, False),
-    ]
+    assert model.calls == []
 
 
-def test_juan_in_portuguese_reads_portuguese_from_the_consent_to_the_certificate(
-    url: str, pool: ConnectionPool
-) -> None:
-    model = scripted("pt-cartao-de-credito", "pt-sim")
-    for text in ("cartão de crédito", "sim"):
-        send(pool, JUAN, text, "pt")
-        run_until_idle(pool, model)
+def test_juan_in_portuguese_gets_a_portuguese_certificate(url: str, pool: ConnectionPool) -> None:
+    start(pool, JUAN, locale="pt")
+    run_until_idle(pool, scripted())
     assert cases(url, JUAN) == [("ended", "prequalified", "credit_card", "pt")]
-    assert thread(url, JUAN) == [
-        ("template", render_notice("confirm_prequalify", "pt", "credit_card")),
-        ("template", certificate_for_policy("PREQUALIFIED", "pt", "credit_card")),
-    ]
+    assert thread(url, JUAN) == [("template", certificate_for_policy("PREQUALIFIED", "pt", "credit_card"))]
 
 
 def test_juliana_is_asked_for_her_income_and_decided_with_it(url: str, pool: ConnectionPool) -> None:
-    converse(
-        pool, JULIANA, scripted("es-quiero-una-tarjeta-de-credito", "es-si", "es-gano-45000-pesos"), CARD, "sí", INCOME
-    )
-    assert names(url, JULIANA) == [
-        *OPENING,
-        *ANSWER,
-        "analysis.completed",
-        "conversation.template_sent",
-        *ANSWER,
-        "analysis.completed",
-        *POLICY_END,
-    ]
+    started(pool, JULIANA)
+    converse(url, pool, JULIANA, scripted("es-gano-45000-pesos"), INCOME)
+    assert names(url, JULIANA) == [*NOTICE, *ANSWER, "analysis.completed", *POLICY_END]
     income_turn = payloads(url, JULIANA, "conversation.turn_classified")[-1]
     assert (income_turn["intent"], income_turn["product"], income_turn["income_requested"]) == (
         "provide_income",
@@ -225,16 +220,14 @@ def test_juliana_is_asked_for_her_income_and_decided_with_it(url: str, pool: Con
         "render_decision",
         "end_after_decision",
     ]
-    assert thread(url, JULIANA)[1] == ("template", render_notice("needs_income", "es", "credit_card"))
+    assert thread(url, JULIANA)[0] == ("template", render_notice("needs_income", "es", "credit_card"))
     assert cases(url, JULIANA) == [("ended", "prequalified", "credit_card", "es")]
 
 
 def test_an_income_in_another_countrys_currency_is_asked_for_again(url: str, pool: ConnectionPool) -> None:
     colombian = ShownReading(TurnReading("provide_income", None, "es", Decimal(45000), "COP", "Gracias."))
-    model = scripted("es-quiero-una-tarjeta-de-credito", "es-si")
-    converse(
-        pool, JULIANA, ScriptedModel({**model.readings, COLOMBIAN_INCOME: colombian}), CARD, "sí", COLOMBIAN_INCOME
-    )
+    started(pool, JULIANA)
+    converse(url, pool, JULIANA, ScriptedModel({COLOMBIAN_INCOME: colombian}), COLOMBIAN_INCOME)
     first, second = payloads(url, JULIANA, "analysis.completed")
     assert (first["outcome"], second["outcome"]) == ("NEEDS_INFO", "NEEDS_INFO")
     assert second["rule_trace"][-1] == {
@@ -243,7 +236,6 @@ def test_an_income_in_another_countrys_currency_is_asked_for_again(url: str, poo
         "result": "NEEDS_INFO",
     }
     assert [p["template_id"] for p in payloads(url, JULIANA, "conversation.template_sent")] == [
-        "confirm_prequalify",
         "needs_income",
         "needs_income",
     ]
@@ -251,24 +243,23 @@ def test_an_income_in_another_countrys_currency_is_asked_for_again(url: str, poo
 
 
 def test_alicia_is_referred_waits_for_a_person_and_is_closed_by_one(url: str, pool: ConnectionPool) -> None:
-    model = scripted("es-quiero-una-tarjeta-de-credito", "es-si")
-    converse(pool, ALICIA, model, CARD, "sí")
-    assert names(url, ALICIA)[-4:] == ["analysis.completed", "conversation.template_sent", *HANDOFF]
+    model = scripted()
+    started(pool, ALICIA)
+    assert names(url, ALICIA) == [*NOTICE, *HANDOFF]
     assert cases(url, ALICIA) == [("human_active", None, "credit_card", "es")]
     assert payloads(url, ALICIA, "conversation.thread_taken") == [
         {"reason_code": "policy_refer", "from_state": "ai_active", "to_state": "human_active"}
     ]
 
-    send(pool, ALICIA, "¿ya revisaron mi caso?")
+    say(url, pool, ALICIA, "¿ya revisaron mi caso?")
     assert run_until_idle(pool, model) == []
-    assert len(model.calls) == 2
+    assert model.calls == []
 
     append(pool, consultant_closed(open_case_of(url, ALICIA), "PREQUALIFIED", CESAR, "es"))
     run_until_idle(pool, model)
     assert names(url, ALICIA)[-5:] == ["conversation.message_received", "conversation.consultant_closed", *POLICY_END]
     assert cases(url, ALICIA) == [("ended", "prequalified", "credit_card", "es")]
     assert thread(url, ALICIA) == [
-        ("template", render_notice("confirm_prequalify", "es", "credit_card")),
         ("template", render_notice("refer_notice", "es", "credit_card")),
         ("template", certificate_for_close("PREQUALIFIED", "es", "credit_card")),
     ]
@@ -277,85 +268,138 @@ def test_alicia_is_referred_waits_for_a_person_and_is_closed_by_one(url: str, po
 
 
 def test_mariana_is_decided_by_delinquency(url: str, pool: ConnectionPool) -> None:
-    converse(pool, MARIANA, scripted("es-quiero-un-prestamo-personal", "es-si"), LOAN, "sí")
+    started(pool, MARIANA, "personal_loan")
     [analysis] = payloads(url, MARIANA, "analysis.completed")
     assert (analysis["outcome"], analysis["deciding_rule"]) == ("NOT_PREQUALIFIED", "R02")
     assert cases(url, MARIANA) == [("ended", "not_prequalified", "personal_loan", "es")]
     assert thread(url, MARIANA)[-1] == ("template", certificate_for_policy("NOT_PREQUALIFIED", "es", "personal_loan"))
 
 
+def test_mariana_asks_a_person_to_review_her_no_and_a_consultant_decides_it_again(
+    url: str, pool: ConnectionPool
+) -> None:
+    started(pool, MARIANA)
+    [(process_id,)] = query(url, "SELECT id FROM processes WHERE customer_id = %s", (MARIANA,))
+    append(pool, appeal_requested(ProcessRow(process_id, MARIANA, "ended"), "es", "credit_card"))
+    run_until_idle(pool, scripted())
+    assert cases(url, MARIANA) == [("human_active", None, "credit_card", "es")]
+    assert payloads(url, MARIANA, "conversation.thread_taken") == [
+        {"reason_code": "customer_requested_human", "from_state": "ended", "to_state": "human_active"}
+    ]
+
+    append(pool, consultant_closed(open_case_of(url, MARIANA), "PREQUALIFIED", CESAR, "es"))
+    run_until_idle(pool, scripted())
+    assert cases(url, MARIANA) == [("ended", "prequalified", "credit_card", "es")]
+    assert [p["decided_by"] for p in payloads(url, MARIANA, "prequalification.decided")] == ["policy", "consultant"]
+    assert thread(url, MARIANA) == [
+        ("template", certificate_for_policy("NOT_PREQUALIFIED", "es", "credit_card")),
+        ("template", render_notice("refer_notice", "es", "credit_card")),
+        ("template", certificate_for_close("PREQUALIFIED", "es", "credit_card")),
+    ]
+    assert [p["end_reason"] for p in payloads(url, MARIANA, "process.ended")] == ["not_prequalified", "prequalified"]
+
+
 def test_a_question_about_the_products_is_answered_with_the_shown_reply(url: str, pool: ConnectionPool) -> None:
     fixture = load_turn_fixture("es-que-productos-ofrecen")
-    converse(pool, JUAN, scripted("es-que-productos-ofrecen"), fixture.text)
-    assert thread(url, JUAN) == [("assistant", fixture.turn.reply_text)]
+    started(pool, JULIANA)
+    converse(url, pool, JULIANA, scripted("es-que-productos-ofrecen"), fixture.text)
+    assert thread(url, JULIANA)[-1] == ("assistant", fixture.turn.reply_text)
     assert queue(url)[-1] == done("conversation.show_reply", "show_reply")
-    assert cases(url, JUAN) == [("ai_active", None, None, "es")]
+    assert cases(url, JULIANA) == [("ai_active", None, "credit_card", "es")]
+
+
+def test_naming_a_product_with_its_own_open_case_points_to_that_case(url: str, pool: ConnectionPool) -> None:
+    started(pool, JULIANA)
+    started(pool, JULIANA, "personal_loan")
+    [(card_id,)] = query(url, "SELECT id FROM processes WHERE customer_id = %s AND product = 'credit_card'", (JULIANA,))
+    send(pool, JULIANA, LOAN, InCase(card_id))
+    run_until_idle(pool, scripted("es-quiero-un-prestamo-personal"))
+    turn = payloads(url, JULIANA, "conversation.turn_classified")[-1]
+    assert (turn["product"], turn["open_case_product"]) == ("credit_card", "personal_loan")
+    assert queue(url)[-1] == done("template.send", "point_to_open_case")
+    notice = render_notice("product_case_open", "es", "personal_loan")
+    assert query(url, "SELECT body FROM messages WHERE process_id = %s ORDER BY created_at", (card_id,))[-1] == (
+        notice,
+    )
 
 
 def test_a_reply_that_states_an_outcome_is_withheld_and_sent_to_a_person(url: str, pool: ConnectionPool) -> None:
     states_outcome = WithheldReading(
         reading_of(load_turn_fixture("es-si-reply-states-outcome").turn), "reply_forbidden"
     )
-    model = scripted("es-quiero-una-tarjeta-de-credito")
-    converse(pool, JUAN, ScriptedModel({**model.readings, "sí": states_outcome}), CARD, "sí")
-    assert names(url, JUAN) == [*OPENING, *ANSWER, *HANDOFF]
-    assert payloads(url, JUAN, "conversation.thread_taken")[0]["reason_code"] == "reply_forbidden"
-    assert [author for author, _ in thread(url, JUAN)] == ["template"]
+    started(pool, JULIANA)
+    converse(url, pool, JULIANA, ScriptedModel({"sí": states_outcome}), "sí")
+    assert names(url, JULIANA) == [*NOTICE, *ANSWER, *HANDOFF]
+    assert payloads(url, JULIANA, "conversation.thread_taken")[0]["reason_code"] == "reply_forbidden"
+    assert [author for author, _ in thread(url, JULIANA)] == ["template"]
 
 
 def test_three_model_failures_send_the_case_to_a_person(url: str, pool: ConnectionPool) -> None:
-    send(pool, JUAN, CARD)
-    results = run_until_idle(pool, scripted("es-quiero-una-tarjeta-de-credito", failures=3))
-    assert results == [Done(1), Retried(1, MODEL_DOWN), Retried(2, MODEL_DOWN), Failed(3, MODEL_DOWN)]
-    assert queue(url) == [
-        done("process.start", "open_process"),
-        ("conversation.generate", "generate_while_ai", "failed", 3, MODEL_DOWN),
-    ]
-    assert names(url, JUAN) == ["conversation.message_received", "process.started", *HANDOFF]
-    assert payloads(url, JUAN, "conversation.thread_taken") == [
+    started(pool, JULIANA)
+    say(url, pool, JULIANA, INCOME)
+    results = run_until_idle(pool, scripted("es-gano-45000-pesos", failures=3))
+    assert results == [Retried(1, MODEL_DOWN), Retried(2, MODEL_DOWN), Failed(3, MODEL_DOWN)]
+    assert queue(url)[-1] == ("conversation.generate", "generate_while_ai", "failed", 3, MODEL_DOWN)
+    assert names(url, JULIANA) == [*NOTICE, "conversation.message_received", *HANDOFF]
+    assert payloads(url, JULIANA, "conversation.thread_taken") == [
         {"reason_code": "tool_failed", "from_state": "ai_active", "to_state": "human_active"}
     ]
-    assert cases(url, JUAN) == [("human_active", None, None, "es")]
+    assert cases(url, JULIANA) == [("human_active", None, "credit_card", "es")]
 
 
 def test_a_failed_attempt_that_succeeds_next_writes_one_turn(url: str, pool: ConnectionPool) -> None:
-    send(pool, JUAN, CARD)
-    run_until_idle(pool, scripted("es-quiero-una-tarjeta-de-credito", failures=1))
-    assert names(url, JUAN) == OPENING
-    assert queue(url)[1] == ("conversation.generate", "generate_while_ai", "done", 2, MODEL_DOWN)
+    started(pool, JULIANA)
+    converse(url, pool, JULIANA, scripted("es-gano-45000-pesos", failures=1), INCOME)
+    assert names(url, JULIANA).count("conversation.turn_classified") == 1
+    assert queue(url)[3] == ("conversation.generate", "generate_while_ai", "done", 2, MODEL_DOWN)
 
 
 def test_without_a_model_adapter_the_command_fails_and_names_what_is_missing(url: str, pool: ConnectionPool) -> None:
-    send(pool, JUAN, CARD)
+    started(pool, JULIANA)
+    say(url, pool, JULIANA, INCOME)
     run_until_idle(pool, model_not_built)
-    name, _rule, status, attempts, error = queue(url)[1]
+    name, _rule, status, attempts, error = queue(url)[-1]
     assert (name, status, attempts) == ("conversation.generate", "failed", 3)
-    assert (
-        error
-        == "ModelNotBuilt: conversation.generate has no model adapter yet: M3 builds api/infrastructure/llm/conversation.py"
+    assert error == (
+        "ModelNotBuilt: conversation.generate has no model adapter yet: M3 builds "
+        "api/infrastructure/llm/conversation.py. Set LLM_MODEL=b0-keywords to read turns with the keyword baseline "
+        "(PLAN.md D23)."
     )
-    assert cases(url, JUAN) == [("human_active", None, None, "es")]
+    assert cases(url, JULIANA) == [("human_active", None, "credit_card", "es")]
 
 
-def test_a_customer_with_no_credit_profile_fails_the_command_and_goes_to_a_person(
-    url: str, pool: ConnectionPool
-) -> None:
-    send(pool, NO_PROFILE, CARD)
-    run_until_idle(pool, scripted("es-quiero-una-tarjeta-de-credito"))
-    assert queue(url)[1][2:] == (
+def test_b0_reads_a_typed_message_when_llm_model_names_it(url: str, pool: ConnectionPool) -> None:
+    started(pool, JULIANA)
+    converse(url, pool, JULIANA, read_turn_for(B0_MODEL), INCOME)
+    assert cases(url, JULIANA) == [("ended", "prequalified", "credit_card", "es")]
+
+
+def test_llm_model_picks_what_reads_a_turn() -> None:
+    assert read_turn_for(B0_MODEL) is read_keyword_turn
+    assert read_turn_for("gpt-6-luna") is model_not_built
+    with pytest.raises(ValueError, match="LLM_MODEL=gpt-4 names nothing that reads a turn"):
+        read_turn_for("gpt-4")
+
+
+def test_a_customer_with_no_credit_profile_fails_the_run_and_goes_to_a_person(url: str, pool: ConnectionPool) -> None:
+    started(pool, NO_PROFILE)
+    assert queue(url)[1] == (
+        "policy.run",
+        "run_requested_policy",
         "failed",
         3,
         f"MissingProfile: customer {NO_PROFILE} has no row in customer_credit_profile",
     )
-    assert cases(url, NO_PROFILE) == [("human_active", None, None, "es")]
+    assert cases(url, NO_PROFILE) == [("human_active", None, "credit_card", "es")]
 
 
 def test_a_message_delivered_twice_plans_nothing_new(url: str, pool: ConnectionPool) -> None:
     message_id = uuid4()
-    send(pool, JUAN, CARD, message_id=message_id)
-    run_until_idle(pool, scripted("es-quiero-una-tarjeta-de-credito"))
+    start(pool, JUAN, message_id=message_id)
+    run_until_idle(pool, scripted())
     before = queue(url)
-    again = append(pool, message_received(JUAN, CARD, message_id, "es", MessageStamp(None, "ai_active")))
+    stamp = MessageStamp(None, "ai_active")
+    again = append(pool, message_received(JUAN, OPENING["credit_card"], message_id, "es", "credit_card", stamp))
     assert isinstance(again, AlreadyAppended)
     assert run_until_idle(pool, scripted()) == []
     assert queue(url) == before
@@ -364,35 +408,35 @@ def test_a_message_delivered_twice_plans_nothing_new(url: str, pool: ConnectionP
 def test_a_message_that_reaches_a_case_handed_off_before_its_turn_does_not_call_the_model(
     url: str, pool: ConnectionPool
 ) -> None:
-    model = scripted("es-quiero-una-tarjeta-de-credito", "es-quiero-hablar-con-una-persona")
-    converse(pool, JUAN, model, CARD)
-    send(pool, JUAN, HUMAN)
+    model = scripted("es-quiero-hablar-con-una-persona")
+    started(pool, JULIANA)
+    say(url, pool, JULIANA, HUMAN)
     assert isinstance(run_next(pool, model), Done)
-    send(pool, JUAN, "sí")
+    say(url, pool, JULIANA, "sí")
     run_until_idle(pool, model)
-    assert [request.text for request in model.calls] == [CARD, HUMAN]
-    assert names(url, JUAN) == [*OPENING, *ANSWER, "conversation.message_received", *HANDOFF]
+    assert [request.text for request in model.calls] == [HUMAN]
+    assert names(url, JULIANA) == [*NOTICE, *ANSWER, "conversation.message_received", *HANDOFF]
     assert queue(url)[-2:] == [
         done("process.transition", "hand_off_human"),
         done("conversation.generate", "generate_while_ai"),
     ]
 
 
-def test_two_messages_sent_before_the_case_opens_join_one_case(url: str, pool: ConnectionPool) -> None:
-    send(pool, JUAN, CARD)
-    send(pool, JUAN, LOAN)
-    run_until_idle(pool, scripted("es-quiero-una-tarjeta-de-credito", "es-quiero-un-prestamo-personal"))
-    assert len(cases(url, JUAN)) == 1
-    turns = query(url, "SELECT process_id FROM events WHERE event_name = 'conversation.turn_classified'")
-    assert [row[0] for row in turns] == [open_case_of(url, JUAN).process_id] * 2
+def test_two_starts_for_one_product_before_the_case_opens_join_one_case(url: str, pool: ConnectionPool) -> None:
+    start(pool, JUAN)
+    start(pool, JUAN)
+    run_until_idle(pool, scripted())
+    assert cases(url, JUAN) == [("ended", "prequalified", "credit_card", "es")]
     assert names(url, JUAN).count("process.started") == 1
+    assert names(url, JUAN).count("analysis.completed") == 1
+    assert [row[1] for row in queue(url)].count("run_requested_policy") == 1
 
 
 def test_one_customers_commands_wait_for_each_other_while_another_customer_goes_ahead(
     url: str, pool: ConnectionPool
 ) -> None:
-    send(pool, JUAN, CARD)
-    send(pool, ALICIA, CARD)
+    start(pool, JUAN)
+    start(pool, ALICIA)
     with psycopg.connect(url) as first, psycopg.connect(url) as second, psycopg.connect(url) as third:
         for conn in (first, second, third):
             configure_json(conn)
@@ -407,10 +451,24 @@ def test_one_customers_commands_wait_for_each_other_while_another_customer_goes_
     assert [juan_start.command.command_name, alicia_start.command.command_name] == ["process.start", "process.start"]
 
 
+def test_a_handoff_that_is_not_an_appeal_cannot_reopen_an_ended_case(url: str, pool: ConnectionPool) -> None:
+    started(pool, MARIANA)
+    sql = "SELECT id FROM events WHERE customer_id = %s AND event_name = %s"
+    [(analysis_id,)] = query(url, sql, (MARIANA, ANALYSIS_COMPLETED))
+    move = hand_off(CUSTOMER_REQUESTED_HUMAN)
+    with pool.connection() as conn:
+        key = command_key("hand_off_human", move.command_name, analysis_id)
+        PostgresCommands(conn).enqueue(PlannedCommand(move, "hand_off_human", analysis_id, key))
+    run_until_idle(pool, scripted())
+    assert queue(url)[-1][:4] == ("process.transition", "hand_off_human", "failed", 3)
+    assert str(queue(url)[-1][4]).startswith("IllegalTransition: process cannot move from ended to human_active")
+    assert cases(url, MARIANA) == [("ended", "not_prequalified", "credit_card", "es")]
+
+
 def test_a_command_with_no_case_to_hand_off_fails_without_a_handoff(url: str, pool: ConnectionPool) -> None:
     with pool.connection() as conn:
         message = PostgresEvents(conn).append(
-            message_received(JUAN, CARD, uuid4(), "es", MessageStamp(None, "ai_active"))
+            message_received(JUAN, CARD, uuid4(), "es", None, MessageStamp(None, "ai_active"))
         )
         key = command_key("generate_while_ai", "conversation.generate", message.event_id)
         PostgresCommands(conn).enqueue(PlannedCommand(GENERATE_COMMAND, "generate_while_ai", message.event_id, key))
@@ -419,11 +477,15 @@ def test_a_command_with_no_case_to_hand_off_fails_without_a_handoff(url: str, po
     assert names(url, JUAN) == ["conversation.message_received"]
 
 
+# A case from before D24 has no product, so the consultant's certificate cannot name one.
 def test_a_certificate_that_cannot_be_written_stops_the_close_before_the_case_ends(
     url: str, pool: ConnectionPool
 ) -> None:
-    converse(pool, JUAN, scripted("es-quiero-hablar-con-una-persona"), HUMAN)
-    append(pool, consultant_closed(open_case_of(url, JUAN), "NOT_PREQUALIFIED", CESAR, "es"))
+    started(pool, JULIANA)
+    converse(url, pool, JULIANA, scripted("es-quiero-hablar-con-una-persona"), HUMAN)
+    with psycopg.connect(url) as conn:
+        conn.execute("UPDATE processes SET product = NULL WHERE customer_id = %s", (JULIANA,))
+    append(pool, consultant_closed(open_case_of(url, JULIANA), "NOT_PREQUALIFIED", CESAR, "es"))
     run_until_idle(pool, scripted())
     render, end = queue(url)[-2:]
     assert render == (
@@ -435,13 +497,13 @@ def test_a_certificate_that_cannot_be_written_stops_the_close_before_the_case_en
     )
     assert end[:4] == ("process.end", "close_on_consultant_decision", "failed", 0)
     assert str(end[4]).startswith("an earlier command of the same event failed: ")
-    assert cases(url, JUAN) == [("human_active", None, None, "es")]
-    assert "prequalification.decided" not in names(url, JUAN)
+    assert cases(url, JULIANA) == [("human_active", None, None, "es")]
+    assert "prequalification.decided" not in names(url, JULIANA)
 
 
 def test_the_worker_thread_runs_a_cycle_and_the_handler_can_wait_for_it(url: str, pool: ConnectionPool) -> None:
-    worker = Worker(pool, scripted("es-quiero-una-tarjeta-de-credito"), poll_seconds=0.05)
-    message = send(pool, JUAN, CARD)
+    worker = Worker(pool, scripted(), poll_seconds=0.05)
+    message = start(pool, JUAN)
     assert worker.wait_for_cycle(message, 0.05) is False
     worker.start()
     worker.wake()
@@ -449,7 +511,7 @@ def test_the_worker_thread_runs_a_cycle_and_the_handler_can_wait_for_it(url: str
         assert worker.wait_for_cycle(message, 10) is True
     finally:
         worker.stop()
-    assert names(url, JUAN) == OPENING
+    assert names(url, JUAN) == [*START, *POLICY_END]
 
 
 def test_the_worker_keeps_polling_after_it_cannot_take_a_command(
@@ -464,8 +526,8 @@ def test_the_worker_keeps_polling_after_it_cannot_take_a_command(
         return run_next(*args)
 
     monkeypatch.setattr(loop, "run_next", flaky)
-    worker = Worker(pool, scripted("es-quiero-una-tarjeta-de-credito"), poll_seconds=0.05)
-    message = send(pool, JUAN, CARD)
+    worker = Worker(pool, scripted(), poll_seconds=0.05)
+    message = start(pool, JUAN)
     worker.start()
     try:
         assert worker.wait_for_cycle(message, 10) is True

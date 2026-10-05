@@ -3,7 +3,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from api.contract_models import ForbiddenError, InvalidRequestError, NotFoundError, UnauthorizedError
+from api.contract_models import (
+    CaseConflictError,
+    CyclePendingError,
+    ForbiddenError,
+    InvalidRequestError,
+    MessageIdReusedError,
+    NotFoundError,
+    UnauthorizedError,
+)
 
 
 class ApiError(Exception):
@@ -23,6 +31,26 @@ def forbidden() -> ApiError:
 
 def not_found() -> ApiError:
     return ApiError(status.HTTP_404_NOT_FOUND, NotFoundError(error="not_found"))
+
+
+def message_id_reused() -> ApiError:
+    return ApiError(status.HTTP_409_CONFLICT, MessageIdReusedError(error="message_id_reused"))
+
+
+def case_already_open() -> ApiError:
+    return ApiError(status.HTTP_409_CONFLICT, CaseConflictError(error="case_already_open"))
+
+
+def case_ended() -> ApiError:
+    return ApiError(status.HTTP_409_CONFLICT, CaseConflictError(error="case_ended"))
+
+
+def case_not_appealable() -> ApiError:
+    return ApiError(status.HTTP_409_CONFLICT, CaseConflictError(error="case_not_appealable"))
+
+
+def cycle_pending() -> ApiError:
+    return ApiError(status.HTTP_503_SERVICE_UNAVAILABLE, CyclePendingError(error="cycle_pending"))
 
 
 def invalid_body() -> ApiError:

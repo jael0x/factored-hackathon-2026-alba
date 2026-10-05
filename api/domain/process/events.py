@@ -3,7 +3,16 @@ from types import MappingProxyType
 from typing import NewType
 from uuid import UUID
 
-from api.contract_models import Actor, EventName, PolicyVersion, ProcessKey, ProcessState, ProductKey, TemplateId
+from api.contract_models import (
+    Actor,
+    DecidedBy,
+    EventName,
+    PolicyVersion,
+    ProcessKey,
+    ProcessState,
+    ProductKey,
+    TemplateId,
+)
 
 MESSAGE_RECEIVED: EventName = "conversation.message_received"
 TURN_CLASSIFIED: EventName = "conversation.turn_classified"
@@ -15,6 +24,7 @@ PREQUALIFICATION_DECIDED: EventName = "prequalification.decided"
 PROCESS_STARTED: EventName = "process.started"
 PROCESS_STATE_CHANGED: EventName = "process.state_changed"
 PROCESS_ENDED: EventName = "process.ended"
+APPEAL_REQUESTED: EventName = "conversation.appeal_requested"
 
 CUSTOMER_ACTOR: Actor = "customer"
 CONSULTANT_ACTOR: Actor = "consultant"
@@ -34,6 +44,7 @@ EVENT_ACTOR: Mapping[EventName, Actor] = MappingProxyType(
         PROCESS_STARTED: SYSTEM_ACTOR,
         PROCESS_STATE_CHANGED: SYSTEM_ACTOR,
         PROCESS_ENDED: SYSTEM_ACTOR,
+        APPEAL_REQUESTED: CUSTOMER_ACTOR,
     }
 )
 
@@ -68,12 +79,18 @@ def consultant_close_key(process_id: UUID) -> ActionKey:
     return ActionKey(f"consultant_close:{process_id}")
 
 
-def decision_key(process_id: UUID) -> ActionKey:
-    return ActionKey(f"decision:{process_id}")
+# A case decided by the policy and appealed is decided again by a consultant (D25): one certificate per decider.
+def decision_key(process_id: UUID, decided_by: DecidedBy) -> ActionKey:
+    return ActionKey(f"decision:{process_id}:{decided_by}")
 
 
-def end_key(process_id: UUID) -> ActionKey:
-    return ActionKey(f"end:{process_id}")
+def appeal_key(process_id: UUID) -> ActionKey:
+    return ActionKey(f"appeal:{process_id}")
+
+
+# An appealed case ends twice, so each end is keyed by the certificate that triggered it (D25).
+def end_key(process_id: UUID, triggered_by_event_id: UUID) -> ActionKey:
+    return ActionKey(f"end:{process_id}:{triggered_by_event_id}")
 
 
 def event_key(action_key: ActionKey, event_name: EventName) -> str:

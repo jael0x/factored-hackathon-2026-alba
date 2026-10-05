@@ -72,6 +72,23 @@ class PostgresEventLog:
             raise LookupError(f"event {event_id} does not exist")
         return EventRow(*row)
 
+    # A message names its case, or, for a start, the case its process.start opened (D24).
+    def process_named_by(self, event_id: UUID) -> UUID | None:
+        row = self._conn.execute(
+            """
+            SELECT process_id FROM (
+                SELECT process_id, 0 AS named_by_cause, seq FROM events WHERE id = %(event)s
+                UNION ALL
+                SELECT process_id, 1, seq FROM events WHERE caused_by_event_id = %(event)s
+            ) named
+            WHERE process_id IS NOT NULL
+            ORDER BY named_by_cause, seq
+            LIMIT 1
+            """,
+            {"event": event_id},
+        ).fetchone()
+        return row[0] if row else None
+
     def earlier(self, process_id: UUID, before_seq: int) -> list[EventRow]:
         rows = self._conn.execute(
             f"SELECT {EVENT_COLUMNS} FROM events WHERE process_id = %s AND seq < %s ORDER BY seq",

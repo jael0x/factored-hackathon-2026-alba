@@ -3,12 +3,34 @@ Feature: Pre-qualification consent
   I want to be asked before the bank checks whether I pre-qualify
   So that nothing is decided on my data until I agree
 
-  Scenario: Naming a product gets a consent question before any decision
-    Given Juan Alberto Romero González is signed in with no open case
-    When Juan writes "quiero una tarjeta de crédito"
-    Then the assistant asks whether to start the pre-qualification for a credit card
-    And no certificate is shown
-    And his case stays with the assistant
+  A case starts from a product on the home, and its dialog is the consent (PLAN.md D24). A consent question in
+  the thread comes only when a message switches the case to the other product. Scenarios that begin with no case
+  describe the engine; the screen reaches them only inside a case.
+
+  Scenario: Choosing a product on the home asks for consent in a dialog
+    Given Juan Alberto Romero González is on his home page with no case for a credit card
+    When Juan chooses "Tarjeta de crédito" under "Preguntar por"
+    Then a dialog says Alba will check whether he pre-qualifies for a credit card under the bank's policy
+    And the dialog says the check is a simulation that opens no product
+    And no case opens until Juan presses "Empezar"
+
+  Scenario Outline: Starting from the dialog decides without asking again
+    Given Juan Alberto Romero González is on his home page in <language> with no case for a credit card
+    When Juan chooses "<row>" and presses "<begin>" in the dialog
+    Then his message "<message>" opens his case
+    And Juan sees his certificate for a credit card in <language>
+    And the assistant does not ask whether to start the pre-qualification
+
+    Examples:
+      | language   | row                | begin   | message                       |
+      | Spanish    | Tarjeta de crédito | Empezar | Quiero una tarjeta de crédito |
+      | Portuguese | Cartão de crédito  | Começar | Quero um cartão de crédito    |
+
+  Scenario: Cancelling the dialog opens no case
+    Given the dialog for a credit card is open on Juan's home page
+    When Juan presses "Cancelar"
+    Then the dialog closes
+    And Juan has no case for a credit card
 
   Scenario: Confirming starts the pre-qualification
     Given the assistant asked Juan whether to start the pre-qualification for a credit card

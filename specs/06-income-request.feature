@@ -3,10 +3,12 @@ Feature: Income request
   I want the assistant to ask for my monthly income
   So that my request can be decided without waiting for a person
 
+  A case starts from a product on the home (PLAN.md D24). The scenario that begins with no case describes the
+  engine; the screen reaches it only inside a case.
+
   Scenario: A customer with no income on file is asked for it
     Given Juliana Castro Gómez has no income on file and a credit score of 714
-    And the assistant asked Juliana whether to start the pre-qualification for a credit card
-    When Juliana writes "sí"
+    When Juliana starts a credit card request from her home
     Then the assistant asks for her monthly income
     And no certificate is shown
     And her case stays with the assistant

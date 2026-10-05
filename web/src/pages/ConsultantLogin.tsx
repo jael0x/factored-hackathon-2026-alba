@@ -88,6 +88,7 @@ export function ConsultantLogin() {
           { label: copy.email, value: identity.email },
           { label: copy.employeeCode, value: identity.employeeCode },
         ]}
+        demoMailbox={(identity) => ({ kind: "sentTo", address: identity.email })}
         requestCode={requestCode}
         openSession={openSession}
       >

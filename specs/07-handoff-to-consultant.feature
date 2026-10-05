@@ -31,9 +31,9 @@ Feature: Handoff to a consultant
     And the assistant does not reply to "sí"
 
   Scenario Outline: A request the assistant should not handle goes to a person
-    Given Juan Alberto Romero González is signed in with no open case
-    When Juan writes "<message>"
-    Then his case enters the review queue with reason "<reason>"
+    Given Juliana Castro Gómez was asked for her monthly income in her credit card case
+    When Juliana writes "<message>" in that case
+    Then her case enters the review queue with reason "<reason>"
     And no certificate is shown
 
     Examples:
@@ -44,10 +44,10 @@ Feature: Handoff to a consultant
       | I want a credit card           | language_unsupported     |
 
   Scenario: A message in another language that names no product is not asked which product
-    Given Juan Alberto Romero González is signed in with no open case
-    When Juan writes "I earn 3,000 a month"
-    Then his case enters the review queue with reason "language_unsupported"
-    And the assistant does not ask which product he wants
+    Given Juliana Castro Gómez was asked for her monthly income in her credit card case
+    When Juliana writes "I earn 3,000 a month" in that case
+    Then her case enters the review queue with reason "language_unsupported"
+    And the assistant does not ask which product she wants
 
   Scenario: A reply that states an outcome is withheld
     Given the assistant drafts a reply to Juan that says he "precalifica"

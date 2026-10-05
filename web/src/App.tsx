@@ -2,11 +2,12 @@ import { Navigate, Route, Routes } from "react-router";
 
 import { Aurora } from "./components/Aurora";
 import { RequireSession } from "./components/RequireSession";
+import { Case } from "./pages/Case";
 import { ConsultantHome } from "./pages/ConsultantHome";
 import { ConsultantLogin } from "./pages/ConsultantLogin";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
-import { HOME_PATH, LOGIN_PATH } from "./routes";
+import { CASE_PATH, HOME_PATH, LOGIN_PATH } from "./routes";
 
 export function App() {
   return (
@@ -20,6 +21,14 @@ export function App() {
           element={
             <RequireSession role="customer">
               <Home />
+            </RequireSession>
+          }
+        />
+        <Route
+          path={`${CASE_PATH}/:processId?`}
+          element={
+            <RequireSession role="customer">
+              <Case />
             </RequireSession>
           }
         />

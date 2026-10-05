@@ -97,3 +97,10 @@ class PostgresCommands:
     def cycle_settled(self, root_event_id: UUID) -> bool:
         row = self._conn.execute(CYCLE_SETTLED, {"root": root_event_id, "pending_status": PENDING}).fetchone()
         return row is not None and row[0] is True
+
+    def failed_for(self, triggered_by_event_id: UUID) -> bool:
+        row = self._conn.execute(
+            "SELECT EXISTS (SELECT 1 FROM commands WHERE triggered_by_event_id = %s AND status = %s)",
+            (triggered_by_event_id, FAILED),
+        ).fetchone()
+        return row is not None and row[0] is True

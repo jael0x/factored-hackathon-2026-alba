@@ -23,7 +23,13 @@ from api.domain.policy.templates import (
 )
 
 AS_OF = date(2026, 6, 17)
-TEMPLATES: tuple[TemplateId, ...] = ("confirm_prequalify", "which_product", "needs_income", "refer_notice")
+TEMPLATES: tuple[TemplateId, ...] = (
+    "confirm_prequalify",
+    "which_product",
+    "needs_income",
+    "refer_notice",
+    "product_case_open",
+)
 BOTH_LOCALES: tuple[Locale, ...] = ("es", "pt")
 CLOSES: tuple[CloseOutcome, ...] = ("PREQUALIFIED", "NOT_PREQUALIFIED")
 
@@ -72,6 +78,10 @@ def test_every_notice_reads_as_written_for_a_card() -> None:
         "avisaremos por aquí cuando tenga una respuesta.",
         ("refer_notice", "pt"): "Uma pessoa do banco vai analisar sua solicitação de um cartão de crédito. Avisaremos "
         "por aqui quando houver uma resposta.",
+        ("product_case_open", "es"): "Ya tienes una conversación abierta sobre una tarjeta de crédito. Ábrela desde el "
+        "inicio para seguir con ella.",
+        ("product_case_open", "pt"): "Você já tem uma conversa aberta sobre um cartão de crédito. Abra-a pelo início "
+        "para continuar.",
     }
 
 
@@ -93,7 +103,7 @@ def test_the_product_question_is_the_same_whatever_product_is_known(product: Pro
     )
 
 
-@pytest.mark.parametrize("template_id", ["confirm_prequalify", "needs_income", "refer_notice"])
+@pytest.mark.parametrize("template_id", ["confirm_prequalify", "needs_income", "refer_notice", "product_case_open"])
 def test_a_notice_that_names_the_product_refuses_to_render_without_one(template_id: TemplateId) -> None:
     with pytest.raises(MissingProduct, match=f"{template_id} names the product, and none was given"):
         render_notice(template_id, "es", None)

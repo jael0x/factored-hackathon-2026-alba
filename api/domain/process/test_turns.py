@@ -14,7 +14,7 @@ def sent(template_id: TemplateId) -> StoredEvent:
 
 
 def shown(intent: Intent, product: ProductKey | None = None, language: TurnLanguage = "es") -> StoredEvent:
-    return ShownTurn(uuid4(), "es", intent, product, language, None, None, 0, False, "")
+    return ShownTurn(uuid4(), "es", intent, product, language, None, None, 0, False, "", None)
 
 
 def analysis(outcome: Outcome, product: ProductKey = "credit_card") -> StoredEvent:
@@ -31,6 +31,21 @@ def test_the_product_the_model_read_wins_over_the_stored_one() -> None:
 
 def test_a_turn_with_no_product_takes_the_stored_one() -> None:
     assert stamp_turn([], None, "credit_card").product == "credit_card"
+
+
+def test_a_turn_naming_a_product_with_its_own_open_case_keeps_the_case_and_names_the_other() -> None:
+    stamp = stamp_turn([], "personal_loan", "credit_card", frozenset({"personal_loan"}))
+    assert (stamp.product, stamp.open_case_product) == ("credit_card", "personal_loan")
+
+
+def test_a_turn_naming_the_case_product_is_no_clash_even_when_another_case_holds_it() -> None:
+    stamp = stamp_turn([], "credit_card", "credit_card", frozenset({"credit_card"}))
+    assert (stamp.product, stamp.open_case_product) == ("credit_card", None)
+
+
+def test_a_turn_naming_a_product_with_no_open_case_switches_the_case_to_it() -> None:
+    stamp = stamp_turn([], "personal_loan", "credit_card", frozenset())
+    assert (stamp.product, stamp.open_case_product) == ("personal_loan", None)
 
 
 def test_the_which_product_template_and_a_shown_clarification_each_count_as_an_ask() -> None:

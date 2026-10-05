@@ -46,7 +46,7 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       MAIL_FROM: "Alba <no-reply@alba.local>"
-      LLM_MODEL: gpt-6-luna
+      LLM_MODEL: ${LLM_MODEL:-b0-keywords}  # PLAN.md D23: the keyword baseline until an OPENAI_API_KEY exists
       WATCHFILES_FORCE_POLLING: "true"
     ports:
       - "8000:8000"
@@ -70,6 +70,8 @@ services:
       dockerfile: docker/web.Dockerfile
     environment:
       API_PROXY_TARGET: http://api:8000
+      MAILPIT_PROXY_TARGET: http://mailpit:8025
+      DEMO_LOGIN: "1"
       VITE_USE_POLLING: "1"
     ports:
       - "5173:5173"

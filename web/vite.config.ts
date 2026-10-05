@@ -3,6 +3,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 const proxyTarget = process.env.API_PROXY_TARGET ?? "http://localhost:8000";
+// The local mail catcher, read by the demo login to fill the code (PLAN.md D25), and reachable only with the demo on.
+const mailpitTarget = process.env.MAILPIT_PROXY_TARGET ?? "http://localhost:8025";
+const demoLogin = process.env.DEMO_LOGIN === "1";
 const usePolling = process.env.VITE_USE_POLLING === "1";
 
 export default defineConfig({
@@ -20,6 +23,13 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
+      ...(demoLogin && {
+        "/mailpit": {
+          target: mailpitTarget,
+          changeOrigin: true,
+          rewrite: (path: string) => path.replace(/^\/mailpit/, ""),
+        },
+      }),
     },
   },
 });

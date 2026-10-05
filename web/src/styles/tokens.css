@@ -39,6 +39,8 @@
   --tone-amber: #7a5d12;
   --tone-slate: #34506b;
   --tone-ink: #1c1f2a;
+  --tone-green-hero: #a8dcc0;
+  --tone-stop-hero: #f2b8ac;
 
   --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;

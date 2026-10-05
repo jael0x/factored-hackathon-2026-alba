@@ -59,6 +59,7 @@ NEEDS_INCOME: TemplateId = "needs_income"
 REFER_NOTICE: TemplateId = "refer_notice"
 WHICH_PRODUCT: TemplateId = "which_product"
 CONFIRM_PREQUALIFY_TEMPLATE: TemplateId = "confirm_prequalify"
+PRODUCT_CASE_OPEN: TemplateId = "product_case_open"
 
 DECIDED_BY_POLICY: DecidedBy = "policy"
 DECIDED_BY_CONSULTANT: DecidedBy = "consultant"
@@ -72,6 +73,7 @@ class NoPayload:
 @dataclass(frozen=True)
 class StartPayload:
     locale: Locale
+    product: ProductKey
 
 
 @dataclass(frozen=True)
@@ -117,8 +119,8 @@ GENERATE_COMMAND = Command(CONVERSATION_GENERATE, NoPayload())
 SHOW_REPLY_COMMAND = Command(CONVERSATION_SHOW_REPLY, NoPayload())
 
 
-def start_process(locale: Locale) -> Command:
-    return Command(PROCESS_START, StartPayload(locale))
+def start_process(locale: Locale, product: ProductKey) -> Command:
+    return Command(PROCESS_START, StartPayload(locale, product))
 
 
 def send_template(template_id: TemplateId) -> Command:
@@ -148,7 +150,7 @@ def command_payload(payload: CommandPayload) -> Payload:
         case NoPayload():
             return {}
         case StartPayload():
-            return {"locale": payload.locale}
+            return {"locale": payload.locale, "product": payload.product}
         case TemplatePayload():
             return {"template_id": payload.template_id}
         case PolicyRunPayload():
@@ -178,7 +180,10 @@ def parse_payload(name: CommandName, payload: Mapping[str, object]) -> CommandPa
             raise ValueError(f"{name} takes no payload, got {sorted(payload)}")
         return NoPayload()
     if name == PROCESS_START:
-        return StartPayload(parse_member(field(payload, "locale"), LOCALES, "locale"))
+        return StartPayload(
+            parse_member(field(payload, "locale"), LOCALES, "locale"),
+            parse_member(field(payload, "product"), PRODUCT_KEYS, "product"),
+        )
     if name == TEMPLATE_SEND:
         return TemplatePayload(parse_member(field(payload, "template_id"), TEMPLATE_IDS, "template_id"))
     if name == POLICY_RUN:

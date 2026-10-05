@@ -13,6 +13,7 @@ from api.domain.process.lifecycle import (
     MessageStamp,
     ProcessRow,
     check_move,
+    check_reopen,
     parse_state,
     stamp_message,
 )
@@ -43,6 +44,18 @@ def test_every_other_move_is_refused(move: tuple[ProcessState, ProcessState, End
 def test_the_table_covers_every_pair_once() -> None:
     assert len(EVERY_MOVE) == 27
     assert len(LEGAL_MOVES) == 5
+
+
+def test_an_ended_case_reopens_only_through_the_reopen_move() -> None:
+    check_reopen(ENDED)
+    with pytest.raises(IllegalTransition, match="from ended to human_active with end_reason None"):
+        check_move(ENDED, HUMAN_ACTIVE, None)
+
+
+@pytest.mark.parametrize("state", [AI_ACTIVE, HUMAN_ACTIVE])
+def test_only_an_ended_case_can_be_reopened(state: ProcessState) -> None:
+    with pytest.raises(IllegalTransition, match=f"from {state} to human_active with end_reason None"):
+        check_reopen(state)
 
 
 def test_a_message_with_no_open_case_has_no_process_and_the_birth_state() -> None:
