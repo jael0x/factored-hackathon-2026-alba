@@ -1,9 +1,17 @@
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 
+import { api } from "../api/client";
+import { useLoad } from "../api/useLoad";
 import { useMessages } from "../i18n/messages";
+import { readDemoCode } from "../session/demoCode";
 import type { SessionAnswer } from "../session/login";
 import { startSession } from "../session/session";
+
+const loadConfig = () => api.GET("/config");
+
+// The mail catcher and the browser share one clock in the local stack; the slack covers rounding only.
+const DEMO_CLOCK_SLACK_MS = 2000;
 
 export type CodeSent = { expiresInSeconds: number; resent: boolean };
 
@@ -37,7 +45,27 @@ export function CodeStep({
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<CodeFailure>("none");
+  const [demoFilled, setDemoFilled] = useState(false);
   const t = useMessages();
+  const config = useLoad(loadConfig);
+  const demo = config.status === "ready" && config.data.demo_login;
+
+  // With DEMO_LOGIN on, the code is read back from the local mail catcher and filled in (PLAN.md D25).
+  useEffect(() => {
+    if (!demo) {
+      return;
+    }
+    let cancelled = false;
+    void readDemoCode(Date.now() - DEMO_CLOCK_SLACK_MS).then((found) => {
+      if (!cancelled && found !== null) {
+        setCode(found);
+        setDemoFilled(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [demo, sent]);
   const minutes = Math.round(sent.expiresInSeconds / 60);
 
   const submit = async (event: FormEvent) => {
@@ -94,6 +122,7 @@ export function CodeStep({
             onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
           />
           <p className="caption muted field-note">{t.code.validFor(minutes)}</p>
+          {demoFilled && <p className="caption muted field-note">{t.code.demoFilled}</p>}
         </div>
         {failure !== "none" && (
           <p className="error-line" role="alert">
