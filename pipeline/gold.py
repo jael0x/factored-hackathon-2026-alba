@@ -7,6 +7,7 @@ from pipeline.constants import (
     COUNTRY_ARGENTINA,
     COUNTRY_COLOMBIA,
     COUNTRY_MEXICO,
+    INCOME_CURRENCY_BY_COUNTRY,
     PRODUCT_STATUS_ACTIVE,
     PRODUCT_TYPE_CREDIT_CARD,
     PRODUCT_TYPE_MORTGAGE,
@@ -15,7 +16,24 @@ from pipeline.constants import (
 )
 
 
+def require_as_of_rates(conn: psycopg.Connection) -> None:
+    rows = conn.execute(
+        """
+        SELECT source_currency FROM daily_exchange_rates
+        WHERE date = %s::date AND target_currency = %s AND exchange_rate > 0
+        """,
+        (AS_OF_DATE, TARGET_CURRENCY_USD),
+    ).fetchall()
+    missing = sorted(set(INCOME_CURRENCY_BY_COUNTRY.values()) - {row[0] for row in rows})
+    if missing:
+        raise SystemExit(
+            f"Quality check failed: no positive rate to {TARGET_CURRENCY_USD} on {AS_OF_DATE} for {', '.join(missing)}"
+        )
+    print(f"check rates ok as_of={AS_OF_DATE}")
+
+
 def rebuild_gold(conn: psycopg.Connection, batch_id: UUID) -> None:
+    require_as_of_rates(conn)
     conn.execute("TRUNCATE customer_credit_profile")
     conn.execute(
         """

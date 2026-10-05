@@ -1,6 +1,7 @@
 import hashlib
 import os
 import subprocess
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +14,10 @@ class BronzeFile:
     path: Path
     bytes: int
     sha256: str
+
+
+type CopyObject = Callable[[str, Path], None]
+type RunCommand = Callable[[Sequence[str], str], None]
 
 
 def raw_dir() -> Path:
@@ -52,7 +57,20 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def download_if_missing(key: str, dest: Path) -> None:
+def run_command(argv: Sequence[str], failure: str) -> None:
+    result = subprocess.run(list(argv), capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise SystemExit(f"{failure}: {detail}")
+
+
+def aws_s3_copy(key: str, dest: Path, run: RunCommand = run_command) -> None:
+    region = os.environ["AWS_DEFAULT_REGION"]
+    command = ["aws", "s3", "cp", f"s3://{bucket_name()}/{key}", str(dest), "--region", region]
+    run(command, f"aws s3 cp failed for key={key}")
+
+
+def download_if_missing(key: str, dest: Path, copy: CopyObject) -> None:
     if dest.is_file() and dest.stat().st_size > 0:
         return
     if not aws_credentials_present():
@@ -61,45 +79,21 @@ def download_if_missing(key: str, dest: Path) -> None:
             "Need AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, S3_BUCKET."
         )
     dest.parent.mkdir(parents=True, exist_ok=True)
-    uri = f"s3://{bucket_name()}/{key}"
     print(f"Downloading {key} ...")
-    result = subprocess.run(
-        [
-            "aws",
-            "s3",
-            "cp",
-            uri,
-            str(dest),
-            "--region",
-            os.environ["AWS_DEFAULT_REGION"],
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout or "").strip()
-        raise SystemExit(f"aws s3 cp failed for key={key}: {detail}")
+    copy(key, dest)
 
 
-def ensure_bronze() -> list[BronzeFile]:
-    root = raw_dir()
+def fetch_bronze_file(key: str, root: Path, copy: CopyObject) -> BronzeFile:
+    name = Path(key).name
+    dest = root / name
+    download_if_missing(key, dest, copy)
+    if not dest.is_file() or dest.stat().st_size == 0:
+        raise SystemExit(f"Bronze file missing or empty after download: {dest}")
+    item = BronzeFile(relative_name=name, path=dest, bytes=dest.stat().st_size, sha256=file_sha256(dest))
+    print(f"bronze ok path={name} bytes={item.bytes} sha256={item.sha256[:12]}...")
+    return item
+
+
+def ensure_bronze(root: Path, copy: CopyObject) -> list[BronzeFile]:
     root.mkdir(parents=True, exist_ok=True)
-    files: list[BronzeFile] = []
-    for key in S3_KEYS:
-        name = Path(key).name
-        dest = root / name
-        download_if_missing(key, dest)
-        if not dest.is_file() or dest.stat().st_size == 0:
-            raise SystemExit(f"Bronze file missing or empty after download: {dest}")
-        digest = file_sha256(dest)
-        files.append(
-            BronzeFile(
-                relative_name=name,
-                path=dest,
-                bytes=dest.stat().st_size,
-                sha256=digest,
-            )
-        )
-        print(f"bronze ok path={name} bytes={files[-1].bytes} sha256={digest[:12]}...")
-    return files
+    return [fetch_bronze_file(key, root, copy) for key in S3_KEYS]

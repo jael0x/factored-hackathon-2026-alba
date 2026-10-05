@@ -11,6 +11,7 @@ from pipeline.constants import (
     EXCHANGE_COLUMNS,
     PRODUCTS_COLUMNS,
 )
+from pipeline.csv_header import require_columns
 
 TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "customers.csv": CUSTOMERS_COLUMNS,
@@ -56,11 +57,7 @@ def load_csv_table(
 ) -> None:
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
-        if reader.fieldnames is None:
-            raise SystemExit(f"CSV has no header: {path}")
-        missing = [col for col in columns if col not in reader.fieldnames]
-        if missing:
-            raise SystemExit(f"CSV {path.name} missing columns {missing}. Found={list(reader.fieldnames)}")
+        require_columns(path, reader.fieldnames, columns)
         col_list = sql.SQL(", ").join(sql.Identifier(c) for c in columns)
         copy_sql = sql.SQL("COPY {} ({}) FROM STDIN").format(
             sql.Identifier(table),

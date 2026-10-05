@@ -292,3 +292,41 @@ def test_a_product_without_a_balance_is_rejected(migrated_db: str) -> None:
             VALUES ('PRD-4', 'CLI-TEST-JULI', 'Cuenta Ahorro', '4410010', 'USD', NULL, 'Active')
             """
         )
+
+
+@pytest.mark.parametrize(
+    ("rates", "missing"),
+    [
+        ("2026-06-17,MXN,USD,0.058641\n2026-06-17,COP,USD,0.000248\n2026-06-16,ARS,USD,0.002873\n", "ARS"),
+        ("2026-06-17,MXN,USD,0.058641\n2026-06-17,COP,USD,0\n2026-06-17,ARS,USD,0.002873\n", "COP"),
+        ("2026-06-17,MXN,COP,236.4\n2026-06-17,COP,USD,0.000248\n2026-06-17,ARS,USD,-0.002873\n", "ARS, MXN"),
+    ],
+)
+def test_a_missing_rate_for_the_as_of_date_stops_the_load_before_gold(
+    rates: str,
+    missing: str,
+    migrated_db: str,
+    testdata_dir: Path,
+    tmp_path: Path,
+) -> None:
+    names = ("customers.csv", "products.csv", "daily_exchange_rates.csv", "service_agents.csv")
+    for name in names:
+        (tmp_path / name).write_bytes((testdata_dir / name).read_bytes())
+    (tmp_path / "daily_exchange_rates.csv").write_text(
+        "date,source_currency,target_currency,exchange_rate\n" + rates, encoding="utf-8"
+    )
+    expected = f"Quality check failed: no positive rate to USD on 2026-06-17 for {missing}"
+    loaded_batch = new_batch_id()
+    with psycopg.connect(migrated_db) as conn:
+        with conn.transaction():
+            reload_silver(conn, [_bronze(testdata_dir / name) for name in names])
+            rebuild_gold(conn, loaded_batch)
+        with pytest.raises(SystemExit, match=f"^{re.escape(expected)}$"), conn.transaction():
+            reload_silver(conn, [_bronze(tmp_path / name) for name in names])
+            rebuild_gold(conn, new_batch_id())
+        gold = conn.execute("SELECT customer_id, batch_id FROM customer_credit_profile ORDER BY customer_id").fetchall()
+    assert gold == [
+        ("CLI-TEST-JUAN", loaded_batch),
+        ("CLI-TEST-JULI", loaded_batch),
+        ("CLI-TEST-MARI", loaded_batch),
+    ]

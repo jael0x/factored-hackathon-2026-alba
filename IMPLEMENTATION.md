@@ -31,23 +31,26 @@ The full load on Sep 29 read 150,000 customers, 400,000 products, and 1,200 cons
 
 | Scenario | Test |
 |---|---|
-| The first start copies only the four source files | None. The key list is a constant in `pipeline/constants.py` |
-| Files already on disk are not copied again | None |
+| The first start copies only the four source files | `test_the_first_start_copies_only_the_four_source_files` |
+| Files already on disk are not copied again | `test_files_already_on_disk_are_not_copied_again` |
 | Unchanged files are not loaded into the database again | `test_silver_gold_and_idempotent_batch` |
 | A changed file is loaded again | `test_changed_file_is_reloaded` |
-| A row count that differs from the snapshot stops the load | `test_assert_expected_row_counts_fails_on_mismatch` (unit) |
+| A row count that differs from the snapshot stops the load | `test_one_row_fewer_than_the_snapshot_stops_the_load`, one case per file (unit) |
+| A source file with no expected row count stops the load | `test_a_bronze_file_with_no_expected_row_count_stops_the_load` |
 | A product with no matching customer stops the load | `test_orphan_product_fails_quality_check` |
+| A missing exchange rate for the snapshot date stops the load | `test_a_missing_rate_for_the_as_of_date_stops_the_load_before_gold` |
 | Missing keys and missing files stop the load with a named error | `test_download_fails_loud_without_aws_and_file` |
 | Every customer gets one credit profile | `test_silver_gold_and_idempotent_batch` (3-row fixture) |
 | Missing scores and incomes stay empty | `test_silver_gold_and_idempotent_batch` (Juliana's row) |
-| The load report counts the customers without a score | `test_report_customer_nulls` |
+| A missing balance loads as zero | `test_an_empty_balance_loads_as_zero` |
+| The load report counts the customers without a score | `test_the_load_report_counts_the_customers_without_a_score` |
+| The load report counts the active products by type | `test_only_active_products_are_counted_by_type_in_name_order`, `test_the_load_report_prints_each_count` |
+| A report column missing from its file stops the load | `test_a_report_column_missing_from_its_file_stops_the_load` |
 
 "The application does not start" is carried by `compose.yaml`: `api` waits for `load` to finish successfully.
 
-Gaps against the contract in what is built (item M0):
+The load gaps of item M0 closed Oct 5: `daily_exchange_rates.csv` has its snapshot size, the report counts active products by type, and the gold build needs the as-of rates (see M0).
 
-- `daily_exchange_rates.csv` has no expected row count. The contract asks for all four files, and its snapshot size is not written in the contract.
-- The load report prints rows and empty scores and incomes, but not active products by type (**Data: what is touched and what is not**).
 - No lint or type-check config existed yet (I4, done Oct 4).
 - Customer login built on Sep 29 and refined on Sep 30 (the two-column layout, the demo popover), one C4 component at a time: the screen (W2), the routes, and the engine. A browser mock (MSW) was tried and removed on Sep 30; screens are built against the local stack. `002_login.sql` adds `customers.email` and hashed codes; `mailpit` receives every code. `api/tests/test_login_integration.py` covers the `01` scenarios against Postgres, and `api/tests/test_code_rules_integration.py` runs the code rules (expiry, five wrong tries, replacement, one use) for both roles.
 - Consultant login built on Sep 30 the same way (D18): `/consultant/login` and a `/consultant` greeting (W8), `POST /consultant/session/code`, `POST /consultant/session`, and `GET /consultant/me`. On the layers of 537e417: `api/domain/consultants` (the login key and the `Active` rule), the consultant use cases in `api/application/session` on the same code steps as the customer's, `api/infrastructure/db/consultants.py`, and `api/presentation/http/routes/consultants.py`. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty`. `specs/11-consultant-login.feature` holds its scenarios, because `01` had reached 15; `api/tests/test_consultant_login_integration.py` covers them.
@@ -170,11 +173,16 @@ Gaps against the contract in what is built (item M0):
 
   This is the contract's oracle test.
   - Depends on E1 to E8. D12 closed Oct 2.
+  - Oct 5: Juan, Juliana (with her stated income), Alicia (to `human_active`), and Mariana run through HTTP and the worker in `api/tests/test_chat_integration.py`. Alicia's consultant close waits for the consultant half of E8.
 
 ## Model and eval (M)
 
-  - Oct 5: Juan, Juliana (with her stated income), Alicia (to `human_active`), and Mariana run through HTTP and the worker in `api/tests/test_chat_integration.py`. Alicia's consultant close waits for the consultant half of E8.
-- [ ] **M0. Load gaps.** Measure the rows of `daily_exchange_rates.csv`, write the count into the contract, add it to `EXPECTED_ROW_COUNTS`. Add active products by type to the load report. Add tests for the two `10` scenarios that have none. No dependency.
+- [x] **M0. Load gaps.** Measure the rows of `daily_exchange_rates.csv`, write the count into the contract, add it to `EXPECTED_ROW_COUNTS`. Add active products by type to the load report. Add tests for the two `10` scenarios that have none. No dependency.
+  - Done Oct 5. The measured size is in `ARCHITECTURE.md`, "Data: what is touched and what is not". A source file with no expected size now stops the load, so a fifth file cannot skip the count, and `test_constants_unit.py` holds the source keys, sizes, tables, and columns to one list of names.
+  - `pipeline/report.py` writes the report to the `load` log on every start, from the CSVs: the null counts moved there from `checks.py`, plus the active products of each `product_type` as stored, in name order. A report column missing from its file stops the load through `require_columns` (`pipeline/csv_header.py`), shared with silver; the old count read a missing column as empty.
+  - `rebuild_gold` first requires a positive rate to USD on the as-of date for every income currency; without it `income_usd` was empty for every income and nothing failed.
+  - `ensure_bronze` takes the raw folder and the copier, so the two copy scenarios run without AWS; `aws_s3_copy` and `run_command` are tested with a recorded runner and a real child process.
+  - Sabotage runs: the exchange size dropped, the size check back to the expected files only, a non-active product counted, a file on disk copied again, the report without `require_columns`, and the rate check removed; each turns its exact tests red.
 - [ ] **M1. R8 and R9 against Postgres.** Confirm every oracle value in `ARCHITECTURE.md` from the loaded tables, and list the distinct `product_type` values. Feeds E1's fixture. No dependency.
 - [ ] **M2. R11 probe.** `gpt-6-luna` on a small dev set (never the held-out set):
   - latency, tokens, and cost per turn;

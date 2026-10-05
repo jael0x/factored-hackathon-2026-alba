@@ -1,0 +1,60 @@
+import csv
+from collections import Counter
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from pathlib import Path
+
+from pipeline.bronze import BronzeFile
+from pipeline.constants import PRODUCT_STATUS_ACTIVE
+from pipeline.csv_header import require_columns
+
+CUSTOMER_REPORT_COLUMNS = ("credit_score", "estimated_monthly_income")
+PRODUCT_REPORT_COLUMNS = ("product_type", "product_status")
+
+
+def read_csv_rows(path: Path, columns: Sequence[str]) -> Iterator[dict[str, str | None]]:
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        require_columns(path, reader.fieldnames, columns)
+        yield from reader
+
+
+def is_empty(value: str | None) -> bool:
+    return (value or "").strip() == ""
+
+
+def count_customer_nulls(rows: Iterable[Mapping[str, str | None]]) -> tuple[int, int, int]:
+    total = null_score = null_income = 0
+    for row in rows:
+        total += 1
+        null_score += is_empty(row["credit_score"])
+        null_income += is_empty(row["estimated_monthly_income"])
+    return total, null_score, null_income
+
+
+def report_customer_nulls(customers_path: Path) -> tuple[int, int, int]:
+    total, null_score, null_income = count_customer_nulls(read_csv_rows(customers_path, CUSTOMER_REPORT_COLUMNS))
+    print(f"check nulls customers total={total} null_score={null_score} null_income={null_income}")
+    return total, null_score, null_income
+
+
+def count_active_products_by_type(rows: Iterable[Mapping[str, str | None]]) -> dict[str, int]:
+    counts = Counter(
+        (row["product_type"] or "").strip()
+        for row in rows
+        if (row["product_status"] or "").strip() == PRODUCT_STATUS_ACTIVE
+    )
+    return dict(sorted(counts.items()))
+
+
+def report_active_products(products_path: Path) -> dict[str, int]:
+    counts = count_active_products_by_type(read_csv_rows(products_path, PRODUCT_REPORT_COLUMNS))
+    for product_type, count in counts.items():
+        print(f"report active products type={product_type} count={count}")
+    print(f"report active products total={sum(counts.values())}")
+    return counts
+
+
+def report_load(files: Sequence[BronzeFile]) -> None:
+    by_name = {item.relative_name: item for item in files}
+    report_customer_nulls(by_name["customers.csv"].path)
+    report_active_products(by_name["products.csv"].path)
