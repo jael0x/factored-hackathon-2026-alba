@@ -143,8 +143,6 @@
     .bubble { padding: 12px 16px; border-radius: var(--r-card); }
     .msg.me .bubble { border-bottom-right-radius: 6px; background: linear-gradient(var(--tint), var(--tint)), var(--glass); }
     .msg:not(.me) .bubble { border-bottom-left-radius: 6px; }
-    .tpl { display: block; border: 1px dashed var(--field-edge); border-radius: 12px; padding: 8px 12px; font-size: 13px; line-height: 19px; color: var(--muted); }
-    .hero .tpl { border-color: rgba(255, 255, 255, 0.4); color: var(--hero-muted); }
     .typing { display: inline-flex; align-items: center; gap: 10px; align-self: flex-start; padding: 10px 16px 10px 12px; border-radius: var(--r-pill); font-size: 14px; line-height: 20px; color: var(--muted); }
     .banner { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: var(--r-row); font-size: 15px; }
 
@@ -441,7 +439,7 @@
         <div class="msg me"><span class="who">Juan Alberto</span><div class="bubble glass">Quiero un crédito.</div></div>
         <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble glass">Puedo orientarte sobre una tarjeta de crédito o un préstamo personal. ¿Cuál de los dos?</div></div>
         <div class="msg me"><span class="who">Juan Alberto</span><div class="bubble glass">Una tarjeta de crédito.</div></div>
-        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid"><span class="tpl">Plantilla <code>confirm_prequalify</code>: pregunta si empezar la precalificación de una tarjeta de crédito. El texto todavía no está escrito.</span></div></div>
+        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid">¿Quieres que revise si precalificas para una tarjeta de crédito? Es una precalificación simulada: usa los datos que el banco ya tiene y no abre ningún producto. Responde sí o no.</div></div>
       </div>
     </div>
     <div class="composer"><div class="composer-in glass"><input aria-label="Mensaje" placeholder="Escribe tu mensaje" /><button class="send" aria-label="Enviar"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button></div></div>
@@ -457,7 +455,7 @@
     <div class="page chat">
       <div class="thread" aria-live="polite">
         <div class="msg me"><span class="who">Juan Alberto</span><div class="bubble glass">Quiero una tarjeta de crédito.</div></div>
-        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid"><span class="tpl">Plantilla <code>confirm_prequalify</code>: pregunta si empezar la precalificación de una tarjeta de crédito. El texto todavía no está escrito.</span></div></div>
+        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid">¿Quieres que revise si precalificas para una tarjeta de crédito? Es una precalificación simulada: usa los datos que el banco ya tiene y no abre ningún producto. Responde sí o no.</div></div>
         <div class="msg me"><span class="who">Juan Alberto</span><div class="bubble glass">Sí.</div></div>
         <div class="typing glass"><span class="orb live"></span>escribiendo…</div>
       </div>
@@ -475,12 +473,12 @@
     <div class="page chat">
       <div class="thread">
         <div class="msg me"><span class="who">Juan Alberto</span><div class="bubble glass">Quiero una tarjeta de crédito.</div></div>
-        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid"><span class="tpl">Plantilla <code>confirm_prequalify</code>. El texto todavía no está escrito.</span></div></div>
+        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid">¿Quieres que revise si precalificas para una tarjeta de crédito? Es una precalificación simulada: usa los datos que el banco ya tiene y no abre ningún producto. Responde sí o no.</div></div>
         <div class="msg me"><span class="who">Juan Alberto</span><div class="bubble glass">Sí.</div></div>
         <article class="hero cert t-green">
           <span class="tag t-green">Precalifica · simulado</span>
           <h2 class="title">Tarjeta de crédito</h2>
-          <p>Juan Alberto Romero González precalifica para una tarjeta nueva. Esto no abre la tarjeta ni mueve dinero.</p>
+          <p>Precalificas para una tarjeta de crédito. Es una precalificación simulada: no abre el producto ni mueve dinero.</p>
           <div class="hsec">
             <span class="kicker">Hechos usados</span>
             <div class="kv"><span>Score</span><span>812</span></div>
@@ -517,19 +515,18 @@
     <div class="page chat">
       <div class="thread">
         <div class="msg me"><span class="who">Juliana</span><div class="bubble glass">Quiero una tarjeta de crédito.</div></div>
-        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid"><span class="tpl">Plantilla <code>confirm_prequalify</code>. El texto todavía no está escrito.</span></div></div>
+        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid">¿Quieres que revise si precalificas para una tarjeta de crédito? Es una precalificación simulada: usa los datos que el banco ya tiene y no abre ningún producto. Responde sí o no.</div></div>
         <div class="msg me"><span class="who">Juliana</span><div class="bubble glass">Sí.</div></div>
-        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid"><span class="tpl">Plantilla <code>needs_income</code>: pide el ingreso mensual. El texto todavía no está escrito.</span></div></div>
+        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid">Para seguir con la precalificación para una tarjeta de crédito, necesito tu ingreso mensual en pesos. ¿Cuánto ganas al mes?</div></div>
         <div class="msg me"><span class="who">Juliana</span><div class="bubble glass">Gano 45,000 pesos al mes.</div></div>
         <article class="hero cert t-green">
           <span class="tag t-green">Precalifica · simulado</span>
           <h2 class="title">Tarjeta de crédito</h2>
-          <p><span class="tpl">Texto de la plantilla <code>es</code>, el mismo molde que la constancia de Juan.</span></p>
+          <p>Precalificas para una tarjeta de crédito. Es una precalificación simulada: no abre el producto ni mueve dinero.</p>
           <div class="hsec">
             <span class="kicker">Hechos usados</span>
             <div class="kv"><span>Score</span><span>714</span></div>
             <div class="kv"><span>Ingreso mensual, declarado</span><span>45,000 MXN</span></div>
-            <div class="kv"><span>Ingreso en USD</span><span>2,639 USD</span></div>
             <div class="kv"><span>Tipo de cambio</span><span>1 MXN = 0.058641 USD</span></div>
             <div class="kv"><span>Fecha del tipo de cambio</span><span>17 de junio de 2026</span></div>
             <div class="kv"><span>Tarjeta activa</span><span>Ninguna</span></div>
@@ -556,9 +553,9 @@
     <div class="page chat">
       <div class="thread">
         <div class="msg me"><span class="who">Alicia</span><div class="bubble glass">Quiero una tarjeta de crédito.</div></div>
-        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid"><span class="tpl">Plantilla <code>confirm_prequalify</code>. El texto todavía no está escrito.</span></div></div>
+        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid">¿Quieres que revise si precalificas para una tarjeta de crédito? Es una precalificación simulada: usa los datos que el banco ya tiene y no abre ningún producto. Responde sí o no.</div></div>
         <div class="msg me"><span class="who">Alicia</span><div class="bubble glass">Sí.</div></div>
-        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid"><span class="tpl">Plantilla <code>refer_notice</code>: avisa que una persona revisará el caso. No menciona el score ni dice si precalifica. El texto todavía no está escrito.</span></div></div>
+        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid">Una persona del banco va a revisar tu solicitud de una tarjeta de crédito. Te avisaremos por aquí cuando tenga una respuesta.</div></div>
         <div class="msg me"><span class="who">Alicia</span><div class="bubble glass">¿Ya revisaron mi caso?</div></div>
         <div class="banner solid"><span class="tag t-clay">En revisión</span><span>Este caso lo ve una persona.</span></div>
       </div>
@@ -576,12 +573,12 @@
     <div class="page chat">
       <div class="thread">
         <div class="msg me"><span class="who">Mariana</span><div class="bubble glass">Quiero un préstamo personal.</div></div>
-        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid"><span class="tpl">Plantilla <code>confirm_prequalify</code>. El texto todavía no está escrito.</span></div></div>
+        <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid">¿Quieres que revise si precalificas para un préstamo personal? Es una precalificación simulada: usa los datos que el banco ya tiene y no abre ningún producto. Responde sí o no.</div></div>
         <div class="msg me"><span class="who">Mariana</span><div class="bubble glass">Sí.</div></div>
         <article class="hero cert t-stop">
           <span class="tag t-stop">No precalifica · simulado</span>
           <h2 class="title">Préstamo personal</h2>
-          <p><span class="tpl">Texto de la plantilla <code>es</code>, el mismo molde que la constancia de Juan.</span></p>
+          <p>No precalificas para un préstamo personal por ahora. Es una precalificación simulada con los datos de tu expediente.</p>
           <div class="hsec">
             <span class="kicker">Hechos usados</span>
             <div class="kv"><span>Tarjeta de crédito</span><span><span aria-label="terminada en 5476">••••5476</span> · activa</span></div>
@@ -672,9 +669,9 @@
             <h2 class="heading">Conversación</h2>
             <div class="thread">
               <div class="msg me"><span class="who">Alicia</span><div class="bubble glass">Quiero una tarjeta de crédito.</div></div>
-              <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid"><span class="tpl">Plantilla <code>confirm_prequalify</code>.</span></div></div>
+              <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid">¿Quieres que revise si precalificas para una tarjeta de crédito? Es una precalificación simulada: usa los datos que el banco ya tiene y no abre ningún producto. Responde sí o no.</div></div>
               <div class="msg me"><span class="who">Alicia</span><div class="bubble glass">Sí.</div></div>
-              <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid"><span class="tpl">Plantilla <code>refer_notice</code>.</span></div></div>
+              <div class="msg"><span class="who"><span class="orb"></span>Alba</span><div class="bubble solid">Una persona del banco va a revisar tu solicitud de una tarjeta de crédito. Te avisaremos por aquí cuando tenga una respuesta.</div></div>
               <div class="msg me"><span class="who">Alicia</span><div class="bubble glass">¿Ya revisaron mi caso?</div></div>
             </div>
           </section>
@@ -710,7 +707,7 @@
     </dialog>
     <div class="note-src" hidden>
       <p>César no escribe en el hilo: no hay caja de respuesta ni campo de texto. Sus únicas acciones son precalificar o no; los dos botones pesan lo mismo y ninguno toma el foco.</p>
-      <p>Confirmar escribe <code>conversation.consultant_closed</code>. Una plantilla avisa a Alicia (texto por escribir) y el proceso termina. La política no vuelve a correr. Un segundo cierre se rechaza (<code>consultant_close:{process_id}</code>).</p>
+      <p>Confirmar escribe <code>conversation.consultant_closed</code>. Una plantilla avisa a Alicia que una persona revisó su solicitud y el proceso termina. La política no vuelve a correr. Un segundo cierre se rechaza (<code>consultant_close:{process_id}</code>).</p>
       <p>Qué elige César para Alicia no está fijado.</p>
     </div>
   </section>

@@ -1023,23 +1023,23 @@ spec('templates', 't-cert', {
   summary: 'The `constancia`, from the policy or from the consultant close.',
   fixed: [
     'Written to `prequalification.decided` with `locale`, `template_id`, `outcome`, `body`, `decided_by` (`policy` or `consultant`).',
-    'Income in local currency, with the USD equivalent and the exchange-rate date beside it. No limit amount, no rate.',
+    'One sentence from `api/domain/policy/templates.py`: the outcome for the product, and that the pre-qualification is simulated. Income, its USD equivalent, and the date are the `facts` shown beside it. No limit amount, no rate, no name.',
     'On the consultant path the row in `messages` has `author = template`. The model does not draft it.',
     'Only templates emit `precalifica`, `no precalifica`, `pré-qualificado`, or `não pré-qualifica`.',
   ],
-  open: [['Copy', 'The certificate sentences in the two locales, the consultant-path message, and the line that says the policy is synthetic.']],
+  open: [['New', 'A self-declared income has no USD equivalent: the profile carries no exchange rate (`DESIGN.md`, "Open").']],
   src: 'ARCHITECTURE.md, "Events", "Consultant close", "Auth and screens"',
 });
 spec('templates', 't-notices', {
-  name: 'Notices', tech: 'conversation.template_sent', status: 'partial',
+  name: 'Notices', tech: 'conversation.template_sent', status: 'defined',
   summary: '`confirm_prequalify`, `needs_income`, `which_product`, `refer_notice`. Non-terminal.',
   fixed: [
     '`confirm_prequalify` once the product is known: asks whether to start the pre-qualification. The policy waits for the answer.',
     '`needs_income` on `NEEDS_INFO`: asks for monthly income. The case stays `ai_active`.',
     '`which_product` when a stated income or a confirmation names no product. The policy waits.',
     '`refer_notice` on `REFER`: a person will review. No score, and no word on whether the customer pre-qualifies.',
+    'The sentences, in `es` and `pt`, are in `api/domain/policy/templates.py`. The three that follow a known product name it and refuse to render without one.',
   ],
-  open: [['Copy', 'The sentences for all four, in `es` and `pt`.']],
   src: 'ARCHITECTURE.md, "Process rules", "Commands", "The other three flows"',
 });
 spec('templates', 't-handoff', {
