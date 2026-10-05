@@ -1,12 +1,12 @@
 import logging
 from dataclasses import dataclass
 
-from api.application.cycle.context import Cycle
+from api.application.cycle.context import Cycle, case_behind, stored
 from api.application.cycle.handlers import handle
-from api.application.cycle.ports import ClaimedCommand, EventRow, Savepoint
+from api.application.cycle.ports import ClaimedCommand, Savepoint
 from api.application.processes import hand_off_process
 from api.domain.process.commands import MAX_ATTEMPTS
-from api.domain.process.lifecycle import AI_ACTIVE, CREDIT_PREQUALIFICATION, TOOL_FAILED, ProcessRow
+from api.domain.process.lifecycle import AI_ACTIVE, TOOL_FAILED
 from api.domain.process.new_events import Cause
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ def run_claimed(cycle: Cycle, claimed: ClaimedCommand, savepoint: Savepoint) -> 
 
 def hand_off_after_failure(cycle: Cycle, claimed: ClaimedCommand, savepoint: Savepoint) -> None:
     row = cycle.log.read(claimed.triggered_by_event_id)
-    process = case_behind(cycle, row)
+    process = case_behind(cycle, row, stored(row))
     if process is None or process.state != AI_ACTIVE:
         state = None if process is None else process.state
         logger.error("command %s failed for good and its case (%s) cannot go to a person", claimed.command_id, state)
@@ -63,9 +63,3 @@ def hand_off_after_failure(cycle: Cycle, claimed: ClaimedCommand, savepoint: Sav
         hand_off_process(
             cycle.events, cycle.processes, process.process_id, TOOL_FAILED, Cause(row.event_id, claimed.command_id)
         )
-
-
-def case_behind(cycle: Cycle, row: EventRow) -> ProcessRow | None:
-    if row.process_id is not None:
-        return cycle.case.read(row.process_id)
-    return cycle.processes.find_open(row.customer_id, CREDIT_PREQUALIFICATION)

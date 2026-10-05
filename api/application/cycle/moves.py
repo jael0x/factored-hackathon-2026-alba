@@ -8,7 +8,7 @@ from api.domain.process.stored_events import AnalysisCompleted, Prequalification
 
 def open_case(cycle: Cycle, trigger: Trigger, payload: CommandPayload) -> None:
     start = expect(payload, StartPayload)
-    start_process(cycle.events, cycle.processes, trigger.row.customer_id, start.locale, trigger.cause)
+    start_process(cycle.events, cycle.processes, trigger.row.customer_id, start.locale, start.product, trigger.cause)
 
 
 def hand_off_case(cycle: Cycle, trigger: Trigger, payload: CommandPayload) -> None:

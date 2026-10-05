@@ -6,9 +6,9 @@ from api.application.cycle.ports import CaseFacts, CommandQueue, EventLog, Event
 from api.application.processes import Events, Processes
 from api.domain.policy.engine import CreditProfile
 from api.domain.process.commands import CommandPayload
-from api.domain.process.lifecycle import ProcessRow
+from api.domain.process.lifecycle import CREDIT_PREQUALIFICATION, ProcessRow
 from api.domain.process.new_events import Cause
-from api.domain.process.stored_events import StoredEvent, parse_stored_event
+from api.domain.process.stored_events import MessageReceived, StoredEvent, parse_stored_event
 
 
 @dataclass(frozen=True)
@@ -69,6 +69,22 @@ def process_id_of(trigger: Trigger) -> UUID:
 
 def process_of(cycle: Cycle, trigger: Trigger) -> ProcessRow:
     return read_process(cycle, process_id_of(trigger))
+
+
+# A start from the home's dialog has no process yet: its case is the open one for the product it names (D24).
+def case_behind(cycle: Cycle, row: EventRow, event: StoredEvent) -> ProcessRow | None:
+    if row.process_id is not None:
+        return cycle.case.read(row.process_id)
+    if isinstance(event, MessageReceived) and event.product is not None:
+        return cycle.processes.find_open(row.customer_id, CREDIT_PREQUALIFICATION, event.product)
+    return None
+
+
+def require_case(cycle: Cycle, trigger: Trigger) -> ProcessRow:
+    process = case_behind(cycle, trigger.row, trigger.event)
+    if process is None:
+        raise LookupError(f"event {trigger.row.event_id} belongs to no case")
+    return process
 
 
 def read_process(cycle: Cycle, process_id: UUID) -> ProcessRow:
