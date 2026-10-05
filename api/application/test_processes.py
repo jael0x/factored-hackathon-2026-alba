@@ -25,7 +25,7 @@ class OpenCaseEndedInBetween:
     def find_open(self, customer_id: str, process_key: ProcessKey, product: ProductKey) -> ProcessRow | None:
         return None
 
-    def read_for_message(self, process_id: UUID) -> ProcessRow | None:
+    def read_for_message(self, customer_id: str, process_id: UUID) -> ProcessRow | None:
         raise AssertionError("start reads no message's case")
 
     def insert_open(

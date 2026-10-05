@@ -43,7 +43,7 @@ class Events(Protocol):
 class Processes(Protocol):
     def find_open(self, customer_id: str, process_key: ProcessKey, product: ProductKey) -> ProcessRow | None: ...
 
-    def read_for_message(self, process_id: UUID) -> ProcessRow | None: ...
+    def read_for_message(self, customer_id: str, process_id: UUID) -> ProcessRow | None: ...
 
     def insert_open(
         self, customer_id: str, process_key: ProcessKey, locale: Locale, product: ProductKey
@@ -146,8 +146,8 @@ def record_customer_message(
 
 
 def case_for_message(processes: Processes, customer_id: str, process_id: UUID, replay: bool) -> ProcessRow | None:
-    process = processes.read_for_message(process_id)
-    if process is None or process.customer_id != customer_id:
+    process = processes.read_for_message(customer_id, process_id)
+    if process is None:
         raise CaseNotFound(process_id)
     if process.state == ENDED:
         if replay:

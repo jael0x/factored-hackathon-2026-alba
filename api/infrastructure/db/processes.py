@@ -37,9 +37,10 @@ class PostgresProcesses:
         return process_row(row) if row else None
 
     # A message reads its case FOR SHARE, so a message sent while the case moves waits and carries the move.
-    def read_for_message(self, process_id: UUID) -> ProcessRow | None:
+    def read_for_message(self, customer_id: str, process_id: UUID) -> ProcessRow | None:
         row = self._conn.execute(
-            "SELECT id, customer_id, state FROM processes WHERE id = %s FOR SHARE", (process_id,)
+            "SELECT id, customer_id, state FROM processes WHERE id = %s AND customer_id = %s FOR SHARE",
+            (process_id, customer_id),
         ).fetchone()
         return process_row(row) if row else None
 
@@ -86,9 +87,13 @@ class PostgresProcesses:
             "UPDATE processes SET state = %s, end_reason = %s WHERE id = %s", (state, end_reason, process_id)
         )
 
-    def read_case(self, process_id: UUID) -> CaseRow | None:
+    def read_case(self, customer_id: str, process_id: UUID) -> CaseRow | None:
         row = self._conn.execute(
-            "SELECT id, customer_id, state, end_reason, product, locale FROM processes WHERE id = %s", (process_id,)
+            """
+            SELECT id, customer_id, state, end_reason, product, locale
+            FROM processes WHERE id = %s AND customer_id = %s
+            """,
+            (process_id, customer_id),
         ).fetchone()
         return None if row is None else case_row(row)
 
