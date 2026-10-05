@@ -101,17 +101,21 @@ api/
       listing.py          # which products the customer sees: not Closed, and not a loan at 0
     search.py             # exactly one search criterion, for both demo searches
     closed_sets.py        # parse_member: a stored or loaded value narrowed into its closed set
+    json_value.py         # the JSON a payload holds, decimals exact
     locale.py             # the Locale constants and the set they form
     policy/               # credit rules
       engine.py           # pure function
       alba-credit-v1.yaml # rules and thresholds
       templates.py        # certificate, ES and PT
+      declared_income.py  # whether a stated amount is this run's income: not in another country's currency
     process/
       events.py           # event-name constants, idempotency-key builders, the actor of each event
       lifecycle.py        # the allowed moves, the message stamp, parse_state
       new_events.py       # one constructor per event: key, actor, process_state, payload
       stored_events.py    # the typed record a rule reads, parsed from a stored event
-      commands.py         # command names and their payloads
+      commands.py         # command names, their payloads, the command status, the attempt limit
+      turns.py            # the model's reading in domain terms, and the two stamps on a turn
+      thread.py           # the authors of a thread line
       rules.py            # rule ids, the command key, and the pure match over the event already written
   application/            # one file per use case. Defines the ports
     session/
@@ -127,6 +131,7 @@ api/
     products/
       list_products.py    # the session customer's products; another customer_id gets none
     processes.py          # record a customer message, start, hand off, end; the Events and Processes ports
+    cycle/                # the command loop: ports, PlanningEvents, one handler per command, the attempts
   infrastructure/
     config/settings.py    # env, including DB_POOL_MIN and DB_POOL_MAX
     db/
@@ -135,9 +140,12 @@ api/
       customers.py        # SQL for customers
       consultants.py      # SQL for service_agents
       search.py           # the demo search limit and LIKE escaping, shared by both searches
-      events.py           # append to events, idempotent on the key
+      events.py           # append to events, idempotent on the key; read one event and a process's earlier ones
+      commands.py         # the command queue: enqueue on the key, claim the next one, done, failed
+      messages.py         # thread lines, one per event
+      json_codec.py       # jsonb both ways with exact decimals, set on every pooled connection
       processes.py        # SQL for processes: the open case, the insert, the row lock, the state
-      profile.py          # gold by customer_id, when that read is built
+      profile.py          # gold by customer_id, for the policy and the model's booleans
       products.py         # SQL for products, filtered on the session customer, ordered by product_id
       catalog.py
     mail/smtp.py          # sends the login code by SMTP; the only module that opens SMTP
@@ -149,7 +157,7 @@ api/
       errors.py           # {error: ...} bodies for 401, 403, 404, 422
       dependencies.py     # wires a request to a use case. get_session lives here
       routes/             # session (/session and /consultant/session), customers (/me and /customers), products (/products), consultants (/consultant/me and /consultants), config, health
-    worker/               # takes commands, when that loop is built
+    worker/loop.py        # the worker thread, run_next, and the wait for one cycle
   fixtures/
     oracle_customers.json # the four profiles and César
     turns/                # one model turn per step of the oracle flows and the spec examples; tests inject them
@@ -180,6 +188,9 @@ db/migrations/003_consultant_login.sql
 db/migrations/004_event_sequence.sql
 db/migrations/005_products_balance_required.sql
 db/migrations/006_process_locale.sql
+db/migrations/007_process_locale_es_pt.sql
+db/migrations/008_events_locale_check.sql
+db/migrations/009_command_queue.sql
 eval/                       # comes later; does not block the flow
 compose.yaml
 docker/api.Dockerfile
@@ -212,7 +223,7 @@ HTTP message
 
 Forbidden in `match_rules`: a `SELECT` on `customers`, `products`, or `customer_credit_profile`. If a condition needs that data, it is already inside `events.payload`, copied when the event was written.
 
-Forbidden: the model handler calling the policy and also writing the state. Only the `policy.run` worker writes `analysis.completed`. Only the `process.transition` worker changes `processes.state`.
+Forbidden: the model handler calling the policy and also writing the state. Only the `policy.run` worker writes `analysis.completed`. Only the `process.transition` and `process.end` workers change `processes.state` (`PLAN.md` D16 (3), closed Oct 5).
 
 ### Process
 
@@ -286,10 +297,10 @@ Closed names. No others are invented in v1. They are the `EventName` enum in `ap
 | `conversation.consultant_closed` | the consultant closes the case | `outcome`, `consultant_id`, `locale` |
 | `conversation.thread_taken` | the transition to `human_active` | `reason_code`, `from_state`, `to_state` |
 | `analysis.completed` | `policy.run` finished | `policy_version`, `product`, `outcome`, `deciding_rule`, `rule_trace`, `facts`, `locale` |
-| `prequalification.decided` | the certificate template was rendered | `locale`, `template_id`, `outcome`, `body`, `decided_by` |
+| `prequalification.decided` | the certificate template was rendered | `locale`, `outcome`, `body`, `decided_by` |
 | `process.started` | the process was inserted | `process_key`, `customer_id`, `locale` |
 | `process.state_changed` | `processes.state` changed | `from_state`, `to_state`, `end_reason` |
-| `process.ended` | reached `ended` | `end_reason`, `policy_version` |
+| `process.ended` | reached `ended` | `end_reason`, `policy_version`: the version of the `analysis.completed` the policy certificate names in `caused_by_event_id`, null after a consultant close |
 
 `rule_trace` is a list of `{rule_id, input, result}`. `result` is `passed`, `self_declared`, or an outcome, as defined under Policy `alba-credit-v1`. `facts` cites column and value, for example `{name: "credit_score", value: 812, source: "customer_credit_profile.credit_score", as_of: "2026-06-17"}`.
 
@@ -304,6 +315,7 @@ Idempotency keys:
 | Run policy | `policy:{process_id}:alba-credit-v1:{product}:{triggered_by_event_id}` |
 | Transition | `transition:{process_id}:{to_state}:{caused_by_event_id}` |
 | Consultant close | `consultant_close:{process_id}` |
+| Certificate | `decision:{process_id}` |
 | End process | `end:{process_id}` |
 
 The run-policy key carries the turn that triggered it (`PLAN.md` D12). Juliana's run after her income is a second run for the same process and product, triggered by another turn, so it has its own key. A message delivered twice is one turn and still makes one run, and a retried `policy.run` writes the same payload under the same key.
@@ -376,6 +388,17 @@ A command's `idempotency_key` is `command:{emitted_by_rule_id}:{command_name}:{t
 
 The worker takes `pending` rows with `FOR UPDATE SKIP LOCKED`, increments `attempt_count`, runs the command, and marks it `done` or `failed`. At most 3 attempts. On the third failure it writes a handoff event and transitions to `human_active` with `reason_code = tool_failed`. It does not retry in a loop.
 
+How the loop runs (built Oct 5, E4):
+
+- **One owner turns an event into commands.** `PlanningEvents` (`api/application/cycle/plan.py`) appends the event, reads it back through `parse_stored_event`, and inserts the `PlannedCommand` rows from `match_rules` in their order, each on its key (a key already present inserts nothing). Every append in the cycle goes through it, in the same transaction, so an event and its commands commit together. A replayed event plans nothing new.
+- **Order.** `commands.seq` (`009_command_queue.sql`) is the order commands were planned in. The worker takes the pending command with the lowest `seq` whose customer has no earlier pending command, so one event's commands run in the order of the rule table, and one customer's commands never run side by side, even with two workers. Other customers go ahead.
+- **One attempt is one transaction.** The claim, the handler's events, process changes, thread lines, the commands they plan, and `done` commit together. A failed attempt rolls back to a savepoint, keeps the row `pending`, and records `attempt_count` and `last_error`, which stays on the row if a later attempt succeeds. The next attempt runs at once: there is no delay.
+- **The third failure.** The command is `failed`, and so is every later pending command its event enqueued, so `process.end` never runs after a failed `decision.render`. If the case is `ai_active`, `hand_off_process` moves it to `human_active` with `tool_failed`, keyed on the command's triggering event. A case with no process, or one already with a person or ended, is not moved; the failure is logged.
+- **The thread.** `conversation.show_reply` writes the turn's `reply_text` with `author = assistant` and the turn as its `event_id`. `template.send` and `decision.render` write their body with `author = template` and the event they wrote. One event has at most one line (unique `messages.event_id`).
+- **`conversation.generate` re-reads the case.** A message stamped `ai_active` may reach a case a queued handoff moved to `human_active` first. The command then writes nothing and is done: the model is not called. The model call comes before any write, so it holds no lock on the process row.
+- **The process.** The API process runs one worker thread when `RUN_WORKER` is set (`compose.yaml` sets it). It wakes when work is enqueued and polls every second otherwise. `wait_for_cycle(event_id)` returns once no command in that event's chain (command, event it wrote, its commands) is pending, so `POST /messages` waits without running commands. Tests run the same commands with `run_until_idle`, with no thread and no sleep.
+- **The model is injected.** `conversation.generate` calls a function that takes a `TurnRequest` (the text, the message's `locale`, the process state, and the four booleans) and returns the reading. Until the adapter of `api/infrastructure/llm/conversation.py` is built, the wired function fails with an error that names it, and each case goes to a person with `tool_failed`.
+
 | `command_name` | Does | Does not |
 |---|---|---|
 | `process.start` | inserts `processes` with the opening message's `locale`, and `process.started`. Writes nothing when its key exists or another case is open | call the model |
@@ -436,7 +459,7 @@ Three things, and no others.
 | Whether to start this run's pre-qualification | the turn is `prequalify_card` or `prequalify_loan` (product known). Soft consent before any `policy.run` for that product request |
 | Monthly income | `income_local` is null after a consented `policy.run` returned `NEEDS_INFO` |
 
-The income amount is read in the country's currency. The gold row is not filled in.
+The income amount is read in the country's currency. The gold row is not filled in. An amount whose `declared_income_currency` names another country's currency (COP for a customer in Mexico) is not an income for the run: `policy.run` passes none, R06 returns `NEEDS_INFO`, and the customer is asked again (`api/domain/policy/declared_income.py`, decided Oct 5). No amount is converted between currencies.
 
 The customer is not asked for `credit_score`, `days_past_due`, `customer_status`, or whether they already hold the product. Those stay on the file. A null score is `REFER` with no question.
 
@@ -457,7 +480,7 @@ R07 and R08 do not exist in the code. An income threshold or a `k * income` limi
 Templates in `api/domain/policy/templates.py`, two locales: `es` and `pt`, the `locale` the customer chose with the switch. The Portuguese is text written by the team (Oct 4); the dataset does not have it. The model does not see this step.
 
 - `render_notice(template_id, locale, product)` writes the four notices. `confirm_prequalify`, `needs_income`, and `refer_notice` name the product and refuse to render without one; `which_product` names both. `needs_income` asks for the amount in pesos, the currency of all three countries.
-- `certificate_for_decision(decision, locale, product)` receives the `Decision` and writes the policy certificate; a `REFER` or `NEEDS_INFO` decision has none and is refused. `certificate_for_close(outcome, locale, product)` writes the consultant-path message, which says a person reviewed the request.
+- `certificate_for_policy(outcome, locale, product)` writes the policy certificate from the outcome of `analysis.completed`, since `decision.render` runs after `policy.run` and reads that event; a `REFER` or `NEEDS_INFO` outcome has none and is refused. `certificate_for_close(outcome, locale, product)` writes the consultant-path message, which says a person reviewed the request.
 - The certificate paragraph is one sentence: the outcome for the product, and that the pre-qualification is simulated and opens nothing. It names no person and carries no number. The income, its USD equivalent, and the date are the `facts` the screen shows beside it. A self-declared income has no USD equivalent, since the profile carries no exchange rate (`DESIGN.md`, "Open").
 - The tables are checked when the module loads: every template id and both certificate paths once, every locale, and the product named where it must be.
 
@@ -617,7 +640,7 @@ The trace includes events with this `process_id`, plus each message with a null 
 
 PostgreSQL 16. `load` is the only process that reads S3. The API and `policy.run` read Postgres.
 
-`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. `004_event_sequence.sql` adds `events.seq`. `005_products_balance_required.sql` sets an empty `products.current_balance` to 0 and makes the column `NOT NULL`. `006_process_locale.sql` renames `processes.language` to `locale`, makes it `NOT NULL`, and limits it to `es`, `en`, and `pt`. `007_process_locale_es_pt.sql` narrows that to `es` and `pt` (`PLAN.md` D22) and moves any local `en` case to `es`. `008_events_locale_check.sql` holds every event's `payload.locale` to `es` or `pt` (or none). A database that still has an `en` event from before D22 fails that migration, and `load` stops: reset its volume. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
+`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. `004_event_sequence.sql` adds `events.seq`. `005_products_balance_required.sql` sets an empty `products.current_balance` to 0 and makes the column `NOT NULL`. `006_process_locale.sql` renames `processes.language` to `locale`, makes it `NOT NULL`, and limits it to `es`, `en`, and `pt`. `007_process_locale_es_pt.sql` narrows that to `es` and `pt` (`PLAN.md` D22) and moves any local `en` case to `es`. `008_events_locale_check.sql` holds every event's `payload.locale` to `es` or `pt` (or none). `009_command_queue.sql` adds `commands.seq`, the indexes the queue and the cycle wait read, and a unique `messages.event_id`. A database that still has an `en` event from before D22 fails that migration, and `load` stops: reset its volume. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
 
 ### Read tables
 
@@ -653,7 +676,9 @@ The customer API does not list this table. `policy.run` reads one row, the one f
 - `products (customer_id)`
 - `service_agents`: primary key `agent_id`, unique index on `(lower(email), upper(employee_code))`
 - `customer_credit_profile`: primary key `customer_id`
-- `commands (status)` where `status = 'pending'`
+- `commands (status)` where `status = 'pending'`, a unique index on `commands (seq)`, and `commands (triggered_by_event_id)`
+- `events (caused_by_command_id)`
+- a unique index on `messages (event_id)`
 - `events (process_id, created_at)`, `events (process_id, seq)`, and a unique index on `events (seq)`
 - a partial unique index on `processes (customer_id, process_key) where state <> 'ended'`
 
@@ -669,7 +694,7 @@ Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` exclude
 |---|---|---|
 | `postgres` | PostgreSQL 16, named volume | yes |
 | `load` | waits for Postgres, applies `db/migrations/`, downloads CSVs if missing, fills the read tables and gold, exits with code 0 | no |
-| `api` | starts when `load` finished successfully. Mounts `api/` and reloads on save | yes |
+| `api` | starts when `load` finished successfully. Mounts `api/` and reloads on save. Runs the command worker (`RUN_WORKER=1`) | yes |
 | `web` | the frontend, Vite, proxies `/api` to the API. Mounts `web/` and reloads on save | yes |
 | `mailpit` | local mail catcher. The API's only SMTP target; its inbox is at http://localhost:8025 | yes |
 | `test` | profile `test`, not started by `up`, rebuilt on every run. Waits for Postgres, runs `npm run check` in `web/`, then `scripts/check.sh` with `ALBA_REQUIRE_POSTGRES=1` | no |
@@ -708,7 +733,7 @@ The Postgres volume keeps gold. A second `up` does not reload if `load_batches` 
 - **Floors only go up.** The two floors live in `scripts/check.sh`, set on Oct 1, 2026 to the measured coverage rounded down. A change that raises coverage raises the floor there in the same change. Lowering a floor is a contract change.
 - **New code is fully covered.** The changed-lines check holds every pull request to 100%, independent of the floors. The target for `api/domain/` is 100%; the remaining gaps are in `api/domain/policy/engine.py` (policy-file validation and invariant guards).
 - **Integration tests cannot pass by skipping.** Without Postgres, `migrated_database` skips. With `ALBA_REQUIRE_POSTGRES=1` (the `test` service and the `python` job) it fails.
-- **mypy is strict** and `pyproject.toml` holds its settings. `api/contract_models.py` is generated and excluded from ruff and mypy. Ruff targets Python 3.12 but skips the PEP 695 generic syntax so host runs on 3.11 still import.
+- **mypy is strict** and `pyproject.toml` holds its settings. `api/contract_models.py` is generated and excluded from ruff and mypy. Ruff targets Python 3.12 but skips the PEP 695 syntax (generics and `type` aliases) so host runs on 3.11 still import.
 - **Third-party actions are pinned** to a commit SHA, the gitleaks binary to a SHA-256, and every tool to an exact version in `requirements-dev.txt`. Node is 22.23.3 in the `test` image and in both CI jobs that use it, and the `test` image pins its two base images by digest. The workflow has `contents: read` only.
 - **Not in the gate yet:** mutation testing for `api/domain/`, and running `specs/*.feature`.
 
@@ -798,7 +823,7 @@ These points are left open on purpose. Implementing them on your own breaks the 
 - A separate intent router beside `ConversationTurn`.
 - Full pandera/Great Expectations suites or a policy freshness rule (R10).
 
-Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D15 (handoffs that are not a policy `REFER`), D16 (3) (which commands change `processes.state`), and D17 (no route lists a customer's cases). D12, D13, D14, and D16 (1) are closed (Oct 2): the run-policy key carries the triggering turn, the third turn with no product goes to a person, an income before consent asks for consent again, and `ask_which_product` checks `language` like the other turn rules. D16 (2) is closed: `decide` takes `declared_income`. D21 is closed: the switch picks the `locale` Alba writes in, and the model's `language` only gates an unreadable message. D19 is closed: the keys of two-event actions, the actor of each event, and where event names live. D20 is closed: `process_state` on every event, the write order, a second start, and a reused message id. Each one that gets decided is written into this file.
+Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D15 (handoffs that are not a policy `REFER`), and D17 (no route lists a customer's cases). D12, D13, D14, and D16 (1) are closed (Oct 2): the run-policy key carries the triggering turn, the third turn with no product goes to a person, an income before consent asks for consent again, and `ask_which_product` checks `language` like the other turn rules. D16 (2) is closed: `decide` takes `declared_income`. D16 (3) is closed (Oct 5): `process.transition` and `process.end` change `processes.state`. D21 is closed: the switch picks the `locale` Alba writes in, and the model's `language` only gates an unreadable message. D19 is closed: the keys of two-event actions, the actor of each event, and where event names live. D20 is closed: `process_state` on every event, the write order, a second start, and a reused message id. Each one that gets decided is written into this file.
 
 ## Known gaps
 
