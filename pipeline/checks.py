@@ -32,23 +32,5 @@ def assert_expected_row_counts(
         print(f"check rows ok {name}={actual}")
 
 
-def report_customer_nulls(customers_path: Path) -> tuple[int, int, int]:
-    null_score = 0
-    null_income = 0
-    total = 0
-    with customers_path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
-            total += 1
-            if (row.get("credit_score") or "").strip() == "":
-                null_score += 1
-            if (row.get("estimated_monthly_income") or "").strip() == "":
-                null_income += 1
-    print(f"check nulls customers total={total} null_score={null_score} null_income={null_income}")
-    return total, null_score, null_income
-
-
 def run_bronze_checks(files: list[BronzeFile]) -> None:
     assert_expected_row_counts(files, EXPECTED_ROW_COUNTS)
-    by_name = {item.relative_name: item for item in files}
-    report_customer_nulls(by_name["customers.csv"].path)

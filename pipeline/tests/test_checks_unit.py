@@ -4,11 +4,7 @@ from pathlib import Path
 import pytest
 
 from pipeline.bronze import BronzeFile, file_sha256
-from pipeline.checks import (
-    assert_expected_row_counts,
-    count_csv_rows,
-    report_customer_nulls,
-)
+from pipeline.checks import assert_expected_row_counts, count_csv_rows
 
 
 def _bronze(path: Path) -> BronzeFile:
@@ -52,13 +48,6 @@ def test_assert_expected_row_counts_fails_when_missing(testdata_dir: Path) -> No
     files = [_bronze(testdata_dir / "customers.csv")]
     with pytest.raises(SystemExit, match=re.escape("missing bronze file products.csv")):
         assert_expected_row_counts(files, {"products.csv": 2})
-
-
-def test_report_customer_nulls(testdata_dir: Path) -> None:
-    total, null_score, null_income = report_customer_nulls(testdata_dir / "customers.csv")
-    assert total == 3
-    assert null_score == 1
-    assert null_income == 1
 
 
 def test_a_bronze_file_with_no_expected_row_count_stops_the_load(testdata_dir: Path) -> None:

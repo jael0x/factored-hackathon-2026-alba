@@ -4,6 +4,7 @@ from pipeline.checks import run_bronze_checks
 from pipeline.db import connect, wait_for_postgres
 from pipeline.gold import rebuild_gold
 from pipeline.migrate import apply_migrations
+from pipeline.report import report_load
 from pipeline.silver import reload_silver
 
 
@@ -12,6 +13,7 @@ def main() -> None:
     apply_migrations()
     files = ensure_bronze(raw_dir(), aws_s3_copy)
     run_bronze_checks(files)
+    report_load(files)
 
     with connect() as conn:
         if all_hashes_loaded(conn, files):
