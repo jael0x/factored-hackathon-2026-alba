@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useLocale, type Locale } from "../i18n/locale";
 import { useMessages } from "../i18n/messages";
 import { HOME_PATH, type Role } from "../routes";
+import type { DemoMailbox } from "../session/demoCode";
 import type { SessionAnswer } from "../session/login";
 import { CodeStep, type CodeSent } from "./CodeStep";
 import { IdentityForm } from "./IdentityForm";
@@ -15,6 +16,7 @@ type LoginStepsProps<Identity> = {
   sent: SentTo<Identity> | null;
   onSentChange: (sent: SentTo<Identity> | null) => void;
   identityRows: (identity: Identity) => { label: string; value: string }[];
+  demoMailbox: (identity: Identity) => DemoMailbox;
   requestCode: (identity: Identity, locale: Locale) => Promise<number | null>;
   openSession: (identity: Identity, code: string) => Promise<SessionAnswer>;
   children: ReactNode;
@@ -26,6 +28,7 @@ export function LoginSteps<Identity>({
   sent,
   onSentChange,
   identityRows,
+  demoMailbox,
   requestCode,
   openSession,
   children,
@@ -38,6 +41,7 @@ export function LoginSteps<Identity>({
     return (
       <CodeStep
         identity={identityRows(identity)}
+        demoMailbox={demoMailbox(identity)}
         sent={sent}
         changeLabel={t.login[role].change}
         home={HOME_PATH[role]}

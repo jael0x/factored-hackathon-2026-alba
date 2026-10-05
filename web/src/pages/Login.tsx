@@ -82,6 +82,7 @@ export function Login() {
         sent={sent}
         onSentChange={setSent}
         identityRows={(number) => [{ label: copy.document, value: number }]}
+        demoMailbox={() => ({ kind: "newest" })}
         requestCode={requestCode}
         openSession={openSession}
       >
