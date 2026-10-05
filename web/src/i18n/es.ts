@@ -136,6 +136,7 @@ export const es = {
     back: "Inicio",
     thread: "Conversación",
     assistant: "Alba",
+    you: "Tú",
     typing: "escribiendo…",
     composer: "Escribe tu mensaje",
     send: "Enviar",

@@ -1,81 +1,19 @@
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type FormEvent,
-  type KeyboardEvent,
-  type ReactNode,
-} from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router";
 
 import { api } from "../api/client";
-import type { components } from "../api/schema";
 import { useLoad } from "../api/useLoad";
 import { AppBar } from "../components/AppBar";
 import { Certificate } from "../components/Certificate";
 import { ErrorCard } from "../components/ErrorCard";
-import { bubbleOf, newSend, showsTyping, type PendingSend } from "../chat";
-import { isLocale, useLocale } from "../i18n/locale";
+import { ENDED, HUMAN_ACTIVE, bubbleOf, newSend, showsTyping, type PendingSend } from "../chat";
+import { useLocale } from "../i18n/locale";
 import { useMessages } from "../i18n/messages";
-import { HOME_PATH, LOGIN_PATH, casePath } from "../routes";
+import { HOME_PATH, LOGIN_PATH } from "../routes";
 import { signOut } from "../session/session";
-
-type CaseData = components["schemas"]["Case"];
-
-// What the home hands over when a product row opens the chat, or what a send hands to the case's own URL.
-type Arrival = { opening?: PendingSend; case?: CaseData };
+import { arrivalOf, useAppeal, useCase, useOpening, useSend, type CaseData } from "./useCase";
 
 const loadMe = () => api.GET("/me");
-
-function arrivalOf(state: unknown): Arrival {
-  if (typeof state !== "object" || state === null) {
-    return {};
-  }
-  const opening = "opening" in state && isPendingSend(state.opening) ? state.opening : undefined;
-  const arrived = "case" in state && isCase(state.case) ? state.case : undefined;
-  return { opening, case: arrived };
-}
-
-function isPendingSend(value: unknown): value is PendingSend {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "text" in value &&
-    typeof value.text === "string" &&
-    "clientMessageId" in value &&
-    typeof value.clientMessageId === "string" &&
-    "locale" in value &&
-    isLocale(value.locale)
-  );
-}
-
-function isCase(value: unknown): value is CaseData {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "process_id" in value &&
-    typeof value.process_id === "string" &&
-    "messages" in value &&
-    Array.isArray(value.messages)
-  );
-}
-
-type Answer = { case: CaseData } | { refused: number | null };
-
-// A start names its product; any other message names its case (D24).
-async function postMessage(message: PendingSend, processId: string | undefined): Promise<Answer> {
-  const sent = { text: message.text, client_message_id: message.clientMessageId, locale: message.locale };
-  const body = message.product ? { ...sent, product: message.product } : { ...sent, process_id: processId };
-  const result = await api.POST("/messages", { body }).catch(() => null);
-  if (result?.data) {
-    return { case: result.data };
-  }
-  return { refused: result?.response.status ?? null };
-}
-
-const CONFLICT = 409;
 
 export function Case() {
   const { processId } = useParams();
@@ -84,73 +22,10 @@ export function Case() {
   const t = useMessages();
   const locale = useLocale();
   const me = useLoad(loadMe);
-  const [caseData, setCaseData] = useState<CaseData | null>(arrival.case ?? null);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  const [pending, setPending] = useState<PendingSend | null>(null);
-  const [sendFailed, setSendFailed] = useState(false);
-  const [appealing, setAppealing] = useState(false);
-  const [appealFailed, setAppealFailed] = useState(false);
-  const opened = useRef(false);
-
-  const send = useCallback(
-    async (message: PendingSend): Promise<boolean> => {
-      setPending(message);
-      setSendFailed(false);
-      const answer = await postMessage(message, processId);
-      if ("refused" in answer) {
-        // The product already has a case, or this one has ended: the home or a fresh read shows which.
-        if (answer.refused === CONFLICT) {
-          setPending(null);
-          if (message.product) {
-            navigate(HOME_PATH.customer, { replace: true });
-          } else {
-            setAttempt((n) => n + 1);
-          }
-          return false;
-        }
-        setSendFailed(true);
-        return false;
-      }
-      setPending(null);
-      setCaseData(answer.case);
-      if (answer.case.process_id !== processId) {
-        navigate(casePath(answer.case.process_id), { replace: true, state: { case: answer.case } });
-      }
-      return true;
-    },
-    [navigate, processId],
-  );
-
-  useEffect(() => {
-    if (processId === undefined && arrival.opening && !opened.current) {
-      opened.current = true;
-      void send(arrival.opening);
-    }
-  }, [processId, arrival.opening, send]);
-
-  useEffect(() => {
-    if (processId === undefined || (caseData?.process_id === processId && attempt === 0)) {
-      return;
-    }
-    let cancelled = false;
-    setLoadFailed(false);
-    api
-      .GET("/case/{process_id}", { params: { path: { process_id: processId } } })
-      .then(({ data }) => {
-        if (!cancelled) {
-          if (data) {
-            setCaseData(data);
-          } else {
-            setLoadFailed(true);
-          }
-        }
-      })
-      .catch(() => !cancelled && setLoadFailed(true));
-    return () => {
-      cancelled = true;
-    };
-  }, [processId, caseData?.process_id, attempt]);
+  const { caseData, setCaseData, loading, loadFailed, reload } = useCase(processId, arrival.case);
+  const { pending, failed: sendFailed, send } = useSend(processId, setCaseData, reload);
+  const appeal = useAppeal(caseData?.process_id, setCaseData);
+  useOpening(processId, arrival.opening, send);
 
   if (processId === undefined && !arrival.opening) {
     return <Navigate to={HOME_PATH.customer} replace />;
@@ -161,77 +36,99 @@ export function Case() {
     navigate(LOGIN_PATH.customer, { replace: true });
   };
   const firstName = me.status === "ready" ? me.data.first_name : undefined;
+  const author = me.status === "error" ? t.chat.you : firstName;
   const state = caseData?.state ?? null;
-  const ended = state === "ended";
-  const certificate = caseData?.certificate ?? null;
-  // A no the policy decided can be sent to a person once; the case then reopens (PLAN.md D25).
-  const appealable = ended && certificate?.outcome === "NOT_PREQUALIFIED" && certificate.decided_by === "policy";
-
-  const appeal = async () => {
-    if (caseData === null) {
-      return;
-    }
-    setAppealing(true);
-    setAppealFailed(false);
-    const { data } = await api
-      .POST("/case/{process_id}/appeal", { params: { path: { process_id: caseData.process_id } }, body: { locale } })
-      .catch(() => ({ data: undefined }));
-    setAppealing(false);
-    if (data) {
-      setCaseData(data);
-    } else {
-      setAppealFailed(true);
-    }
-  };
 
   return (
     <>
       <AppBar firstName={firstName} onSignOut={leave} />
       <main className="chat">
-        <Link className="btn text back" to={HOME_PATH.customer}>
-          <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M15 6l-6 6 6 6" />
-          </svg>
-          {t.chat.back}
-        </Link>
+        <BackLink />
+        {loading && (
+          <p role="status" className="pulse greeting">
+            <span className="sr-only">{t.loading}</span>
+          </p>
+        )}
         {loadFailed ? (
-          <ErrorCard message={t.chat.loadFailed} onRetry={() => setAttempt((n) => n + 1)} />
+          <ErrorCard message={t.chat.loadFailed} onRetry={reload} />
         ) : (
-          <Thread
-            caseData={caseData}
-            pending={pending}
-            typing={showsTyping(pending !== null && !sendFailed, state)}
-            firstName={firstName}
-            certificate={
-              caseData?.certificate && (
-                <Certificate
-                  certificate={caseData.certificate}
-                  appeal={appealable ? { busy: appealing, failed: appealFailed, onAppeal: () => void appeal() } : null}
-                />
-              )
-            }
-          />
+          !loading && (
+            <Thread
+              caseData={caseData}
+              pending={pending}
+              typing={showsTyping(pending !== null && !sendFailed, state)}
+              firstName={author}
+              certificate={certificateCard(caseData, appeal)}
+            />
+          )
         )}
       </main>
-      <div className="dock">
-        {state === "human_active" && <p className="banner solid">{t.chat.withPerson}</p>}
-        {sendFailed && pending && (
-          <div className="actions-row send-failed" role="alert">
-            <p className="error-line">{t.chat.sendFailed}</p>
-            <button type="button" className="btn text" onClick={() => void send(pending)}>
-              {t.retry}
-            </button>
-          </div>
-        )}
-        {ended ? (
-          <Link className="btn secondary back-home" to={HOME_PATH.customer}>
-            {t.chat.backHome}
-          </Link>
-        ) : (
-          <Composer sending={pending !== null && !sendFailed} onSend={(text) => send(newSend(text, locale))} />
-        )}
-      </div>
+      <Dock
+        state={state}
+        retry={sendFailed ? pending : null}
+        sending={pending !== null && !sendFailed}
+        send={send}
+        onSend={(text) => send(newSend(text, locale))}
+      />
     </>
+  );
+}
+
+function BackLink() {
+  const t = useMessages();
+  return (
+    <Link className="btn text back" to={HOME_PATH.customer}>
+      <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M15 6l-6 6 6 6" />
+      </svg>
+      {t.chat.back}
+    </Link>
+  );
+}
+
+function certificateCard(caseData: CaseData | null, appeal: ReturnType<typeof useAppeal>): ReactNode {
+  if (!caseData?.certificate) {
+    return null;
+  }
+  const offer = caseData.appealable
+    ? {
+        busy: appeal.busy,
+        failed: appeal.failed,
+        onAppeal: () => void appeal.appeal(),
+      }
+    : null;
+  return <Certificate certificate={caseData.certificate} appeal={offer} />;
+}
+
+type DockProps = {
+  state: CaseData["state"] | null;
+  retry: PendingSend | null;
+  sending: boolean;
+  send: (message: PendingSend) => Promise<boolean>;
+  onSend: (text: string) => Promise<boolean>;
+};
+
+function Dock({ state, retry, sending, send, onSend }: DockProps) {
+  const t = useMessages();
+  return (
+    <div className="dock">
+      {state === HUMAN_ACTIVE && <p className="banner solid">{t.chat.withPerson}</p>}
+      {retry && (
+        <div className="actions-row send-failed" role="alert">
+          <p className="error-line">{t.chat.sendFailed}</p>
+          <button type="button" className="btn text" onClick={() => void send(retry)}>
+            {t.retry}
+          </button>
+        </div>
+      )}
+      {state === ENDED ? (
+        <Link className="btn secondary back-home" to={HOME_PATH.customer}>
+          {t.chat.backHome}
+        </Link>
+      ) : (
+        <Composer sending={sending} onSend={onSend} />
+      )}
+    </div>
   );
 }
 

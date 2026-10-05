@@ -112,6 +112,7 @@ export const pt: Messages = {
     back: "Início",
     thread: "Conversa",
     assistant: "Alba",
+    you: "Você",
     typing: "digitando…",
     composer: "Escreva sua mensagem",
     send: "Enviar",

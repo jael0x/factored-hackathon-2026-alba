@@ -1,6 +1,7 @@
 import { useId } from "react";
 
 import type { components } from "../api/schema";
+import { PREQUALIFIED } from "../chat";
 import { formatAmount, formatDate } from "../format";
 import { useMessages } from "../i18n/messages";
 
@@ -15,7 +16,7 @@ export function Certificate({ certificate, appeal }: { certificate: CertificateD
   const { outcome, product, body, income_local, income_currency, income_usd, as_of, locale } = certificate;
   return (
     <section
-      className={`certificate hero enter ${outcome === "PREQUALIFIED" ? "yes" : "no"}`}
+      className={`certificate hero enter ${outcome === PREQUALIFIED ? "yes" : "no"}`}
       aria-labelledby={titleId}
       lang={locale}
     >

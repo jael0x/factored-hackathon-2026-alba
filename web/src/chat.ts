@@ -5,6 +5,7 @@ type MessageAuthor = components["schemas"]["MessageAuthor"];
 type ProcessState = components["schemas"]["ProcessState"];
 type ProductKey = components["schemas"]["ProductKey"];
 type CaseSummary = components["schemas"]["CaseSummary"];
+type CloseOutcome = components["schemas"]["CloseOutcome"];
 
 // One send: the same id and locale go out again on a retry, so the API answers it as the same message.
 // A start from the home names its product (the consent given in the dialog); every other send goes to its case.
@@ -23,6 +24,9 @@ const BUBBLES: Record<MessageAuthor, Bubble> = {
 };
 
 const AI_ACTIVE: ProcessState = "ai_active";
+export const HUMAN_ACTIVE: ProcessState = "human_active";
+export const ENDED: ProcessState = "ended";
+export const PREQUALIFIED: CloseOutcome = "PREQUALIFIED";
 
 export function newSend(text: string, locale: Locale, product?: ProductKey): PendingSend {
   return { text, clientMessageId: crypto.randomUUID(), locale, product };
@@ -34,7 +38,7 @@ export function rowAction(cases: CaseSummary[], product: ProductKey): RowAction 
   if (latest === undefined) {
     return { kind: "start" };
   }
-  return { kind: latest.state === "ended" ? "result" : "continue", processId: latest.process_id };
+  return { kind: latest.state === ENDED ? "result" : "continue", processId: latest.process_id };
 }
 
 export function bubbleOf(author: MessageAuthor): Bubble {
