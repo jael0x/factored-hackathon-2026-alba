@@ -1,7 +1,7 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Generic, Literal, TypeVar, assert_never, get_args
+from typing import Literal, assert_never, get_args
 from uuid import UUID
 
 from api.contract_models import EndReason, EventName, Intent, Outcome, ProcessState
@@ -120,11 +120,9 @@ END_REASON_BY_OUTCOME: Mapping[Outcome, EndReason] = MappingProxyType(
     {PREQUALIFIED: PREQUALIFIED_END, NOT_PREQUALIFIED: NOT_PREQUALIFIED_END}
 )
 
-Event = TypeVar("Event")
-
 
 @dataclass(frozen=True)
-class Rule(Generic[Event]):
+class Rule[Event]:
     rule_id: ProcessRuleId
     trigger: EventName
     when: Callable[[Event], bool]
@@ -337,11 +335,11 @@ RuleTable = (
 )
 
 
-def fire(rules: tuple[Rule[Event], ...], event: Event) -> tuple[Firing, ...]:
+def fire[Event](rules: tuple[Rule[Event], ...], event: Event) -> tuple[Firing, ...]:
     return tuple(Firing(rule.rule_id, distinct_commands(rule)(event)) for rule in rules if rule.when(event))
 
 
-def distinct_commands(rule: Rule[Event]) -> Callable[[Event], tuple[Command, ...]]:
+def distinct_commands[Event](rule: Rule[Event]) -> Callable[[Event], tuple[Command, ...]]:
     def actions(event: Event) -> tuple[Command, ...]:
         commands = rule.actions(event)
         names = [command.command_name for command in commands]

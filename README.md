@@ -36,9 +36,13 @@ On the host (unit always; integration needs Postgres on host port **55432**, and
 
 ```bash
 docker compose up -d postgres
+py -3.12 -m venv .venv            # python3.12 -m venv .venv outside Windows
+. .venv/Scripts/activate          # . .venv/bin/activate outside Windows
 python -m pip install -r requirements-dev.txt
 sh scripts/check.sh
 ```
+
+The host runs Python 3.12, as the images and CI do. The code uses 3.12 syntax, so 3.11 cannot import it.
 
 The web gate on the host: `npm ci && npm run check` in `web/`.
 

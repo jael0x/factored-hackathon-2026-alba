@@ -5,8 +5,8 @@ extend-exclude = ["api/contract_models.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "BLE", "UP", "SIM", "RUF"]
-# The formatter owns line length. UP040, UP046, and UP047 ask for PEP 695 syntax, which breaks host runs on Python 3.11.
-ignore = ["E501", "UP040", "UP046", "UP047"]
+# The formatter owns line length.
+ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

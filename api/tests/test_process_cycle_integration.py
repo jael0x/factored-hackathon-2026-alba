@@ -1,7 +1,7 @@
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, TypeVar
+from typing import Any
 from uuid import UUID, uuid4
 
 import psycopg
@@ -36,8 +36,7 @@ pytestmark = pytest.mark.integration
 CYCLE_TEST_DB = "alba_process_cycle_test"
 JUAN = "CLI-9EDEKZ8OUNUR"
 ALICIA = "CLI-440CO5FZIY6A"
-Result = TypeVar("Result")
-Work = Callable[[PostgresEvents, PostgresProcesses], Result]
+type Work[Result] = Callable[[PostgresEvents, PostgresProcesses], Result]
 
 
 @pytest.fixture(scope="module")
@@ -52,7 +51,7 @@ def url(cycle_database: str) -> Iterator[str]:
     yield cycle_database
 
 
-def run(url: str, work: Work[Result]) -> Result:
+def run[Result](url: str, work: Work[Result]) -> Result:
     with psycopg.connect(url) as conn:
         return work(PostgresEvents(conn), PostgresProcesses(conn))
 

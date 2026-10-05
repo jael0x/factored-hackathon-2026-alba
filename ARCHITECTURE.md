@@ -733,7 +733,7 @@ The Postgres volume keeps gold. A second `up` does not reload if `load_batches` 
 - **Floors only go up.** The two floors live in `scripts/check.sh`, set on Oct 1, 2026 to the measured coverage rounded down. A change that raises coverage raises the floor there in the same change. Lowering a floor is a contract change.
 - **New code is fully covered.** The changed-lines check holds every pull request to 100%, independent of the floors. The target for `api/domain/` is 100%; the remaining gaps are in `api/domain/policy/engine.py` (policy-file validation and invariant guards).
 - **Integration tests cannot pass by skipping.** Without Postgres, `migrated_database` skips. With `ALBA_REQUIRE_POSTGRES=1` (the `test` service and the `python` job) it fails.
-- **mypy is strict** and `pyproject.toml` holds its settings. `api/contract_models.py` is generated and excluded from ruff and mypy. Ruff targets Python 3.12 but skips the PEP 695 syntax (generics and `type` aliases) so host runs on 3.11 still import.
+- **mypy is strict** and `pyproject.toml` holds its settings. `api/contract_models.py` is generated and excluded from ruff and mypy. Ruff targets Python 3.12, the version of the images, CI, and a host run, and asks for the PEP 695 syntax (generics and `type` aliases).
 - **Third-party actions are pinned** to a commit SHA, the gitleaks binary to a SHA-256, and every tool to an exact version in `requirements-dev.txt`. Node is 22.23.3 in the `test` image and in both CI jobs that use it, and the `test` image pins its two base images by digest. The workflow has `contents: read` only.
 - **Not in the gate yet:** mutation testing for `api/domain/`, and running `specs/*.feature`.
 
