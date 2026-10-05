@@ -12,7 +12,13 @@ from api.application.processes import (
     AlreadyOpen,
     AlreadyStarted,
     Applied,
+    CaseAlreadyOpen,
+    CaseEnded,
+    CaseNotFound,
+    InCase,
+    MessageTarget,
     ProcessNotFound,
+    StartCase,
     Started,
     end_process,
     hand_off_process,
@@ -56,16 +62,26 @@ def run[Result](url: str, work: Work[Result]) -> Result:
         return work(PostgresEvents(conn), PostgresProcesses(conn))
 
 
-def send(url: str, customer_id: str, text: str, client_message_id: UUID | None = None, locale: Locale = "es") -> UUID:
+CARD = StartCase("credit_card")
+
+
+def send(
+    url: str,
+    customer_id: str,
+    text: str,
+    client_message_id: UUID | None = None,
+    locale: Locale = "es",
+    target: MessageTarget = CARD,
+) -> UUID:
     message_id = client_message_id or uuid4()
-    result = run(url, lambda e, p: record_customer_message(e, p, customer_id, text, message_id, locale))
+    result = run(url, lambda e, p: record_customer_message(e, p, customer_id, text, message_id, locale, target))
     assert isinstance(result, Appended)
     return result.event_id
 
 
 def open_case(url: str, customer_id: str) -> tuple[UUID, UUID]:
     message = send(url, customer_id, "quiero una tarjeta de crédito")
-    started = run(url, lambda e, p: start_process(e, p, customer_id, "es", Cause(message, None)))
+    started = run(url, lambda e, p: start_process(e, p, customer_id, "es", "credit_card", Cause(message, None)))
     assert isinstance(started, Started)
     return message, started.process_id
 
@@ -114,7 +130,12 @@ def test_a_first_message_has_no_process_and_is_born_ai_active(url: str) -> None:
             "ai_active",
             None,
             None,
-            {"text": "quiero una tarjeta de crédito", "client_message_id": str(client_message_id), "locale": "es"},
+            {
+                "text": "quiero una tarjeta de crédito",
+                "client_message_id": str(client_message_id),
+                "locale": "es",
+                "product": "credit_card",
+            },
         )
     ]
     assert events(url)[0][0] == "conversation.message_received"
@@ -125,7 +146,7 @@ def test_a_first_message_has_no_process_and_is_born_ai_active(url: str) -> None:
 def test_the_same_send_twice_writes_one_event(url: str) -> None:
     client_message_id = uuid4()
     first = send(url, JUAN, "sí", client_message_id)
-    again = run(url, lambda e, p: record_customer_message(e, p, JUAN, "sí", client_message_id, "es"))
+    again = run(url, lambda e, p: record_customer_message(e, p, JUAN, "sí", client_message_id, "es", CARD))
     assert again == AlreadyAppended(first)
     assert len(events(url)) == 1
 
@@ -139,7 +160,7 @@ def test_a_reused_message_id_for_another_fact_is_refused(url: str, customer_id: 
     client_message_id = uuid4()
     send(url, JUAN, "sí", client_message_id)
     with pytest.raises(IdempotencyConflict, match=f"msg:{client_message_id}"):
-        run(url, lambda e, p: record_customer_message(e, p, customer_id, text, client_message_id, locale))
+        run(url, lambda e, p: record_customer_message(e, p, customer_id, text, client_message_id, locale, CARD))
     assert len(events(url)) == 1
 
 
@@ -164,9 +185,11 @@ def test_a_key_reused_by_another_event_name_is_refused(url: str) -> None:
 def test_start_opens_the_case_and_points_at_its_message(url: str) -> None:
     command_id = uuid4()
     message = send(url, JUAN, "quiero una tarjeta de crédito")
-    started = run(url, lambda e, p: start_process(e, p, JUAN, "es", Cause(message, command_id)))
+    started = run(url, lambda e, p: start_process(e, p, JUAN, "es", "credit_card", Cause(message, command_id)))
     assert isinstance(started, Started)
-    assert processes(url) == [(started.process_id, JUAN, "credit_prequalification", "ai_active", None, None, "es")]
+    assert processes(url) == [
+        (started.process_id, JUAN, "credit_prequalification", "ai_active", None, "credit_card", "es")
+    ]
     assert events(url)[1] == (
         "process.started",
         f"process:{JUAN}:credit_prequalification:{message}",
@@ -176,13 +199,13 @@ def test_start_opens_the_case_and_points_at_its_message(url: str) -> None:
         "ai_active",
         message,
         command_id,
-        {"process_key": "credit_prequalification", "customer_id": JUAN, "locale": "es"},
+        {"process_key": "credit_prequalification", "customer_id": JUAN, "locale": "es", "product": "credit_card"},
     )
 
 
 def test_a_case_keeps_the_language_of_its_opening_message(url: str) -> None:
     message = send(url, JUAN, "quero um cartão de crédito", locale="pt")
-    started = run(url, lambda e, p: start_process(e, p, JUAN, "pt", Cause(message, None)))
+    started = run(url, lambda e, p: start_process(e, p, JUAN, "pt", "credit_card", Cause(message, None)))
     assert isinstance(started, Started)
     assert [row[6] for row in processes(url)] == ["pt"]
     assert events(url)[0][8]["locale"] == "pt"
@@ -191,9 +214,9 @@ def test_a_case_keeps_the_language_of_its_opening_message(url: str) -> None:
 
 def test_a_message_joins_the_open_case_with_its_state(url: str) -> None:
     message, process_id = open_case(url, JUAN)
-    send(url, JUAN, "¿qué tasa tiene?")
+    send(url, JUAN, "¿qué tasa tiene?", target=InCase(process_id))
     run(url, lambda e, p: hand_off_process(e, p, process_id, "customer_requested_human", Cause(message, None)))
-    send(url, JUAN, "¿hay alguien?")
+    send(url, JUAN, "¿hay alguien?", target=InCase(process_id))
     stamps = [(row[0], row[4], row[5]) for row in events(url) if row[0] == "conversation.message_received"]
     assert stamps == [
         ("conversation.message_received", None, "ai_active"),
@@ -213,7 +236,7 @@ def test_a_message_after_an_ended_case_opens_a_new_case(url: str) -> None:
     run(url, lambda e, p: end_process(e, p, first, "prequalified", "alba-credit-v1", Cause(message, None)))
     later = send(url, JUAN, "quiero un préstamo personal")
     assert [row[4:6] for row in events(url)][-1] == (None, "ai_active")
-    second = run(url, lambda e, p: start_process(e, p, JUAN, "es", Cause(later, None)))
+    second = run(url, lambda e, p: start_process(e, p, JUAN, "es", "credit_card", Cause(later, None)))
     assert isinstance(second, Started)
     assert [(row[0], row[3], row[4]) for row in processes(url)] == [
         (first, "ended", "prequalified"),
@@ -225,33 +248,76 @@ def test_a_replayed_start_returns_its_case_even_after_it_ended(url: str) -> None
     message, process_id = open_case(url, JUAN)
     run(url, lambda e, p: end_process(e, p, process_id, "not_prequalified", "alba-credit-v1", Cause(message, None)))
     before = events(url)
-    replay = run(url, lambda e, p: start_process(e, p, JUAN, "es", Cause(message, None)))
+    replay = run(url, lambda e, p: start_process(e, p, JUAN, "es", "credit_card", Cause(message, None)))
     assert replay == AlreadyStarted(process_id)
     assert events(url) == before
     assert len(processes(url)) == 1
 
 
-def test_a_second_first_message_joins_the_case_the_first_opened(url: str) -> None:
-    first_message, process_id = open_case(url, JUAN)
-    second_message = send(url, JUAN, "también quiero un préstamo")
-    joined = run(url, lambda e, p: start_process(e, p, JUAN, "es", Cause(second_message, None)))
-    assert joined == AlreadyOpen(process_id)
+def test_a_second_start_sent_before_the_case_opens_joins_it(url: str) -> None:
+    first_message = send(url, JUAN, "quiero una tarjeta de crédito")
+    second_message = send(url, JUAN, "quiero una tarjeta de crédito")
+    first = run(url, lambda e, p: start_process(e, p, JUAN, "es", "credit_card", Cause(first_message, None)))
+    joined = run(url, lambda e, p: start_process(e, p, JUAN, "es", "credit_card", Cause(second_message, None)))
+    assert isinstance(first, Started)
+    assert joined == AlreadyOpen(first.process_id)
     assert [row[0] for row in events(url)] == [
         "conversation.message_received",
-        "process.started",
         "conversation.message_received",
+        "process.started",
     ]
     assert len(processes(url)) == 1
-    assert first_message != second_message
+
+
+def test_a_start_for_a_product_with_an_open_case_is_refused(url: str) -> None:
+    open_case(url, JUAN)
+    with pytest.raises(CaseAlreadyOpen, match="credit_card"):
+        send(url, JUAN, "quiero una tarjeta de crédito")
+
+
+def test_each_product_has_its_own_open_case(url: str) -> None:
+    open_case(url, JUAN)
+    loan = send(url, JUAN, "quiero un préstamo personal", target=StartCase("personal_loan"))
+    second = run(url, lambda e, p: start_process(e, p, JUAN, "es", "personal_loan", Cause(loan, None)))
+    assert isinstance(second, Started)
+    assert sorted(row[5] for row in processes(url)) == ["credit_card", "personal_loan"]
+
+
+def test_a_message_to_another_customers_case_is_refused(url: str) -> None:
+    _, alicias = open_case(url, ALICIA)
+    with pytest.raises(CaseNotFound):
+        send(url, JUAN, "hola", target=InCase(alicias))
+
+
+def test_a_message_to_an_ended_case_is_refused_but_its_replay_is_not(url: str) -> None:
+    message, process_id = open_case(url, JUAN)
+    client_message_id = uuid4()
+    send(url, JUAN, "gracias", client_message_id, target=InCase(process_id))
+    run(url, lambda e, p: end_process(e, p, process_id, "prequalified", "alba-credit-v1", Cause(message, None)))
+    with pytest.raises(CaseEnded):
+        send(url, JUAN, "una pregunta más", target=InCase(process_id))
+    replay = run(
+        url,
+        lambda e, p: record_customer_message(e, p, JUAN, "gracias", client_message_id, "es", InCase(process_id)),
+    )
+    assert isinstance(replay, AlreadyAppended)
 
 
 def test_two_starts_at_once_open_one_case(url: str) -> None:
     first_message = send(url, JUAN, "quiero una tarjeta")
     second_message = send(url, JUAN, "quiero un préstamo")
     with psycopg.connect(url) as holder, psycopg.connect(url) as waiter, ThreadPoolExecutor(1) as pool:
-        first = start_process(PostgresEvents(holder), PostgresProcesses(holder), JUAN, "es", Cause(first_message, None))
+        first = start_process(
+            PostgresEvents(holder), PostgresProcesses(holder), JUAN, "es", "credit_card", Cause(first_message, None)
+        )
         second = pool.submit(
-            start_process, PostgresEvents(waiter), PostgresProcesses(waiter), JUAN, "es", Cause(second_message, None)
+            start_process,
+            PostgresEvents(waiter),
+            PostgresProcesses(waiter),
+            JUAN,
+            "es",
+            "credit_card",
+            Cause(second_message, None),
         )
         wait_until_blocked(url, waiter.info.backend_pid)
         holder.commit()
@@ -275,6 +341,7 @@ def test_a_message_sent_during_a_handoff_carries_the_handoffs_result(url: str) -
             "¿sigue ahí?",
             uuid4(),
             "es",
+            InCase(process_id),
         )
         wait_until_blocked(url, waiter.info.backend_pid)
         holder.commit()
@@ -336,7 +403,7 @@ def test_an_end_writes_both_events_with_one_end_reason(url: str, handed_off: boo
     assert events(url)[-2:] == [
         (
             "process.state_changed",
-            f"end:{process_id}:process.state_changed",
+            f"end:{process_id}:{message}:process.state_changed",
             "system",
             JUAN,
             process_id,
@@ -347,7 +414,7 @@ def test_an_end_writes_both_events_with_one_end_reason(url: str, handed_off: boo
         ),
         (
             "process.ended",
-            f"end:{process_id}:process.ended",
+            f"end:{process_id}:{message}:process.ended",
             "system",
             JUAN,
             process_id,
@@ -371,15 +438,11 @@ def test_a_replayed_end_writes_nothing(url: str) -> None:
     assert events(url) == before
 
 
-@pytest.mark.parametrize("ended_first", [False, True], ids=["already human_active", "already ended"])
-def test_an_illegal_handoff_raises_and_writes_nothing(url: str, ended_first: bool) -> None:
+def test_an_illegal_handoff_raises_and_writes_nothing(url: str) -> None:
     message, process_id = open_case(url, JUAN)
-    if ended_first:
-        run(url, lambda e, p: end_process(e, p, process_id, "prequalified", None, Cause(message, None)))
-    else:
-        run(url, lambda e, p: hand_off_process(e, p, process_id, "policy_refer", Cause(message, None)))
+    run(url, lambda e, p: hand_off_process(e, p, process_id, "policy_refer", Cause(message, None)))
     before_events, before_processes = events(url), processes(url)
-    later = send(url, JUAN, "hola otra vez")
+    later = send(url, JUAN, "quiero un préstamo personal", target=StartCase("personal_loan"))
     with pytest.raises(IllegalTransition):
         run(url, lambda e, p: hand_off_process(e, p, process_id, "out_of_scope", Cause(later, None)))
     assert [row for row in events(url) if row[0] != "conversation.message_received"] == [
@@ -395,3 +458,17 @@ def test_moving_a_process_that_does_not_exist_fails_loud(url: str) -> None:
     with pytest.raises(ProcessNotFound, match=str(missing)):
         run(url, lambda e, p: end_process(e, p, missing, "prequalified", None, Cause(uuid4(), None)))
     assert events(url) == []
+
+
+def test_an_ended_case_reopens_for_a_person_and_ends_again(url: str) -> None:
+    message, process_id = open_case(url, JUAN)
+    run(url, lambda e, p: end_process(e, p, process_id, "not_prequalified", "alba-credit-v1", Cause(message, None)))
+    appeal = send(url, JUAN, "quiero un préstamo personal", target=StartCase("personal_loan"))
+    reopened = run(
+        url, lambda e, p: hand_off_process(e, p, process_id, "customer_requested_human", Cause(appeal, None))
+    )
+    assert reopened == Applied(process_id)
+    assert [row[3] for row in processes(url) if row[0] == process_id] == ["human_active"]
+    ended = run(url, lambda e, p: end_process(e, p, process_id, "prequalified", None, Cause(appeal, None)))
+    assert ended == Applied(process_id)
+    assert [(row[3], row[4]) for row in processes(url) if row[0] == process_id] == [("ended", "prequalified")]
