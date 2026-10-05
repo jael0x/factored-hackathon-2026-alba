@@ -15,7 +15,7 @@ from api.domain.policy.templates import (
     MissingProduct,
     Texts,
     certificate_for_close,
-    certificate_for_decision,
+    certificate_for_policy,
     render_notice,
     require_certificates,
     require_notices,
@@ -107,7 +107,7 @@ def test_the_referral_notice_states_no_outcome_and_no_score(locale: Locale) -> N
 
 def test_the_policy_certificate_reads_as_written_for_each_close_outcome() -> None:
     rendered = {
-        (decision.outcome, locale): certificate_for_decision(decision, locale, "credit_card")
+        (decision.outcome, locale): certificate_for_policy(decision.outcome, locale, "credit_card")
         for decision in (JUAN, MARIANA)
         for locale in BOTH_LOCALES
     }
@@ -126,7 +126,7 @@ def test_the_policy_certificate_reads_as_written_for_each_close_outcome() -> Non
 @pytest.mark.parametrize("decision", [ALICIA, JULIANA], ids=["refer", "needs_info"])
 def test_a_decision_that_does_not_close_the_case_has_no_certificate(decision: Decision) -> None:
     with pytest.raises(ValueError, match=f"certificate outcome '{decision.outcome}' is not one of"):
-        certificate_for_decision(decision, "es", "credit_card")
+        certificate_for_policy(decision.outcome, "es", "credit_card")
 
 
 def test_the_consultant_certificate_says_a_person_reviewed_the_request() -> None:

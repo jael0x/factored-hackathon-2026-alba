@@ -1,11 +1,11 @@
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import TypeVar, get_args
+from typing import TypeVar
 
 from api.contract_models import CloseOutcome, DecidedBy, Locale, Outcome, ProductKey, TemplateId
 from api.domain.closed_sets import parse_member
 from api.domain.locale import LOCALES, PORTUGUESE_LOCALE, SPANISH_LOCALE
-from api.domain.policy.engine import CREDIT_CARD, NOT_PREQUALIFIED, PERSONAL_LOAN, PREQUALIFIED, Decision
+from api.domain.policy.engine import CREDIT_CARD, NOT_PREQUALIFIED, PERSONAL_LOAN, PREQUALIFIED
 from api.domain.process.commands import (
     CONFIRM_PREQUALIFY_TEMPLATE,
     DECIDED_BY_CONSULTANT,
@@ -14,11 +14,10 @@ from api.domain.process.commands import (
     REFER_NOTICE,
     WHICH_PRODUCT,
 )
-from api.domain.process.stored_events import CLOSE_OUTCOMES, DECIDED_BY, PRODUCT_KEYS
+from api.domain.process.stored_events import CLOSE_OUTCOMES, DECIDED_BY, PRODUCT_KEYS, TEMPLATE_IDS
 
 PRODUCT_SLOT = "{product}"
 
-TEMPLATE_IDS: frozenset[TemplateId] = frozenset(get_args(TemplateId))
 
 Texts = Mapping[Locale, str]
 Key = TypeVar("Key")
@@ -127,9 +126,9 @@ def render_notice(template_id: TemplateId, locale: Locale, product: ProductKey |
     return name_product(NOTICES_FOR_A_PRODUCT[template_id][locale], locale, product)
 
 
-def certificate_for_decision(decision: Decision, locale: Locale, product: ProductKey) -> str:
-    outcome = parse_member(decision.outcome, CLOSE_OUTCOMES, "certificate outcome")
-    return render_certificate(DECIDED_BY_POLICY, outcome, locale, product)
+def certificate_for_policy(outcome: Outcome, locale: Locale, product: ProductKey) -> str:
+    closing = parse_member(outcome, CLOSE_OUTCOMES, "certificate outcome")
+    return render_certificate(DECIDED_BY_POLICY, closing, locale, product)
 
 
 def certificate_for_close(outcome: CloseOutcome, locale: Locale, product: ProductKey | None) -> str:

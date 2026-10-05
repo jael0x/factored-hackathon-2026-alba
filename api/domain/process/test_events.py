@@ -16,6 +16,7 @@ from api.domain.process.events import (
     TURN_CLASSIFIED,
     ActionKey,
     consultant_close_key,
+    decision_key,
     end_key,
     event_key,
     message_key,
@@ -72,6 +73,7 @@ def test_action_keys_follow_the_contract_table() -> None:
         policy_key(PROCESS_ID, "alba-credit-v1", "credit_card", EVENT_ID),
         transition_key(PROCESS_ID, "human_active", EVENT_ID),
         consultant_close_key(PROCESS_ID),
+        decision_key(PROCESS_ID),
         end_key(PROCESS_ID),
     ] == [
         "msg:33333333-3333-4333-8333-333333333333",
@@ -81,6 +83,7 @@ def test_action_keys_follow_the_contract_table() -> None:
         "policy:11111111-1111-4111-8111-111111111111:alba-credit-v1:credit_card:22222222-2222-4222-8222-222222222222",
         "transition:11111111-1111-4111-8111-111111111111:human_active:22222222-2222-4222-8222-222222222222",
         "consultant_close:11111111-1111-4111-8111-111111111111",
+        "decision:11111111-1111-4111-8111-111111111111",
         "end:11111111-1111-4111-8111-111111111111",
     ]
 

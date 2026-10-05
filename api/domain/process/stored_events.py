@@ -12,18 +12,22 @@ from api.contract_models import (
     Intent,
     Locale,
     Outcome,
+    PolicyVersion,
     ProcessState,
     ProductKey,
     ReasonCode,
+    TemplateId,
     TurnLanguage,
 )
 from api.domain.closed_sets import parse_member
 from api.domain.locale import LOCALES
+from api.domain.policy.engine import POLICY_VERSIONS
 from api.domain.process.events import (
     ANALYSIS_COMPLETED,
     CONSULTANT_CLOSED,
     MESSAGE_RECEIVED,
     PREQUALIFICATION_DECIDED,
+    TEMPLATE_SENT,
     TURN_CLASSIFIED,
 )
 from api.domain.process.lifecycle import (
@@ -61,6 +65,7 @@ INCOME_CURRENCIES: frozenset[IncomeCurrency] = frozenset(get_args(IncomeCurrency
 OUTCOMES: frozenset[Outcome] = frozenset(get_args(Outcome))
 CLOSE_OUTCOMES: frozenset[CloseOutcome] = frozenset(get_args(CloseOutcome))
 DECIDED_BY: frozenset[DecidedBy] = frozenset(get_args(DecidedBy))
+TEMPLATE_IDS: frozenset[TemplateId] = frozenset(get_args(TemplateId))
 
 Payload = Mapping[str, object]
 
@@ -71,11 +76,13 @@ class MessageReceived:
     process_id: UUID | None
     process_state: ProcessState
     locale: Locale
+    text: str
 
 
 @dataclass(frozen=True)
 class ShownTurn:
     event_id: UUID
+    locale: Locale
     intent: Intent
     product: ProductKey | None
     language: TurnLanguage
@@ -83,18 +90,29 @@ class ShownTurn:
     declared_income_currency: IncomeCurrency | None
     product_asked_count: int
     income_requested: bool
+    reply_text: str
 
 
 @dataclass(frozen=True)
 class WithheldTurn:
     event_id: UUID
+    locale: Locale
     reason_code: ReasonCode
+
+
+@dataclass(frozen=True)
+class TemplateSent:
+    event_id: UUID
+    template_id: TemplateId
 
 
 @dataclass(frozen=True)
 class AnalysisCompleted:
     event_id: UUID
     outcome: Outcome
+    product: ProductKey
+    locale: Locale
+    policy_version: PolicyVersion
 
 
 @dataclass(frozen=True)
@@ -108,6 +126,7 @@ class PrequalificationDecided:
 class ConsultantClosed:
     event_id: UUID
     outcome: CloseOutcome
+    locale: Locale
 
 
 @dataclass(frozen=True)
@@ -118,7 +137,13 @@ class NoRuleEvent:
 
 TurnClassified = ShownTurn | WithheldTurn
 StoredEvent = (
-    MessageReceived | TurnClassified | AnalysisCompleted | PrequalificationDecided | ConsultantClosed | NoRuleEvent
+    MessageReceived
+    | TurnClassified
+    | TemplateSent
+    | AnalysisCompleted
+    | PrequalificationDecided
+    | ConsultantClosed
+    | NoRuleEvent
 )
 
 
@@ -134,8 +159,10 @@ def parse_stored_event(
         return parse_message(event_id, process_id, process_state, payload)
     if name == TURN_CLASSIFIED:
         return parse_turn(event_id, payload)
+    if name == TEMPLATE_SENT:
+        return TemplateSent(event_id, parse_member(field(payload, "template_id"), TEMPLATE_IDS, "template_id"))
     if name == ANALYSIS_COMPLETED:
-        return AnalysisCompleted(event_id, parse_member(field(payload, "outcome"), OUTCOMES, "outcome"))
+        return parse_analysis(event_id, payload)
     if name == PREQUALIFICATION_DECIDED:
         return PrequalificationDecided(
             event_id,
@@ -143,7 +170,7 @@ def parse_stored_event(
             decided_by=parse_member(field(payload, "decided_by"), DECIDED_BY, "decided_by"),
         )
     if name == CONSULTANT_CLOSED:
-        return ConsultantClosed(event_id, outcome=parse_close_outcome(payload))
+        return ConsultantClosed(event_id, outcome=parse_close_outcome(payload), locale=parse_locale(payload))
     return NoRuleEvent(event_id, name)
 
 
@@ -153,18 +180,21 @@ def parse_message(event_id: UUID, process_id: UUID | None, process_state: object
         raise ValueError("a message is never stamped with an ended process")
     if process_id is None and state != AI_ACTIVE:
         raise ValueError(f"a message with no process is stamped {AI_ACTIVE}, not {state}")
-    return MessageReceived(event_id, process_id, state, parse_member(field(payload, "locale"), LOCALES, "locale"))
+    return MessageReceived(
+        event_id, process_id, state, parse_locale(payload), require_str(field(payload, "text"), "text")
+    )
 
 
 def parse_turn(event_id: UUID, payload: Payload) -> TurnClassified:
     reply_ok = require_bool(field(payload, "reply_ok"), "reply_ok")
     reason_code = field(payload, "reason_code")
     if not reply_ok:
-        return WithheldTurn(event_id, parse_withheld_reason(reason_code))
+        return WithheldTurn(event_id, parse_locale(payload), parse_withheld_reason(reason_code))
     if reason_code is not None:
         raise ValueError(f"a shown turn has no reason_code, got {reason_code!r}")
     return ShownTurn(
         event_id,
+        locale=parse_locale(payload),
         intent=parse_member(field(payload, "intent"), INTENTS, "intent"),
         product=parse_optional_product(field(payload, "product")),
         language=parse_member(field(payload, "language"), TURN_LANGUAGES, "language"),
@@ -172,7 +202,22 @@ def parse_turn(event_id: UUID, payload: Payload) -> TurnClassified:
         declared_income_currency=parse_optional_currency(field(payload, "declared_income_currency")),
         product_asked_count=parse_count(field(payload, "product_asked_count")),
         income_requested=require_bool(field(payload, "income_requested"), "income_requested"),
+        reply_text=require_str(field(payload, "reply_text"), "reply_text"),
     )
+
+
+def parse_analysis(event_id: UUID, payload: Payload) -> AnalysisCompleted:
+    return AnalysisCompleted(
+        event_id,
+        outcome=parse_member(field(payload, "outcome"), OUTCOMES, "outcome"),
+        product=parse_member(field(payload, "product"), PRODUCT_KEYS, "product"),
+        locale=parse_locale(payload),
+        policy_version=parse_member(field(payload, "policy_version"), POLICY_VERSIONS, "policy_version"),
+    )
+
+
+def parse_locale(payload: Payload) -> Locale:
+    return parse_member(field(payload, "locale"), LOCALES, "locale")
 
 
 def parse_withheld_reason(value: object) -> ReasonCode:
@@ -209,6 +254,12 @@ def parse_amount(value: object) -> Decimal | None:
 def parse_count(value: object) -> int:
     if type(value) is not int or value < 0:
         raise ValueError(f"product_asked_count must be a whole number of asks, got {value!r}")
+    return value
+
+
+def require_str(value: object, label: str) -> str:
+    if type(value) is not str:
+        raise TypeError(f"{label} must be text, got {value!r}")
     return value
 
 
