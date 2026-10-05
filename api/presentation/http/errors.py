@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from api.contract_models import (
     CaseConflictError,
+    CyclePendingError,
     ForbiddenError,
     InvalidRequestError,
     MessageIdReusedError,
@@ -46,6 +47,10 @@ def case_ended() -> ApiError:
 
 def case_not_appealable() -> ApiError:
     return ApiError(status.HTTP_409_CONFLICT, CaseConflictError(error="case_not_appealable"))
+
+
+def cycle_pending() -> ApiError:
+    return ApiError(status.HTTP_503_SERVICE_UNAVAILABLE, CyclePendingError(error="cycle_pending"))
 
 
 def invalid_body() -> ApiError:

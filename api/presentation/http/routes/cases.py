@@ -1,8 +1,10 @@
+from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
 import psycopg
 from fastapi import APIRouter, Depends, Request
+from psycopg_pool import ConnectionPool
 
 from api.application.cases import (
     CaseNotAppealable,
@@ -42,39 +44,47 @@ from api.presentation.http.errors import (
     case_already_open,
     case_ended,
     case_not_appealable,
+    cycle_pending,
     invalid_body,
     message_id_reused,
     not_found,
 )
-from api.presentation.worker.loop import Worker
+from api.presentation.worker.loop import Worker, cycle_settled
 
 router = APIRouter()
 
 CYCLE_WAIT_SECONDS = 30.0
 
+Refusal = IdempotencyConflict | CaseAlreadyOpen | CaseEnded | CaseNotFound | CaseNotAppealable
 
+
+# The write and the read each take a pooled connection; none is held while the worker runs the cycle.
 @router.post("/messages", response_model=Case)
 def send_message(
-    body: SendMessageRequest,
-    request: Request,
-    session: Annotated[SessionClaims, Depends(require_customer)],
-    conn: Annotated[psycopg.Connection, Depends(get_connection)],
+    body: SendMessageRequest, request: Request, session: Annotated[SessionClaims, Depends(require_customer)]
 ) -> Case:
     target = message_target(body)
-    processes, log = PostgresProcesses(conn), PostgresEventLog(conn)
-    try:
-        sent = record_customer_message(
-            planning(conn), processes, session.sub, body.text, body.client_message_id, body.locale, target
-        )
-    except (IdempotencyConflict, CaseAlreadyOpen, CaseEnded, CaseNotFound) as refused:
-        conn.rollback()
-        raise refusal(refused) from None
-    conn.commit()
-    wait_for_cycle(request, sent.event_id)
-    process_id = log.process_named_by(sent.event_id)
-    if process_id is None:
-        raise LookupError(f"message {sent.event_id} opened no case and joined none")
-    return case_or_not_found(conn, processes, session.sub, process_id)
+    pool: ConnectionPool = request.app.state.pool
+    with pool.connection() as conn:
+        try:
+            sent = record_customer_message(
+                planning(conn),
+                PostgresProcesses(conn),
+                session.sub,
+                body.text,
+                body.client_message_id,
+                body.locale,
+                target,
+            )
+        except (IdempotencyConflict, CaseAlreadyOpen, CaseEnded, CaseNotFound) as refused:
+            conn.rollback()
+            raise refusal(refused) from None
+    require_settled(request, sent.event_id)
+    with pool.connection() as conn:
+        process_id = PostgresEventLog(conn).process_named_by(sent.event_id)
+        if process_id is None:
+            raise start_without_case(conn, sent.event_id, target)
+        return case_or_not_found(conn, session.sub, process_id)
 
 
 @router.get("/cases", response_model=CaseList)
@@ -91,20 +101,20 @@ def appeal_case(
     body: AppealRequest,
     request: Request,
     session: Annotated[SessionClaims, Depends(require_customer)],
-    conn: Annotated[psycopg.Connection, Depends(get_connection)],
 ) -> Case:
-    processes = PostgresProcesses(conn)
-    try:
-        appealed = appeal_customer_case(
-            planning(conn), processes, PostgresThreads(conn), session.sub, process_id, body.locale
-        )
-    except (CaseNotFound, CaseNotAppealable) as refused:
-        conn.rollback()
-        raise refusal(refused) from None
-    conn.commit()
+    pool: ConnectionPool = request.app.state.pool
+    with pool.connection() as conn:
+        try:
+            appealed = appeal_customer_case(
+                planning(conn), PostgresProcesses(conn), PostgresThreads(conn), session.sub, process_id, body.locale
+            )
+        except (CaseNotFound, CaseNotAppealable, CaseAlreadyOpen) as refused:
+            conn.rollback()
+            raise refusal(refused) from None
     if appealed is not None:
-        wait_for_cycle(request, appealed.event_id)
-    return case_or_not_found(conn, processes, session.sub, process_id)
+        require_settled(request, appealed.event_id)
+    with pool.connection() as conn:
+        return case_or_not_found(conn, session.sub, process_id)
 
 
 @router.get("/case/{process_id}", response_model=Case)
@@ -113,7 +123,7 @@ def read_case(
     session: Annotated[SessionClaims, Depends(require_customer)],
     conn: Annotated[psycopg.Connection, Depends(get_connection)],
 ) -> Case:
-    return case_or_not_found(conn, PostgresProcesses(conn), session.sub, process_id)
+    return case_or_not_found(conn, session.sub, process_id)
 
 
 # Exactly one of product (a start from the home's dialog) and process_id (a message in that case), D24.
@@ -125,7 +135,7 @@ def message_target(body: SendMessageRequest) -> MessageTarget:
     raise invalid_body()
 
 
-def refusal(refused: Exception) -> Exception:
+def refusal(refused: Refusal) -> Exception:
     if isinstance(refused, CaseAlreadyOpen):
         return case_already_open()
     if isinstance(refused, CaseEnded):
@@ -141,19 +151,26 @@ def planning(conn: psycopg.Connection) -> PlanningEvents:
     return PlanningEvents(PostgresEvents(conn), PostgresEventLog(conn), PostgresCommands(conn))
 
 
-# The answer is the case after the worker finished this event's cycle. A cycle that runs past CYCLE_WAIT_SECONDS,
-# or an API with no worker, answers with the case as it stands; the page reads it again with GET /case.
-def wait_for_cycle(request: Request, event_id: UUID) -> None:
+def require_settled(request: Request, event_id: UUID) -> None:
     worker: Worker | None = request.app.state.worker
-    if worker is not None:
+    if worker is None:
+        settled = cycle_settled(request.app.state.pool, event_id)
+    else:
         worker.wake()
-        worker.wait_for_cycle(event_id, CYCLE_WAIT_SECONDS)
+        settled = worker.wait_for_cycle(event_id, CYCLE_WAIT_SECONDS)
+    if not settled:
+        raise cycle_pending()
 
 
-def case_or_not_found(
-    conn: psycopg.Connection, processes: PostgresProcesses, customer_id: str, process_id: UUID
-) -> Case:
-    view = read_customer_case(processes, PostgresThreads(conn), customer_id, process_id)
+# A settled start that opened no case lost to another start for its product (D24), unless its own command failed.
+def start_without_case(conn: psycopg.Connection, event_id: UUID, target: MessageTarget) -> Exception:
+    if isinstance(target, StartCase) and not PostgresCommands(conn).failed_for(event_id):
+        return case_already_open()
+    return LookupError(f"message {event_id} opened no case and joined none")
+
+
+def case_or_not_found(conn: psycopg.Connection, customer_id: str, process_id: UUID) -> Case:
+    view = read_customer_case(PostgresProcesses(conn), PostgresThreads(conn), customer_id, process_id)
     if view is None:
         raise not_found()
     return wire_case(view)
@@ -182,10 +199,12 @@ def wire_case(view: CaseView) -> Case:
             for line in view.thread
         ],
         certificate=None if view.certificate is None else wire_certificate(view.certificate),
+        appealable=view.appealable,
     )
 
 
 def wire_certificate(certificate: CertificateView) -> Certificate:
+    income = certificate.income
     return Certificate(
         event_id=certificate.event_id,
         decided_by=certificate.decided_by,
@@ -193,8 +212,12 @@ def wire_certificate(certificate: CertificateView) -> Certificate:
         outcome=certificate.outcome,
         body=certificate.body,
         product=certificate.product,
-        income_local=None if certificate.income_local is None else float(certificate.income_local),
-        income_currency=certificate.income_currency,
-        income_usd=None if certificate.income_usd is None else float(certificate.income_usd),
-        as_of=certificate.as_of,
+        income_local=wire_amount(income.income_local),
+        income_currency=income.income_currency,
+        income_usd=wire_amount(income.income_usd),
+        as_of=income.as_of,
     )
+
+
+def wire_amount(amount: Decimal | None) -> float | None:
+    return None if amount is None else float(amount)
