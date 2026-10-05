@@ -9,6 +9,7 @@ from uuid import UUID
 import pytest
 
 from api.contract_models import EndReason, EventName, IncomeCurrency, Intent, ProductKey, ReasonCode, TurnLanguage
+from api.domain.policy.engine import PERSONAL_LOAN
 from api.domain.process.commands import (
     GENERATE_COMMAND,
     SHOW_REPLY_COMMAND,
@@ -24,6 +25,7 @@ from api.domain.process.lifecycle import ProcessRow
 from api.domain.process.new_events import Cause, turn_classified
 from api.domain.process.rules import (
     ANALYSIS_RULES,
+    APPEAL_RULES,
     CLOSE_RULES,
     DECIDED_RULES,
     END_REASON_BY_OUTCOME,
@@ -39,6 +41,7 @@ from api.domain.process.rules import (
     hand_off_withheld,
     match_rules,
     matching_rules,
+    policy_run_from_start,
     policy_run_from_turn,
     require_end_reasons,
     require_rule_table,
@@ -55,6 +58,7 @@ from api.domain.process.turns import ShownReading, TurnReading, TurnStamp, Withh
 EVENT_ID = UUID("33333333-3333-4333-8333-333333333333")
 MESSAGE_ID = UUID("55555555-5555-4555-8555-555555555555")
 PROCESS_ID = UUID("11111111-1111-4111-8111-111111111111")
+CAUSE = Cause(UUID("22222222-2222-4222-8222-222222222222"), None)
 COUNTS = (0, 1, 2, 3)
 
 Fired = tuple[tuple[ProcessRuleId, Command], ...]
@@ -64,9 +68,13 @@ def stored(event_name: str, payload: Mapping[str, object], process_id: UUID | No
     return parse_stored_event(EVENT_ID, event_name, process_id, "ai_active", payload)
 
 
-def message(process_id: UUID | None, state: str, locale: str = "es") -> StoredEvent:
-    payload = {"text": "hola", "locale": locale}
+def message(process_id: UUID | None, state: str, locale: str = "es", product: str | None = None) -> StoredEvent:
+    payload = {"text": "hola", "locale": locale, "product": product}
     return parse_stored_event(EVENT_ID, "conversation.message_received", process_id, state, payload)
+
+
+def start(product: str, locale: str = "es") -> StoredEvent:
+    return message(None, "ai_active", locale, product)
 
 
 def turn(
@@ -79,6 +87,7 @@ def turn(
     withheld: ReasonCode | None = None,
     product_asked_count: int = 0,
     income_requested: bool = False,
+    open_case_product: ProductKey | None = None,
 ) -> StoredEvent:
     reading = TurnReading(intent, None, language, declared_income_amount, declared_income_currency, "")
     model = ShownReading(reading) if withheld is None else WithheldReading(reading, withheld)
@@ -86,7 +95,7 @@ def turn(
         ProcessRow(PROCESS_ID, "CLI-TEST", "ai_active"),
         "es",
         model,
-        TurnStamp(product, product_asked_count, income_requested),
+        TurnStamp(product, product_asked_count, income_requested, open_case_product),
         Cause(MESSAGE_ID, None),
     )
     return parse_stored_event(EVENT_ID, event.event_name, event.process_id, event.process_state, event.payload)
@@ -124,15 +133,20 @@ def test_a_planned_command_carries_its_rule_event_and_key() -> None:
     )
 
 
-def test_the_first_message_opens_the_case_then_classifies_it() -> None:
-    assert fired(message(None, "ai_active")) == (
-        ("open_process", start_process("es")),
-        ("generate_while_ai", GENERATE_COMMAND),
+def test_a_start_from_the_home_opens_the_case_and_runs_the_policy_without_the_model() -> None:
+    assert fired(start("credit_card")) == (
+        ("open_process", start_process("es", "credit_card")),
+        ("run_requested_policy", run_policy("credit_card", None, None)),
     )
 
 
-def test_a_case_opens_in_the_locale_of_its_first_message() -> None:
-    assert fired(message(None, "ai_active", "pt"))[0] == ("open_process", start_process("pt"))
+def test_a_case_opens_in_the_locale_and_for_the_product_of_its_start() -> None:
+    assert fired(start("personal_loan", "pt"))[0] == ("open_process", start_process("pt", "personal_loan"))
+
+
+def test_a_start_names_its_product() -> None:
+    with pytest.raises(ValueError, match="a start names its product"):
+        policy_run_from_start(MessageReceived(EVENT_ID, None, "ai_active", "es", "hola", None))
 
 
 def test_a_message_in_an_open_assistant_case_is_classified_only() -> None:
@@ -329,6 +343,7 @@ EVERY_TURN = list(
         (None, *get_args(ProductKey)),
         COUNTS,
         (True, False),
+        (None, PERSONAL_LOAN),
     )
 )
 
@@ -342,13 +357,14 @@ def every_turn() -> list[StoredEvent]:
             product=product,
             product_asked_count=count,
             income_requested=requested,
+            open_case_product=open_case,
         )
-        for reply_ok, language, intent, product, count, requested in EVERY_TURN
+        for reply_ok, language, intent, product, count, requested, open_case in EVERY_TURN
     ]
 
 
 def test_every_classified_turn_matches_exactly_one_rule() -> None:
-    assert len(EVERY_TURN) == 1440
+    assert len(EVERY_TURN) == 2880
     matches = [matching_rules(event) for event in every_turn()]
     assert [match for match in matches if len(match) != 1] == []
     assert {match[0] for match in matches} == {rule.rule_id for rule in TURN_RULES}
@@ -424,18 +440,11 @@ def flow(events: list[StoredEvent]) -> list[Fired]:
 
 
 def test_juan_prequalifies_for_a_card() -> None:
-    assert flow(
-        [
-            message(None, "ai_active"),
-            turn(intent="prequalify_card", product="credit_card"),
-            turn(intent="confirm_prequalify", product="credit_card"),
-            analysis("PREQUALIFIED"),
-            decided("PREQUALIFIED", "policy"),
-        ]
-    ) == [
-        (("open_process", start_process("es")), ("generate_while_ai", GENERATE_COMMAND)),
-        (("ask_confirm_prequalify", send_template("confirm_prequalify")),),
-        (("run_policy", run_policy("credit_card", None, None)),),
+    assert flow([start("credit_card"), analysis("PREQUALIFIED"), decided("PREQUALIFIED", "policy")]) == [
+        (
+            ("open_process", start_process("es", "credit_card")),
+            ("run_requested_policy", run_policy("credit_card", None, None)),
+        ),
         (("render_decision", render_decision("policy")),),
         (("end_after_decision", end_process("prequalified")),),
     ]
@@ -456,7 +465,7 @@ def test_juan_in_portuguese_takes_the_same_path() -> None:
 def test_juliana_is_asked_for_income_then_decided_with_it() -> None:
     assert flow(
         [
-            turn(intent="confirm_prequalify", product="credit_card"),
+            start("credit_card"),
             analysis("NEEDS_INFO"),
             turn(
                 intent="provide_income",
@@ -468,7 +477,10 @@ def test_juliana_is_asked_for_income_then_decided_with_it() -> None:
             analysis("PREQUALIFIED"),
         ]
     ) == [
-        (("run_policy", run_policy("credit_card", None, None)),),
+        (
+            ("open_process", start_process("es", "credit_card")),
+            ("run_requested_policy", run_policy("credit_card", None, None)),
+        ),
         (("render_needs_info", send_template("needs_income")),),
         (("run_policy_income", run_policy("credit_card", Decimal("45000"), "MXN")),),
         (("render_decision", render_decision("policy")),),
@@ -478,13 +490,16 @@ def test_juliana_is_asked_for_income_then_decided_with_it() -> None:
 def test_alicia_is_referred_waits_for_a_person_and_is_closed_by_one() -> None:
     assert flow(
         [
-            turn(intent="confirm_prequalify", product="credit_card"),
+            start("credit_card"),
             analysis("REFER"),
             message(PROCESS_ID, "human_active"),
             closed("PREQUALIFIED"),
         ]
     ) == [
-        (("run_policy", run_policy("credit_card", None, None)),),
+        (
+            ("open_process", start_process("es", "credit_card")),
+            ("run_requested_policy", run_policy("credit_card", None, None)),
+        ),
         (("render_refer_notice", send_template("refer_notice")), ("take_thread", hand_off("policy_refer"))),
         (),
         (
@@ -497,12 +512,15 @@ def test_alicia_is_referred_waits_for_a_person_and_is_closed_by_one() -> None:
 def test_mariana_does_not_prequalify_and_the_case_ends() -> None:
     assert flow(
         [
-            turn(intent="confirm_prequalify", product="personal_loan"),
+            start("personal_loan"),
             analysis("NOT_PREQUALIFIED"),
             decided("NOT_PREQUALIFIED", "policy"),
         ]
     ) == [
-        (("run_policy", run_policy("personal_loan", None, None)),),
+        (
+            ("open_process", start_process("es", "personal_loan")),
+            ("run_requested_policy", run_policy("personal_loan", None, None)),
+        ),
         (("render_decision", render_decision("policy")),),
         (("end_after_decision", end_process("not_prequalified")),),
     ]
@@ -519,7 +537,7 @@ def tables_with(**changes: RuleTable) -> Mapping[EventName, RuleTable]:
 
 def test_the_rule_tables_list_every_rule_once_under_its_trigger() -> None:
     require_rule_table(RULE_TABLES)
-    assert len([rule for rules in RULE_TABLES.values() for rule in rules]) == 21
+    assert len([rule for rules in RULE_TABLES.values() for rule in rules]) == 25
 
 
 def test_a_rule_listed_twice_is_refused() -> None:
@@ -529,7 +547,7 @@ def test_a_rule_listed_twice_is_refused() -> None:
 
 def test_a_missing_rule_is_refused() -> None:
     with pytest.raises(ValueError, match=r"must list every rule id: \['generate_while_ai'\]"):
-        require_rule_table(tables_with(message=(MESSAGE_RULES[0], MESSAGE_RULES[2])))
+        require_rule_table(tables_with(message=(MESSAGE_RULES[0], MESSAGE_RULES[1], MESSAGE_RULES[3])))
 
 
 def test_a_rule_under_another_trigger_is_refused() -> None:
@@ -549,7 +567,7 @@ def test_a_rule_that_emits_a_command_twice_is_refused() -> None:
         "open_process",
         "conversation.message_received",
         lambda _event: True,
-        lambda _event: (start_process("es"), start_process("es")),
+        lambda _event: (start_process("es", "credit_card"), start_process("es", "credit_card")),
     )
     event = message(None, "ai_active")
     assert isinstance(event, MessageReceived)
@@ -574,5 +592,38 @@ def test_a_reply_handoff_is_only_built_from_a_withheld_turn() -> None:
 
 
 def test_no_trigger_table_is_shared() -> None:
-    tables = (MESSAGE_RULES, TURN_RULES, ANALYSIS_RULES, DECIDED_RULES, CLOSE_RULES)
+    tables = (MESSAGE_RULES, TURN_RULES, ANALYSIS_RULES, DECIDED_RULES, CLOSE_RULES, APPEAL_RULES)
     assert tuple(RULE_TABLES.values()) == tables
+
+
+@pytest.mark.parametrize("language", ["es", "pt"])
+def test_naming_a_product_with_its_own_open_case_points_to_that_case(language: TurnLanguage) -> None:
+    named = turn(intent="prequalify_loan", product="credit_card", language=language, open_case_product="personal_loan")
+    assert fired(named) == (("point_to_open_case", send_template("product_case_open")),)
+
+
+def test_another_language_still_goes_to_a_person_when_it_names_an_open_case() -> None:
+    named = turn(intent="prequalify_loan", product="credit_card", language="other", open_case_product="personal_loan")
+    assert matching_rules(named) == ("hand_off_language",)
+
+
+def test_naming_the_other_product_with_no_open_case_switches_and_asks_consent() -> None:
+    switched = turn(intent="prequalify_loan", product="personal_loan")
+    assert fired(switched) == (("ask_confirm_prequalify", send_template("confirm_prequalify")),)
+
+
+def test_an_appeal_reopens_the_case_for_a_person_then_tells_the_customer() -> None:
+    appeal = parse_stored_event(
+        EVENT_ID, "conversation.appeal_requested", PROCESS_ID, "ended", {"locale": "es", "product": "credit_card"}
+    )
+    assert fired(appeal) == (
+        ("reopen_on_appeal", hand_off("customer_requested_human")),
+        ("notify_appeal", send_template("refer_notice")),
+    )
+
+
+def test_an_appeal_belongs_to_a_case() -> None:
+    with pytest.raises(ValueError, match="an appeal belongs to a case"):
+        parse_stored_event(
+            EVENT_ID, "conversation.appeal_requested", None, "ended", {"locale": "es", "product": "credit_card"}
+        )

@@ -24,6 +24,7 @@ from api.domain.locale import LOCALES
 from api.domain.policy.engine import POLICY_VERSIONS
 from api.domain.process.events import (
     ANALYSIS_COMPLETED,
+    APPEAL_REQUESTED,
     CONSULTANT_CLOSED,
     MESSAGE_RECEIVED,
     PREQUALIFICATION_DECIDED,
@@ -77,6 +78,7 @@ class MessageReceived:
     process_state: ProcessState
     locale: Locale
     text: str
+    product: ProductKey | None
 
 
 @dataclass(frozen=True)
@@ -91,6 +93,7 @@ class ShownTurn:
     product_asked_count: int
     income_requested: bool
     reply_text: str
+    open_case_product: ProductKey | None
 
 
 @dataclass(frozen=True)
@@ -130,6 +133,14 @@ class ConsultantClosed:
 
 
 @dataclass(frozen=True)
+class AppealRequested:
+    event_id: UUID
+    process_id: UUID
+    locale: Locale
+    product: ProductKey
+
+
+@dataclass(frozen=True)
 class NoRuleEvent:
     event_id: UUID
     event_name: EventName
@@ -143,6 +154,7 @@ StoredEvent = (
     | AnalysisCompleted
     | PrequalificationDecided
     | ConsultantClosed
+    | AppealRequested
     | NoRuleEvent
 )
 
@@ -171,6 +183,8 @@ def parse_stored_event(
         )
     if name == CONSULTANT_CLOSED:
         return ConsultantClosed(event_id, outcome=parse_close_outcome(payload), locale=parse_locale(payload))
+    if name == APPEAL_REQUESTED:
+        return parse_appeal(event_id, process_id, payload)
     return NoRuleEvent(event_id, name)
 
 
@@ -181,7 +195,12 @@ def parse_message(event_id: UUID, process_id: UUID | None, process_state: object
     if process_id is None and state != AI_ACTIVE:
         raise ValueError(f"a message with no process is stamped {AI_ACTIVE}, not {state}")
     return MessageReceived(
-        event_id, process_id, state, parse_locale(payload), require_str(field(payload, "text"), "text")
+        event_id,
+        process_id,
+        state,
+        parse_locale(payload),
+        require_str(field(payload, "text"), "text"),
+        parse_optional_product(field(payload, "product")),
     )
 
 
@@ -203,6 +222,7 @@ def parse_turn(event_id: UUID, payload: Payload) -> TurnClassified:
         product_asked_count=parse_count(field(payload, "product_asked_count")),
         income_requested=require_bool(field(payload, "income_requested"), "income_requested"),
         reply_text=require_str(field(payload, "reply_text"), "reply_text"),
+        open_case_product=parse_optional_product(field(payload, "open_case_product")),
     )
 
 
@@ -214,6 +234,13 @@ def parse_analysis(event_id: UUID, payload: Payload) -> AnalysisCompleted:
         locale=parse_locale(payload),
         policy_version=parse_member(field(payload, "policy_version"), POLICY_VERSIONS, "policy_version"),
     )
+
+
+def parse_appeal(event_id: UUID, process_id: UUID | None, payload: Payload) -> AppealRequested:
+    if process_id is None:
+        raise ValueError("an appeal belongs to a case")
+    product = parse_member(field(payload, "product"), PRODUCT_KEYS, "product")
+    return AppealRequested(event_id, process_id, parse_locale(payload), product)
 
 
 def parse_locale(payload: Payload) -> Locale:

@@ -4,6 +4,7 @@ from uuid import UUID
 from api.contract_models import EventName
 from api.domain.process.events import (
     ANALYSIS_COMPLETED,
+    APPEAL_REQUESTED,
     CONSULTANT_CLOSED,
     EVENT_ACTOR,
     MESSAGE_RECEIVED,
@@ -15,6 +16,7 @@ from api.domain.process.events import (
     THREAD_TAKEN,
     TURN_CLASSIFIED,
     ActionKey,
+    appeal_key,
     consultant_close_key,
     decision_key,
     end_key,
@@ -42,6 +44,7 @@ NAMED_EVENTS = (
     PROCESS_STARTED,
     PROCESS_STATE_CHANGED,
     PROCESS_ENDED,
+    APPEAL_REQUESTED,
 )
 
 
@@ -61,6 +64,7 @@ def test_the_customer_writes_the_message_the_consultant_the_close_and_commands_t
         "process.started": "system",
         "process.state_changed": "system",
         "process.ended": "system",
+        "conversation.appeal_requested": "customer",
     }
 
 
@@ -73,8 +77,9 @@ def test_action_keys_follow_the_contract_table() -> None:
         policy_key(PROCESS_ID, "alba-credit-v1", "credit_card", EVENT_ID),
         transition_key(PROCESS_ID, "human_active", EVENT_ID),
         consultant_close_key(PROCESS_ID),
-        decision_key(PROCESS_ID),
-        end_key(PROCESS_ID),
+        end_key(PROCESS_ID, EVENT_ID),
+        decision_key(PROCESS_ID, "policy"),
+        appeal_key(PROCESS_ID),
     ] == [
         "msg:33333333-3333-4333-8333-333333333333",
         "turn:22222222-2222-4222-8222-222222222222",
@@ -83,14 +88,15 @@ def test_action_keys_follow_the_contract_table() -> None:
         "policy:11111111-1111-4111-8111-111111111111:alba-credit-v1:credit_card:22222222-2222-4222-8222-222222222222",
         "transition:11111111-1111-4111-8111-111111111111:human_active:22222222-2222-4222-8222-222222222222",
         "consultant_close:11111111-1111-4111-8111-111111111111",
-        "decision:11111111-1111-4111-8111-111111111111",
-        "end:11111111-1111-4111-8111-111111111111",
+        "end:11111111-1111-4111-8111-111111111111:22222222-2222-4222-8222-222222222222",
+        "decision:11111111-1111-4111-8111-111111111111:policy",
+        "appeal:11111111-1111-4111-8111-111111111111",
     ]
 
 
 def test_each_event_of_a_two_event_action_gets_its_own_key() -> None:
     transition = transition_key(PROCESS_ID, "human_active", EVENT_ID)
-    end = end_key(PROCESS_ID)
+    end = end_key(PROCESS_ID, EVENT_ID)
     assert_type(transition, ActionKey)
     assert_type(end, ActionKey)
     keys = [
@@ -102,8 +108,8 @@ def test_each_event_of_a_two_event_action_gets_its_own_key() -> None:
     assert keys == [
         f"{transition}:process.state_changed",
         f"{transition}:conversation.thread_taken",
-        "end:11111111-1111-4111-8111-111111111111:process.state_changed",
-        "end:11111111-1111-4111-8111-111111111111:process.ended",
+        "end:11111111-1111-4111-8111-111111111111:22222222-2222-4222-8222-222222222222:process.state_changed",
+        "end:11111111-1111-4111-8111-111111111111:22222222-2222-4222-8222-222222222222:process.ended",
     ]
     assert len(set(keys)) == len(keys)
 

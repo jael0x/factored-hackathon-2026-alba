@@ -4,7 +4,7 @@ from types import MappingProxyType
 from typing import Literal, assert_never, get_args
 from uuid import UUID
 
-from api.contract_models import EndReason, EventName, Intent, Outcome, ProcessState
+from api.contract_models import EndReason, EventName, Intent, Outcome, ProcessState, ProductKey
 from api.domain.policy.engine import NEEDS_INFO, NOT_PREQUALIFIED, PREQUALIFIED, REFER
 from api.domain.process.commands import (
     CONFIRM_PREQUALIFY_TEMPLATE,
@@ -12,6 +12,7 @@ from api.domain.process.commands import (
     DECIDED_BY_POLICY,
     GENERATE_COMMAND,
     NEEDS_INCOME,
+    PRODUCT_CASE_OPEN,
     REFER_NOTICE,
     SHOW_REPLY_COMMAND,
     WHICH_PRODUCT,
@@ -26,6 +27,7 @@ from api.domain.process.commands import (
 )
 from api.domain.process.events import (
     ANALYSIS_COMPLETED,
+    APPEAL_REQUESTED,
     CONSULTANT_CLOSED,
     MESSAGE_RECEIVED,
     PREQUALIFICATION_DECIDED,
@@ -56,6 +58,7 @@ from api.domain.process.stored_events import (
     PROVIDE_INCOME_INTENT,
     TEMPLATE_LANGUAGES,
     AnalysisCompleted,
+    AppealRequested,
     ConsultantClosed,
     MessageReceived,
     NoRuleEvent,
@@ -69,8 +72,10 @@ from api.domain.process.stored_events import (
 
 ProcessRuleId = Literal[
     "open_process",
+    "run_requested_policy",
     "generate_while_ai",
     "record_only_when_human",
+    "point_to_open_case",
     "ask_confirm_prequalify",
     "run_policy",
     "decline_prequalify",
@@ -89,11 +94,15 @@ ProcessRuleId = Literal[
     "render_decision",
     "end_after_decision",
     "close_on_consultant_decision",
+    "reopen_on_appeal",
+    "notify_appeal",
 ]
 
 OPEN_PROCESS: ProcessRuleId = "open_process"
+RUN_REQUESTED_POLICY: ProcessRuleId = "run_requested_policy"
 GENERATE_WHILE_AI: ProcessRuleId = "generate_while_ai"
 RECORD_ONLY_WHEN_HUMAN: ProcessRuleId = "record_only_when_human"
+POINT_TO_OPEN_CASE: ProcessRuleId = "point_to_open_case"
 ASK_CONFIRM_PREQUALIFY: ProcessRuleId = "ask_confirm_prequalify"
 RUN_POLICY: ProcessRuleId = "run_policy"
 DECLINE_PREQUALIFY: ProcessRuleId = "decline_prequalify"
@@ -112,6 +121,8 @@ TAKE_THREAD: ProcessRuleId = "take_thread"
 RENDER_DECISION: ProcessRuleId = "render_decision"
 END_AFTER_DECISION: ProcessRuleId = "end_after_decision"
 CLOSE_ON_CONSULTANT_DECISION: ProcessRuleId = "close_on_consultant_decision"
+REOPEN_ON_APPEAL: ProcessRuleId = "reopen_on_appeal"
+NOTIFY_APPEAL: ProcessRuleId = "notify_appeal"
 PROCESS_RULE_IDS: frozenset[ProcessRuleId] = frozenset(get_args(ProcessRuleId))
 
 PRODUCT_ASKS_BEFORE_HANDOFF = 2
@@ -154,26 +165,46 @@ def emits(*commands: Command) -> Callable[[object], tuple[Command, ...]]:
     return actions
 
 
-def opens_no_process(message: MessageReceived) -> bool:
-    return message.process_id is None
+# A start is the message the home's dialog sends (D24): no case yet, a product, and the consent already given.
+def is_start(message: MessageReceived) -> bool:
+    return message.process_id is None and message.product is not None
 
 
 def start_in_message_locale(message: MessageReceived) -> tuple[Command, ...]:
-    return (start_process(message.locale),)
+    return (start_process(message.locale, requested_product(message)),)
+
+
+def policy_run_from_start(message: MessageReceived) -> tuple[Command, ...]:
+    return (run_policy(requested_product(message), None, None),)
+
+
+def requested_product(message: MessageReceived) -> ProductKey:
+    if message.product is None:
+        raise ValueError("a start names its product")
+    return message.product
 
 
 def stamped(state: ProcessState) -> Callable[[MessageReceived], bool]:
     def when(message: MessageReceived) -> bool:
-        return message.process_state == state
+        return message.process_state == state and not is_start(message)
 
     return when
 
 
 def answerable(*intents: Intent) -> Callable[[TurnClassified], bool]:
     def when(turn: TurnClassified) -> bool:
-        return isinstance(turn, ShownTurn) and turn.language in TEMPLATE_LANGUAGES and turn.intent in intents
+        return (
+            isinstance(turn, ShownTurn)
+            and turn.language in TEMPLATE_LANGUAGES
+            and turn.intent in intents
+            and turn.open_case_product is None
+        )
 
     return when
+
+
+def names_an_open_case(turn: TurnClassified) -> bool:
+    return isinstance(turn, ShownTurn) and turn.language in TEMPLATE_LANGUAGES and turn.open_case_product is not None
 
 
 def all_of(*conditions: Callable[[TurnClassified], bool]) -> Callable[[TurnClassified], bool]:
@@ -255,12 +286,14 @@ def close_for_consultant(closed: ConsultantClosed) -> tuple[Command, ...]:
 
 
 MESSAGE_RULES: tuple[Rule[MessageReceived], ...] = (
-    Rule(OPEN_PROCESS, MESSAGE_RECEIVED, opens_no_process, start_in_message_locale),
+    Rule(OPEN_PROCESS, MESSAGE_RECEIVED, is_start, start_in_message_locale),
+    Rule(RUN_REQUESTED_POLICY, MESSAGE_RECEIVED, is_start, policy_run_from_start),
     Rule(GENERATE_WHILE_AI, MESSAGE_RECEIVED, stamped(AI_ACTIVE), emits(GENERATE_COMMAND)),
     Rule(RECORD_ONLY_WHEN_HUMAN, MESSAGE_RECEIVED, stamped(HUMAN_ACTIVE), emits()),
 )
 
 TURN_RULES: tuple[Rule[TurnClassified], ...] = (
+    Rule(POINT_TO_OPEN_CASE, TURN_CLASSIFIED, names_an_open_case, emits(send_template(PRODUCT_CASE_OPEN))),
     Rule(
         ASK_CONFIRM_PREQUALIFY,
         TURN_CLASSIFIED,
@@ -326,12 +359,20 @@ CLOSE_RULES: tuple[Rule[ConsultantClosed], ...] = (
 )
 
 
+# An appeal reopens the case for a person, then tells the customer a person will review it (D25).
+APPEAL_RULES: tuple[Rule[AppealRequested], ...] = (
+    Rule(REOPEN_ON_APPEAL, APPEAL_REQUESTED, lambda _appeal: True, emits(hand_off(CUSTOMER_REQUESTED_HUMAN))),
+    Rule(NOTIFY_APPEAL, APPEAL_REQUESTED, lambda _appeal: True, emits(send_template(REFER_NOTICE))),
+)
+
+
 RuleTable = (
     tuple[Rule[MessageReceived], ...]
     | tuple[Rule[TurnClassified], ...]
     | tuple[Rule[AnalysisCompleted], ...]
     | tuple[Rule[PrequalificationDecided], ...]
     | tuple[Rule[ConsultantClosed], ...]
+    | tuple[Rule[AppealRequested], ...]
 )
 
 
@@ -362,6 +403,8 @@ def fired_rules(event: StoredEvent) -> tuple[Firing, ...]:
             return fire(DECIDED_RULES, event)
         case ConsultantClosed():
             return fire(CLOSE_RULES, event)
+        case AppealRequested():
+            return fire(APPEAL_RULES, event)
         case TemplateSent() | NoRuleEvent():
             return ()
         case _:
@@ -408,6 +451,7 @@ RULE_TABLES: Mapping[EventName, RuleTable] = MappingProxyType(
         ANALYSIS_COMPLETED: ANALYSIS_RULES,
         PREQUALIFICATION_DECIDED: DECIDED_RULES,
         CONSULTANT_CLOSED: CLOSE_RULES,
+        APPEAL_REQUESTED: APPEAL_RULES,
     }
 )
 

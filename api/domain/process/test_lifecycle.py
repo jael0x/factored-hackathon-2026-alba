@@ -21,6 +21,7 @@ PROCESS_ID = UUID("11111111-1111-4111-8111-111111111111")
 END_REASONS: tuple[EndReason | None, ...] = (None, *get_args(EndReason))
 LEGAL_MOVES: set[tuple[ProcessState, ProcessState, EndReason | None]] = {
     ("ai_active", "human_active", None),
+    ("ended", "human_active", None),
     ("ai_active", "ended", "prequalified"),
     ("ai_active", "ended", "not_prequalified"),
     ("human_active", "ended", "prequalified"),
@@ -42,7 +43,7 @@ def test_every_other_move_is_refused(move: tuple[ProcessState, ProcessState, End
 
 def test_the_table_covers_every_pair_once() -> None:
     assert len(EVERY_MOVE) == 27
-    assert len(LEGAL_MOVES) == 5
+    assert len(LEGAL_MOVES) == 6
 
 
 def test_a_message_with_no_open_case_has_no_process_and_the_birth_state() -> None:

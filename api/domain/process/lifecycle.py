@@ -32,6 +32,8 @@ MOVE_NEEDS_END_REASON: Mapping[tuple[ProcessState, ProcessState], bool] = Mappin
         (AI_ACTIVE, HUMAN_ACTIVE): False,
         (AI_ACTIVE, ENDED): True,
         (HUMAN_ACTIVE, ENDED): True,
+        # The one move out of ended: a customer's appeal of a policy's no reopens the case for a person (D25).
+        (ENDED, HUMAN_ACTIVE): False,
     }
 )
 
