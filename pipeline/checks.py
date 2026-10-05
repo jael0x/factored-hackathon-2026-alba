@@ -19,11 +19,14 @@ def assert_expected_row_counts(
     expected: dict[str, int],
 ) -> None:
     by_name = {item.relative_name: item for item in files}
+    missing = sorted(expected.keys() - by_name.keys())
+    if missing:
+        raise SystemExit(f"Quality check: missing bronze file {', '.join(missing)}")
+    unexpected = sorted(by_name.keys() - expected.keys())
+    if unexpected:
+        raise SystemExit(f"Quality check: no expected row count for {', '.join(unexpected)}")
     for name, expected_count in expected.items():
-        item = by_name.get(name)
-        if item is None:
-            raise SystemExit(f"Quality check: missing bronze file {name}")
-        actual = count_csv_rows(item.path)
+        actual = count_csv_rows(by_name[name].path)
         if actual != expected_count:
             raise SystemExit(f"Quality check failed for {name}: expected {expected_count} rows, got {actual}")
         print(f"check rows ok {name}={actual}")

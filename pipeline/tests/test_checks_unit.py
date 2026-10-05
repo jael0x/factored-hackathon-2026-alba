@@ -59,3 +59,27 @@ def test_report_customer_nulls(testdata_dir: Path) -> None:
     assert total == 3
     assert null_score == 1
     assert null_income == 1
+
+
+def test_a_bronze_file_with_no_expected_row_count_stops_the_load(testdata_dir: Path) -> None:
+    files = [_bronze(testdata_dir / "customers.csv"), _bronze(testdata_dir / "daily_exchange_rates.csv")]
+    with pytest.raises(
+        SystemExit, match=f"^{re.escape('Quality check: no expected row count for daily_exchange_rates.csv')}$"
+    ):
+        assert_expected_row_counts(files, {"customers.csv": 3})
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["customers.csv", "products.csv", "daily_exchange_rates.csv", "service_agents.csv"],
+)
+def test_one_row_fewer_than_the_snapshot_stops_the_load(name: str, testdata_dir: Path, tmp_path: Path) -> None:
+    for source in testdata_dir.iterdir():
+        (tmp_path / source.name).write_bytes(source.read_bytes())
+    lines = (tmp_path / name).read_text(encoding="utf-8-sig").splitlines(keepends=True)
+    (tmp_path / name).write_text("".join(lines[:-1]), encoding="utf-8")
+    expected = {"customers.csv": 3, "products.csv": 2, "daily_exchange_rates.csv": 3, "service_agents.csv": 1}
+    files = [_bronze(tmp_path / source) for source in expected]
+    message = f"^Quality check failed for {re.escape(name)}: expected {expected[name]} rows, got {expected[name] - 1}$"
+    with pytest.raises(SystemExit, match=message):
+        assert_expected_row_counts(files, expected)
