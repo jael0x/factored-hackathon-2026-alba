@@ -68,6 +68,10 @@ def consultant_close_key(process_id: UUID) -> ActionKey:
     return ActionKey(f"consultant_close:{process_id}")
 
 
+def decision_key(process_id: UUID) -> ActionKey:
+    return ActionKey(f"decision:{process_id}")
+
+
 def end_key(process_id: UUID) -> ActionKey:
     return ActionKey(f"end:{process_id}")
 

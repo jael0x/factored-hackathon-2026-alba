@@ -28,6 +28,12 @@ Feature: Income request
     Then the decision records her income as 45,000 MXN
     And the decision marks that income as self-declared
 
+  Scenario: An income stated in another country's currency is asked for again
+    Given the assistant asked Juliana for her monthly income for a credit card
+    When Juliana writes "gano 45,000 pesos colombianos"
+    Then the assistant asks for her monthly income again
+    And no certificate is shown
+
   Scenario: A stated income is not saved to the customer record
     Given Juliana pre-qualified for a credit card with a stated income of 45,000 MXN
     When Juliana later confirms a pre-qualification for a personal loan

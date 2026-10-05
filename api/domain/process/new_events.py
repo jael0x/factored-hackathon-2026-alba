@@ -1,19 +1,42 @@
-from collections.abc import Mapping
 from dataclasses import dataclass
 from uuid import UUID
 
-from api.contract_models import Actor, EndReason, EventName, Locale, PolicyVersion, ProcessState, ReasonCode
+from api.contract_models import (
+    Actor,
+    CloseOutcome,
+    DecidedBy,
+    EndReason,
+    EventName,
+    Locale,
+    PolicyVersion,
+    ProcessState,
+    ProductKey,
+    ReasonCode,
+    TemplateId,
+)
+from api.domain.json_value import Payload
+from api.domain.policy.engine import Decision, PolicyFact, TraceStep
 from api.domain.process.events import (
+    ANALYSIS_COMPLETED,
+    CONSULTANT_CLOSED,
     EVENT_ACTOR,
     MESSAGE_RECEIVED,
+    PREQUALIFICATION_DECIDED,
     PROCESS_ENDED,
     PROCESS_STARTED,
     PROCESS_STATE_CHANGED,
+    TEMPLATE_SENT,
     THREAD_TAKEN,
+    TURN_CLASSIFIED,
     ActionKey,
+    consultant_close_key,
+    decision_key,
     event_key,
     message_key,
     open_process_key,
+    policy_key,
+    template_key,
+    turn_key,
 )
 from api.domain.process.lifecycle import (
     AI_ACTIVE,
@@ -23,8 +46,7 @@ from api.domain.process.lifecycle import (
     MessageStamp,
     ProcessRow,
 )
-
-PayloadValue = str | None
+from api.domain.process.turns import ModelReading, TurnStamp, WithheldReading
 
 
 @dataclass(frozen=True)
@@ -42,7 +64,7 @@ class NewEvent:
     process_state: ProcessState
     caused_by_event_id: UUID | None
     caused_by_command_id: UUID | None
-    payload: Mapping[str, PayloadValue]
+    payload: Payload
 
     @property
     def actor(self) -> Actor:
@@ -111,13 +133,85 @@ def process_ended(
     return _process_event(PROCESS_ENDED, key, process, ENDED, cause, payload)
 
 
+def turn_classified(
+    process: ProcessRow, locale: Locale, model: ModelReading, stamp: TurnStamp, cause: Cause
+) -> NewEvent:
+    reading = model.reading
+    reason_code = model.reason_code if isinstance(model, WithheldReading) else None
+    payload: Payload = {
+        "intent": reading.intent,
+        "product": stamp.product,
+        "language": reading.language,
+        "locale": locale,
+        "declared_income_amount": reading.declared_income_amount,
+        "declared_income_currency": reading.declared_income_currency,
+        "reply_text": reading.reply_text,
+        "reply_ok": reason_code is None,
+        "reason_code": reason_code,
+        "product_asked_count": stamp.product_asked_count,
+        "income_requested": stamp.income_requested,
+    }
+    return _process_event(TURN_CLASSIFIED, turn_key(cause.event_id), process, process.state, cause, payload)
+
+
+def template_sent(process: ProcessRow, locale: Locale, template_id: TemplateId, body: str, cause: Cause) -> NewEvent:
+    key = template_key(template_id, cause.event_id)
+    payload: Payload = {"locale": locale, "template_id": template_id, "body": body}
+    return _process_event(TEMPLATE_SENT, key, process, process.state, cause, payload)
+
+
+def analysis_completed(
+    process: ProcessRow, decision: Decision, product: ProductKey, locale: Locale, cause: Cause
+) -> NewEvent:
+    key = policy_key(process.process_id, decision.policy_version, product, cause.event_id)
+    payload: Payload = {
+        "policy_version": decision.policy_version,
+        "product": product,
+        "outcome": decision.outcome,
+        "deciding_rule": decision.deciding_rule,
+        "rule_trace": [trace_step(step) for step in decision.rule_trace],
+        "facts": [policy_fact(fact) for fact in decision.facts],
+        "locale": locale,
+    }
+    return _process_event(ANALYSIS_COMPLETED, key, process, process.state, cause, payload)
+
+
+def prequalification_decided(
+    process: ProcessRow, locale: Locale, outcome: CloseOutcome, body: str, decided_by: DecidedBy, cause: Cause
+) -> NewEvent:
+    payload: Payload = {"locale": locale, "outcome": outcome, "body": body, "decided_by": decided_by}
+    key = decision_key(process.process_id)
+    return _process_event(PREQUALIFICATION_DECIDED, key, process, process.state, cause, payload)
+
+
+def consultant_closed(process: ProcessRow, outcome: CloseOutcome, consultant_id: str, locale: Locale) -> NewEvent:
+    return NewEvent(
+        event_name=CONSULTANT_CLOSED,
+        idempotency_key=consultant_close_key(process.process_id),
+        customer_id=process.customer_id,
+        process_id=process.process_id,
+        process_state=process.state,
+        caused_by_event_id=None,
+        caused_by_command_id=None,
+        payload={"outcome": outcome, "consultant_id": consultant_id, "locale": locale},
+    )
+
+
+def trace_step(step: TraceStep) -> Payload:
+    return {"rule_id": step.rule_id, "input": dict(step.input), "result": step.result}
+
+
+def policy_fact(fact: PolicyFact) -> Payload:
+    return {"name": fact.name, "value": fact.value, "source": fact.source, "as_of": fact.as_of.isoformat()}
+
+
 def _process_event(
     event_name: EventName,
     idempotency_key: str,
     process: ProcessRow,
     process_state: ProcessState,
     cause: Cause,
-    payload: Mapping[str, PayloadValue],
+    payload: Payload,
 ) -> NewEvent:
     return NewEvent(
         event_name=event_name,

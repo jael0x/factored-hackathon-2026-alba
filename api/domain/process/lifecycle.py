@@ -14,6 +14,7 @@ PROCESS_STATES: frozenset[ProcessState] = frozenset(get_args(ProcessState))
 
 PREQUALIFIED_END: EndReason = "prequalified"
 NOT_PREQUALIFIED_END: EndReason = "not_prequalified"
+END_REASONS: frozenset[EndReason] = frozenset(get_args(EndReason))
 
 CUSTOMER_REQUESTED_HUMAN: ReasonCode = "customer_requested_human"
 OUT_OF_SCOPE: ReasonCode = "out_of_scope"

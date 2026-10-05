@@ -6,14 +6,16 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from api.contract_models import Locale, ProductKey, ReasonCode
-from api.domain.process.events import TURN_CLASSIFIED
-from api.domain.process.lifecycle import AI_ACTIVE
+from api.domain.process.lifecycle import AI_ACTIVE, ProcessRow
+from api.domain.process.new_events import Cause, turn_classified
 from api.domain.process.stored_events import StoredEvent, parse_stored_event
-from api.infrastructure.llm.schema import ConversationTurn, decode_exact_json
+from api.domain.process.turns import ModelReading, ShownReading, TurnStamp, WithheldReading
+from api.infrastructure.llm.schema import ConversationTurn, decode_exact_json, reading_of
 
 TURN_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "turns"
 EVENT_ID = UUID("44444444-4444-4444-8444-444444444444")
 PROCESS_ID = UUID("22222222-2222-4222-8222-222222222222")
+MESSAGE_ID = UUID("66666666-6666-4666-8666-666666666666")
 
 TurnFixtureName = Literal[
     "es-quiero-un-credito",
@@ -62,18 +64,13 @@ def load_turn_fixture(name: TurnFixtureName) -> TurnFixture:
 
 
 def classified_turn(fixture: TurnFixture, stamp: Stamp) -> StoredEvent:
-    turn = fixture.turn
-    payload: dict[str, object] = {
-        "intent": turn.intent,
-        "product": stamp.product,
-        "language": turn.language,
-        "locale": fixture.locale,
-        "declared_income_amount": turn.declared_income_amount,
-        "declared_income_currency": turn.declared_income_currency,
-        "reply_text": turn.reply_text,
-        "reply_ok": stamp.withheld is None,
-        "reason_code": stamp.withheld,
-        "product_asked_count": stamp.product_asked_count,
-        "income_requested": stamp.income_requested,
-    }
-    return parse_stored_event(EVENT_ID, TURN_CLASSIFIED, PROCESS_ID, AI_ACTIVE, payload)
+    reading = reading_of(fixture.turn)
+    model: ModelReading = ShownReading(reading) if stamp.withheld is None else WithheldReading(reading, stamp.withheld)
+    event = turn_classified(
+        ProcessRow(PROCESS_ID, "CLI-TEST", AI_ACTIVE),
+        fixture.locale,
+        model,
+        TurnStamp(stamp.product, stamp.product_asked_count, stamp.income_requested),
+        Cause(MESSAGE_ID, None),
+    )
+    return parse_stored_event(EVENT_ID, event.event_name, event.process_id, event.process_state, event.payload)

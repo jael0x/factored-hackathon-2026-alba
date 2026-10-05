@@ -491,7 +491,7 @@ node('worker', {
   parent: 'api', kind: 'component', name: 'Command worker', tech: 'api/presentation/worker/',
   summary: 'Takes pending commands with `FOR UPDATE SKIP LOCKED` and runs one of 8 handlers. At most 3 attempts.',
   desc: ['A loop inside the API process. A finished command may write another event, and the rules react to that event. A handler never enqueues the next command itself.'],
-  files: ['api/presentation/worker/'],
+  files: ['api/presentation/worker/loop.py', 'api/application/cycle/', 'api/infrastructure/db/commands.py'],
   src: 'ARCHITECTURE.md, "Commands"',
 });
 node('processes', {
@@ -720,24 +720,24 @@ spec('events', 'e-payloads', {
   src: 'ARCHITECTURE.md, "Events"',
 });
 spec('events', 'e-idem', {
-  name: 'Idempotency keys', tech: '8 actions', status: 'defined',
+  name: 'Idempotency keys', tech: '9 actions', status: 'defined',
   summary: 'Every action has a key derived from facts, never from a clock.',
   fixed: [
     'Message `msg:{client_message_id}`. Turn `turn:{triggered_by_event_id}`. Template `template:{template_id}:{triggered_by_event_id}`. Open process `process:{customer_id}:credit_prequalification:{triggered_by_event_id}`.',
-    'Run policy `policy:{process_id}:alba-credit-v1:{product}:{triggered_by_event_id}` (D12): a run after `NEEDS_INFO` comes from another turn, so it has its own key. Transition `transition:{process_id}:{to_state}:{caused_by_event_id}`. Consultant close `consultant_close:{process_id}`. End `end:{process_id}`.',
+    'Run policy `policy:{process_id}:alba-credit-v1:{product}:{triggered_by_event_id}` (D12): a run after `NEEDS_INFO` comes from another turn, so it has its own key. Transition `transition:{process_id}:{to_state}:{caused_by_event_id}`. Consultant close `consultant_close:{process_id}`. Certificate `decision:{process_id}`, one per case. End `end:{process_id}`.',
     'Transition and end write two events each; each event is keyed `{action key}:{event_name}` (D19). Every builder is in `api/domain/process/events.py`.',
   ],
   tests: ['A second message with the same key creates no event and no decision.'],
   src: 'ARCHITECTURE.md, "Events"; AGENTS.md, "Database"',
 });
 spec('events', 'e-dispatch', {
-  name: 'Event to rules hand-off', tech: 'owner not named', status: 'partial',
-  summary: 'Who calls `match_rules` after an insert, and in which transaction.',
+  name: 'Event to rules hand-off', tech: 'api/application/cycle/plan.py', status: 'defined',
+  summary: '`PlanningEvents` appends the event and inserts its commands in the same transaction.',
   fixed: [
-    'Insert the event, then `match_rules(event)`, then `commands` rows.',
-    'Commands from one event are inserted in rule-table order and run in that order before another event is taken.',
+    'Insert the event, then `match_rules(event)` on the stored row read back through `parse_stored_event`, then `commands` rows on their keys.',
+    'Every append in the cycle goes through `PlanningEvents`, so an event and its commands commit together, and a replayed event plans nothing new.',
+    'Commands from one event are inserted in rule-table order (`commands.seq`) and run in that order: a customer\'s command waits while an earlier one of theirs is pending.',
   ],
-  open: [['New', 'Which module calls `match_rules` and inserts the commands, and whether an event and its commands commit in one transaction.']],
   src: 'ARCHITECTURE.md, "Process-native loop", "Process rules"',
 });
 spec('rules', 'ru-shape', {
@@ -812,13 +812,14 @@ spec('rules', 'ru-purity', {
 });
 
 spec('worker', 'w-loop', {
-  name: 'Worker loop', tech: 'FOR UPDATE SKIP LOCKED', status: 'partial',
-  summary: 'Takes pending commands, counts attempts, stops at 3.',
+  name: 'Worker loop', tech: 'FOR UPDATE SKIP LOCKED', status: 'defined',
+  summary: 'Takes pending commands in order per customer, counts attempts, stops at 3.',
   fixed: [
-    'Takes `pending` rows with `FOR UPDATE SKIP LOCKED`, increments `attempt_count`, runs the command, marks it `done` or `failed`. Index on pending `commands (status)`.',
-    'At most 3 attempts. On the third failure it transitions to `human_active` with `reason_code = tool_failed`. It does not retry in a loop.',
+    'Takes the lowest-`seq` `pending` row whose customer has no earlier pending command, with `FOR UPDATE SKIP LOCKED`. One attempt is one transaction; a failure rolls back to a savepoint and records `attempt_count` and `last_error`.',
+    'At most 3 attempts, the next one at once. On the third failure the command and its event\'s later commands fail, and an `ai_active` case moves to `human_active` with `reason_code = tool_failed`. It does not retry in a loop.',
+    'One thread in the API process when `RUN_WORKER` is set: it wakes when work is enqueued and polls every second. `POST /messages` waits on `wait_for_cycle` and runs no command itself.',
   ],
-  open: [['New', 'How often the loop polls, and whether a failed attempt is retried at once or after a delay.']],
+  tests: ['Two workers never run one customer\'s commands side by side.', 'Three model failures send the case to a person with `tool_failed`.'],
   src: 'ARCHITECTURE.md, "Commands", "Indexes"',
 });
 spec('worker', 'w-table', {
@@ -912,13 +913,13 @@ spec('processes', 'p-reasons', {
   src: 'ARCHITECTURE.md, "Process"',
 });
 spec('processes', 'p-end', {
-  name: 'Ending', tech: 'process.end', status: 'partial',
+  name: 'Ending', tech: 'process.end', status: 'defined',
   summary: 'Both end events, with the same reason, from the policy or the consultant.',
   fixed: [
     '`process.end` writes `process.state_changed` and `process.ended`, both with the same `end_reason`.',
     'From the consultant, the reason is `prequalified` or `not_prequalified`, the same choice. There is no `referred_closed`.',
+    'Only `process.transition` and `process.end` change `processes.state` (D16 (3), closed Oct 5). `process.ended` carries the `policy_version` of the analysis behind a policy certificate, null after a consultant close.',
   ],
-  open: [['New', '`process.end` sets `state = ended`, yet "Process-native loop" says only `process.transition` changes `processes.state`.']],
   src: 'ARCHITECTURE.md, "Process-native loop", "Commands", "Consultant close"',
 });
 spec('policy', 'po-decide', {
@@ -1022,7 +1023,7 @@ spec('templates', 't-cert', {
   name: 'Certificate', tech: 'prequalification.decided', status: 'partial',
   summary: 'The `constancia`, from the policy or from the consultant close.',
   fixed: [
-    'Written to `prequalification.decided` with `locale`, `template_id`, `outcome`, `body`, `decided_by` (`policy` or `consultant`).',
+    'Written to `prequalification.decided` with `locale`, `outcome`, `body`, `decided_by` (`policy` or `consultant`), keyed `decision:{process_id}`.',
     'One sentence from `api/domain/policy/templates.py`: the outcome for the product, and that the pre-qualification is simulated. Income, its USD equivalent, and the date are the `facts` shown beside it. No limit amount, no rate, no name.',
     'On the consultant path the row in `messages` has `author = template`. The model does not draft it.',
     'Only templates emit `precalifica`, `no precalifica`, `pré-qualificado`, or `não pré-qualifica`.',

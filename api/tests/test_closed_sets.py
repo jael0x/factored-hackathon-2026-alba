@@ -6,7 +6,7 @@ from typing import Literal, get_args, get_origin
 
 from api import contract_models
 from api.contract_models import IncomeCurrency
-from api.domain.process.commands import CommandName
+from api.domain.process.commands import CommandName, CommandStatus
 from api.domain.process.rules import ProcessRuleId
 from pipeline.constants import INCOME_CURRENCY_BY_COUNTRY
 
@@ -19,6 +19,7 @@ WIRE_SETS: dict[str, frozenset[str]] = {
 }
 DOMAIN_SETS: dict[str, frozenset[str]] = {
     "CommandName": frozenset(get_args(CommandName)),
+    "CommandStatus": frozenset(get_args(CommandStatus)),
     "ProcessRuleId": frozenset(get_args(ProcessRuleId)),
 }
 CLOSED_SETS: dict[str, frozenset[str]] = {**WIRE_SETS, **DOMAIN_SETS}
@@ -27,6 +28,7 @@ CLOSED_VALUES: frozenset[str] = frozenset().union(*CLOSED_SETS.values())
 LITERAL_OWNERS: frozenset[tuple[str, str]] = frozenset(
     {
         ("CommandName", "api/domain/process/commands.py"),
+        ("CommandStatus", "api/domain/process/commands.py"),
         ("ProcessRuleId", "api/domain/process/rules.py"),
         ("CustomerStatus", "api/domain/policy/engine.py"),
     }

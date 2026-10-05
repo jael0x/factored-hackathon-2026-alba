@@ -5,6 +5,7 @@ from typing import Annotated, NoReturn
 from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
 
 from api.contract_models import IncomeCurrency, Intent, ProductKey, TurnLanguage
+from api.domain.process.turns import TurnReading
 
 IncomeAmount = Annotated[Decimal, Field(ge=0, allow_inf_nan=False), WithJsonSchema({"type": "number", "minimum": 0})]
 
@@ -20,6 +21,17 @@ class ConversationTurn(BaseModel):
     needs_clarification: bool
     clarification_question: str | None
     reply_text: str
+
+
+def reading_of(turn: ConversationTurn) -> TurnReading:
+    return TurnReading(
+        intent=turn.intent,
+        product=turn.product,
+        language=turn.language,
+        declared_income_amount=turn.declared_income_amount,
+        declared_income_currency=turn.declared_income_currency,
+        reply_text=turn.reply_text,
+    )
 
 
 class InvalidConversationTurn(Exception):

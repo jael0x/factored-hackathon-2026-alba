@@ -8,7 +8,7 @@ from uuid import UUID
 
 import pytest
 
-from api.contract_models import EndReason, EventName, Intent, ProductKey, TurnLanguage
+from api.contract_models import EndReason, EventName, IncomeCurrency, Intent, ProductKey, ReasonCode, TurnLanguage
 from api.domain.process.commands import (
     GENERATE_COMMAND,
     SHOW_REPLY_COMMAND,
@@ -20,6 +20,8 @@ from api.domain.process.commands import (
     send_template,
     start_process,
 )
+from api.domain.process.lifecycle import ProcessRow
+from api.domain.process.new_events import Cause, turn_classified
 from api.domain.process.rules import (
     ANALYSIS_RULES,
     CLOSE_RULES,
@@ -48,8 +50,10 @@ from api.domain.process.stored_events import (
     WithheldTurn,
     parse_stored_event,
 )
+from api.domain.process.turns import ShownReading, TurnReading, TurnStamp, WithheldReading
 
 EVENT_ID = UUID("33333333-3333-4333-8333-333333333333")
+MESSAGE_ID = UUID("55555555-5555-4555-8555-555555555555")
 PROCESS_ID = UUID("11111111-1111-4111-8111-111111111111")
 COUNTS = (0, 1, 2, 3)
 
@@ -61,28 +65,36 @@ def stored(event_name: str, payload: Mapping[str, object], process_id: UUID | No
 
 
 def message(process_id: UUID | None, state: str, locale: str = "es") -> StoredEvent:
-    return parse_stored_event(EVENT_ID, "conversation.message_received", process_id, state, {"locale": locale})
+    payload = {"text": "hola", "locale": locale}
+    return parse_stored_event(EVENT_ID, "conversation.message_received", process_id, state, payload)
 
 
-def turn(**overrides: object) -> StoredEvent:
-    payload: dict[str, object] = {
-        "intent": "clarify",
-        "product": None,
-        "language": "es",
-        "declared_income_amount": None,
-        "declared_income_currency": None,
-        "reply_text": "",
-        "reply_ok": True,
-        "reason_code": None,
-        "product_asked_count": 0,
-        "income_requested": False,
-        **overrides,
-    }
-    return stored("conversation.turn_classified", payload)
+def turn(
+    *,
+    intent: Intent = "clarify",
+    product: ProductKey | None = None,
+    language: TurnLanguage = "es",
+    declared_income_amount: Decimal | None = None,
+    declared_income_currency: IncomeCurrency | None = None,
+    withheld: ReasonCode | None = None,
+    product_asked_count: int = 0,
+    income_requested: bool = False,
+) -> StoredEvent:
+    reading = TurnReading(intent, None, language, declared_income_amount, declared_income_currency, "")
+    model = ShownReading(reading) if withheld is None else WithheldReading(reading, withheld)
+    event = turn_classified(
+        ProcessRow(PROCESS_ID, "CLI-TEST", "ai_active"),
+        "es",
+        model,
+        TurnStamp(product, product_asked_count, income_requested),
+        Cause(MESSAGE_ID, None),
+    )
+    return parse_stored_event(EVENT_ID, event.event_name, event.process_id, event.process_state, event.payload)
 
 
 def analysis(outcome: str) -> StoredEvent:
-    return stored("analysis.completed", {"outcome": outcome})
+    payload = {"outcome": outcome, "product": "credit_card", "locale": "es", "policy_version": "alba-credit-v1"}
+    return stored("analysis.completed", payload)
 
 
 def decided(outcome: str, decided_by: str) -> StoredEvent:
@@ -90,7 +102,7 @@ def decided(outcome: str, decided_by: str) -> StoredEvent:
 
 
 def closed(outcome: str) -> StoredEvent:
-    return stored("conversation.consultant_closed", {"outcome": outcome})
+    return stored("conversation.consultant_closed", {"outcome": outcome, "locale": "es"})
 
 
 def fired(event: StoredEvent) -> Fired:
@@ -247,12 +259,12 @@ TURN_CASES: list[tuple[str, StoredEvent, Fired]] = [
     ),
     (
         "a forbidden reply goes to a person",
-        turn(reply_ok=False, reason_code="reply_forbidden", intent="confirm_prequalify", product="credit_card"),
+        turn(withheld="reply_forbidden", intent="confirm_prequalify", product="credit_card"),
         (("hand_off_reply", hand_off("reply_forbidden")),),
     ),
     (
         "two invalid model outputs go to a person",
-        turn(reply_ok=False, reason_code="model_output_invalid", language="other"),
+        turn(withheld="model_output_invalid", language="other"),
         (("hand_off_reply", hand_off("model_output_invalid")),),
     ),
     (
@@ -297,7 +309,7 @@ NOT_FIRED: list[tuple[str, StoredEvent, ProcessRuleId]] = [
         turn(intent="confirm_prequalify", product="credit_card", product_asked_count=2),
         "hand_off_no_product",
     ),
-    ("a withheld turn is not shown", turn(reply_ok=False, reason_code="reply_forbidden"), "show_reply"),
+    ("a withheld turn is not shown", turn(withheld="reply_forbidden"), "show_reply"),
     ("a shown turn is not a reply handoff", turn(intent="chit_chat"), "hand_off_reply"),
     ("Spanish is not another language", turn(intent="chit_chat"), "hand_off_language"),
     ("a spent clarify is not shown", turn(intent="clarify", product_asked_count=2), "show_reply"),
@@ -324,8 +336,7 @@ EVERY_TURN = list(
 def every_turn() -> list[StoredEvent]:
     return [
         turn(
-            reply_ok=reply_ok,
-            reason_code=None if reply_ok else "model_output_invalid",
+            withheld=None if reply_ok else "model_output_invalid",
             language=language,
             intent=intent,
             product=product,
@@ -393,7 +404,6 @@ def test_a_consultant_close_renders_then_ends_without_the_policy(outcome: str, e
 @pytest.mark.parametrize(
     "event_name",
     [
-        "conversation.template_sent",
         "conversation.thread_taken",
         "process.started",
         "process.state_changed",
@@ -402,6 +412,11 @@ def test_a_consultant_close_renders_then_ends_without_the_policy(outcome: str, e
 )
 def test_an_event_no_rule_reads_plans_nothing(event_name: str) -> None:
     assert match_rules(stored(event_name, {})) == ()
+
+
+@pytest.mark.parametrize("template_id", ["confirm_prequalify", "which_product", "needs_income", "refer_notice"])
+def test_a_sent_template_plans_nothing(template_id: str) -> None:
+    assert match_rules(stored("conversation.template_sent", {"template_id": template_id})) == ()
 
 
 def flow(events: list[StoredEvent]) -> list[Fired]:
@@ -544,7 +559,7 @@ def test_a_rule_that_emits_a_command_twice_is_refused() -> None:
 
 def test_policy_run_is_only_built_from_a_shown_turn_with_a_product() -> None:
     with pytest.raises(ValueError, match=r"policy\.run needs a shown turn with a product"):
-        policy_run_from_turn(WithheldTurn(EVENT_ID, "reply_forbidden"))
+        policy_run_from_turn(WithheldTurn(EVENT_ID, "es", "reply_forbidden"))
     no_product = turn(intent="confirm_prequalify")
     assert isinstance(no_product, ShownTurn)
     with pytest.raises(ValueError, match=r"policy\.run needs a shown turn with a product"):

@@ -62,6 +62,7 @@ from api.domain.process.stored_events import (
     PrequalificationDecided,
     ShownTurn,
     StoredEvent,
+    TemplateSent,
     TurnClassified,
     WithheldTurn,
 )
@@ -363,7 +364,7 @@ def fired_rules(event: StoredEvent) -> tuple[Firing, ...]:
             return fire(DECIDED_RULES, event)
         case ConsultantClosed():
             return fire(CLOSE_RULES, event)
-        case NoRuleEvent():
+        case TemplateSent() | NoRuleEvent():
             return ()
         case _:
             assert_never(event)

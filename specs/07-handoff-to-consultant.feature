@@ -23,6 +23,13 @@ Feature: Handoff to a consultant
     Then her message is saved in the thread
     And the assistant does not reply
 
+  Scenario: A message sent while the case is being handed off does not reach the model
+    Given Juan wrote "quiero hablar con una persona"
+    And his case has not reached the review queue yet
+    When Juan writes "sí"
+    Then his case enters the review queue with reason "customer_requested_human"
+    And the assistant does not reply to "sí"
+
   Scenario Outline: A request the assistant should not handle goes to a person
     Given Juan Alberto Romero González is signed in with no open case
     When Juan writes "<message>"

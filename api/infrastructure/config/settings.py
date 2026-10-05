@@ -14,15 +14,16 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     llm_model: str = "gpt-6-luna"
     demo_login: bool = False
+    run_worker: bool = False
     smtp_host: str = "localhost"
     smtp_port: int = 1025
     mail_from: str = "Alba <no-reply@alba.local>"
     db_pool_min: int = DB_POOL_MIN_DEFAULT
     db_pool_max: int = DB_POOL_MAX_DEFAULT
 
-    @field_validator("demo_login", mode="before")
+    @field_validator("demo_login", "run_worker", mode="before")
     @classmethod
-    def parse_demo_login(cls, value: object) -> bool:
+    def parse_flag(cls, value: object) -> bool:
         if isinstance(value, bool):
             return value
         if value is None:

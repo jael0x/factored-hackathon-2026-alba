@@ -1,0 +1,117 @@
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from decimal import Decimal
+from typing import Any, LiteralString
+from uuid import UUID, uuid4
+
+import psycopg
+from psycopg_pool import ConnectionPool
+
+from api.application.cycle.plan import PlanningEvents
+from api.application.cycle.ports import TurnRequest
+from api.application.processes import record_customer_message
+from api.contract_models import Locale
+from api.domain.process.new_events import Appended, AppendResult, NewEvent
+from api.domain.process.turns import ModelReading, ShownReading
+from api.infrastructure.db.commands import PostgresCommands
+from api.infrastructure.db.events import PostgresEventLog, PostgresEvents
+from api.infrastructure.db.json_codec import configure_json
+from api.infrastructure.db.pool import open_pool
+from api.infrastructure.db.processes import PostgresProcesses
+from api.infrastructure.llm.schema import reading_of
+from api.tests.turn_harness import TurnFixtureName, load_turn_fixture
+
+JUAN = "CLI-9EDEKZ8OUNUR"
+JULIANA = "CLI-MD60UR8PNJDI"
+ALICIA = "CLI-440CO5FZIY6A"
+MARIANA = "CLI-ZGOY1V6ZC46J"
+NO_PROFILE = "CLI-NOPROFILE001"
+
+# The oracle values of ARCHITECTURE.md, "Oracle fixtures", as the gold row holds them.
+GOLD_ROWS: list[tuple[Any, ...]] = [
+    (JUAN, "México", 812, Decimal("306753.45"), "MXN", Decimal("17988.33"), 0, False, False),
+    (JULIANA, "México", 714, None, "MXN", None, 0, False, False),
+    (ALICIA, "Colombia", 615, Decimal("4707334.28"), "COP", Decimal("1167.42"), 0, False, False),
+    (MARIANA, "Argentina", 515, Decimal("801583.70"), "ARS", Decimal("2302.95"), 180, True, False),
+]
+
+
+class ModelDown(Exception):
+    pass
+
+
+@dataclass
+class ScriptedModel:
+    readings: Mapping[str, ModelReading]
+    failures_left: int = 0
+    calls: list[TurnRequest] = field(default_factory=list)
+
+    def __call__(self, request: TurnRequest) -> ModelReading:
+        self.calls.append(request)
+        if self.failures_left > 0:
+            self.failures_left -= 1
+            raise ModelDown("the model did not answer")
+        return self.readings[request.text]
+
+
+def scripted(*names: TurnFixtureName, failures: int = 0) -> ScriptedModel:
+    fixtures = [load_turn_fixture(name) for name in names]
+    return ScriptedModel({f.text: ShownReading(reading_of(f.turn)) for f in fixtures}, failures)
+
+
+def seed_cycle_people(url: str) -> None:
+    with psycopg.connect(url) as conn:
+        conn.cursor().executemany(
+            """
+            INSERT INTO customers (customer_id, document_number, first_name, last_name, country, segment, customer_status)
+            VALUES (%s, %s, 'Nombre', 'Apellido', %s, 'Basic', 'Active')
+            """,
+            [(row[0], row[0], row[1]) for row in GOLD_ROWS] + [(NO_PROFILE, NO_PROFILE, "México")],
+        )
+        conn.cursor().executemany(
+            """
+            INSERT INTO customer_credit_profile (
+                customer_id, first_name, last_name, country, segment, customer_status, credit_score, income_local,
+                income_currency, income_usd, max_days_past_due, has_active_card, has_active_personal_loan, as_of, batch_id
+            )
+            VALUES (%s, 'Nombre', 'Apellido', %s, 'Basic', 'Active', %s, %s, %s, %s, %s, %s, %s, '2026-06-17', %s)
+            """,
+            [(*row, uuid4()) for row in GOLD_ROWS],
+        )
+
+
+@contextmanager
+def cycle_pool(url: str) -> Iterator[ConnectionPool]:
+    pool = open_pool(url, 1, 4)
+    pool.wait()
+    try:
+        yield pool
+    finally:
+        pool.close()
+
+
+def planning(conn: psycopg.Connection) -> PlanningEvents:
+    return PlanningEvents(PostgresEvents(conn), PostgresEventLog(conn), PostgresCommands(conn))
+
+
+def send(
+    pool: ConnectionPool, customer_id: str, text: str, locale: Locale = "es", message_id: UUID | None = None
+) -> UUID:
+    with pool.connection() as conn:
+        result = record_customer_message(
+            planning(conn), PostgresProcesses(conn), customer_id, text, message_id or uuid4(), locale
+        )
+    assert isinstance(result, Appended)
+    return result.event_id
+
+
+def append(pool: ConnectionPool, event: NewEvent) -> AppendResult:
+    with pool.connection() as conn:
+        return planning(conn).append(event)
+
+
+def query(url: str, sql: LiteralString, params: tuple[Any, ...] = ()) -> list[tuple[Any, ...]]:
+    with psycopg.connect(url) as conn:
+        configure_json(conn)
+        return conn.execute(sql, params).fetchall()
