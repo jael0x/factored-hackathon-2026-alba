@@ -983,7 +983,7 @@ spec('policy', 'po-decision', {
   fixed: [
     '`outcome`, `deciding_rule`, `rule_trace`, `facts`, `policy_version = "alba-credit-v1"`.',
     'One outcome, not `is_prequalified` plus `needs_human`.',
-    '`facts` cites the closing rule. A `self_declared` income is cited ahead of it, with source `self_declared`. A typed amount is ignored when income is on file.',
+    '`facts` names each fact once: the closing rule first, then `credit_score`, `income_local`, `income_currency`, and `income_usd` from the profile, which the certificate and the packet read. A `self_declared` income is the `income_local` fact, with source `self_declared`. A typed amount is ignored when income is on file.',
   ],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; AGENTS.md, "Types"',
 });

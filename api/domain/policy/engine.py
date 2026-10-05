@@ -45,11 +45,14 @@ HOLDS_PRODUCT = "holds_product"
 INCOME_LOCAL = "income_local"
 DECLARED_INCOME = "declared_income"
 INCOME_CURRENCY = "income_currency"
+INCOME_USD = "income_usd"
 
 SOURCE_STATUS = "customer_credit_profile.customer_status"
 SOURCE_SCORE = "customer_credit_profile.credit_score"
 SOURCE_DAYS = "customer_credit_profile.max_days_past_due"
 SOURCE_INCOME = "customer_credit_profile.income_local"
+SOURCE_CURRENCY = "customer_credit_profile.income_currency"
+SOURCE_INCOME_USD = "customer_credit_profile.income_usd"
 SOURCE_PRODUCTS = "products"
 SOURCE_SELF_DECLARED = "self_declared"
 
@@ -409,19 +412,31 @@ def evaluate(
     return tuple(found)
 
 
-def decision_from(evaluations: tuple[RuleEvaluation, ...], spec: PolicySpec) -> Decision:
+def cited_facts(profile: CreditProfile, declared_income: PolicyFact | None) -> tuple[PolicyFact, ...]:
+    file_income = _fact(INCOME_LOCAL, profile.income_local, SOURCE_INCOME, profile.as_of)
+    return (
+        _fact(CREDIT_SCORE, profile.credit_score, SOURCE_SCORE, profile.as_of),
+        file_income if declared_income is None else declared_income,
+        _fact(INCOME_CURRENCY, profile.income_currency, SOURCE_CURRENCY, profile.as_of),
+        _fact(INCOME_USD, profile.income_usd, SOURCE_INCOME_USD, profile.as_of),
+    )
+
+
+def decision_from(evaluations: tuple[RuleEvaluation, ...], profile: CreditProfile, spec: PolicySpec) -> Decision:
     winner = terminal_step(tuple(evaluation.step for evaluation in evaluations))
     closing = next(evaluation.deciding_fact for evaluation in evaluations if evaluation.step.rule_id == winner.rule_id)
     if closing is None:
         raise ValueError(f"{winner.rule_id} closed without a fact")
-    declared = tuple(
-        evaluation.declared_income_fact for evaluation in evaluations if evaluation.declared_income_fact is not None
+    declared = next(
+        (evaluation.declared_income_fact for evaluation in evaluations if evaluation.declared_income_fact is not None),
+        None,
     )
+    cited = tuple(fact for fact in cited_facts(profile, declared) if fact.name != closing.name)
     return Decision(
         outcome=outcome_of(winner.result),
         deciding_rule=winner.rule_id,
         rule_trace=tuple(evaluation.step for evaluation in evaluations),
-        facts=(*declared, closing),
+        facts=(closing, *cited),
         policy_version=spec.version,
     )
 
@@ -435,7 +450,7 @@ def decide_under(
     product_key = parse_product(product)
     amount = parse_declared_income(declared_income)
     require_declared_currency(profile, amount)
-    return decision_from(evaluate(profile, product_key, amount, spec), spec)
+    return decision_from(evaluate(profile, product_key, amount, spec), profile, spec)
 
 
 def decide(profile: CreditProfile, product: ProductKey, declared_income: Decimal | None) -> Decision:
