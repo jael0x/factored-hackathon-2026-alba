@@ -308,13 +308,15 @@ paths:
         Alba's reply, templates, and certificate for this case are written in the locale of the latest message.
         customer_id comes from the token; the customer never sends process_state.
         The handler appends conversation.message_received. It does not choose an outcome.
-        The response is sent after the worker has finished the commands enqueued from that event, or after
-        30 seconds with the case as it stands.
+        The response is sent after the worker has finished the commands enqueued from that event. If they have
+        not finished within 30 seconds, the answer is 503 cycle_pending and nothing is undone: the same
+        client_message_id sent again waits for the same cycle.
         The same client_message_id with the same text, locale, and product from the same customer returns this
         case again and does not append a second event. The same client_message_id for another message is
         409 message_id_reused and appends nothing.
-        A start for a product that already has an open case is 409 case_already_open. A message to an ended case
-        is 409 case_ended. Another customer's process_id, or an unknown one, is 404.
+        A start for a product that already has an open case is 409 case_already_open, also when another start
+        for the product opened its case first. A message to an ended case is 409 case_ended. Another customer's
+        process_id, or an unknown one, is 404.
       requestBody:
         required: true
         content:
@@ -338,6 +340,8 @@ paths:
           $ref: "#/components/responses/MessageConflict"
         "422":
           $ref: "#/components/responses/InvalidRequest"
+        "503":
+          $ref: "#/components/responses/CyclePending"
 
   /cases:
     get:
@@ -367,9 +371,11 @@ paths:
       description: >
         Requires role customer (PLAN.md D25). The case must be the token's customer's, ended as not_prequalified
         by the policy, and not appealed before; otherwise 409 case_not_appealable, or 404 for another customer's
-        or an unknown case. Appends conversation.appeal_requested, keyed appeal:{process_id}; the case moves back
+        or an unknown case. While another case of the same product is open, the case cannot reopen: 409
+        case_already_open. Case.appealable says in advance whether this succeeds. Appends conversation.appeal_requested, keyed appeal:{process_id}; the case moves back
         to human_active with reason customer_requested_human and the customer gets the referral notice. Sending
-        it again for the same case returns the case and appends nothing. The response is the case after that cycle.
+        it again for the same case returns the case and appends nothing. The response is the case after that
+        cycle, or 503 cycle_pending as for POST /messages.
       parameters:
         - $ref: "#/components/parameters/ProcessId"
       requestBody:
@@ -395,6 +401,8 @@ paths:
           $ref: "#/components/responses/MessageConflict"
         "422":
           $ref: "#/components/responses/InvalidRequest"
+        "503":
+          $ref: "#/components/responses/CyclePending"
 
   /case/{process_id}:
     get:
@@ -615,6 +623,14 @@ components:
             oneOf:
               - $ref: "#/components/schemas/MessageIdReusedError"
               - $ref: "#/components/schemas/CaseConflictError"
+    CyclePending:
+      description: >
+        The message or appeal is stored, and its commands had not finished after 30 seconds. Nothing is undone;
+        the same request sent again waits for the same cycle.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CyclePendingError"
     AlreadyClosed:
       description: This process was already ended. The outcome does not change.
       content:
@@ -704,6 +720,15 @@ components:
         error:
           type: string
           enum: [case_already_open, case_ended, case_not_appealable]
+
+    CyclePendingError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [cycle_pending]
 
     AlreadyClosedError:
       type: object
@@ -1079,10 +1104,11 @@ components:
       type: object
       additionalProperties: false
       description: >
-        Present only when prequalification.decided exists for this process.
-        Income fields are copied from facts on the analysis.completed for this process
-        (names income_local, income_currency, income_usd). as_of is the as_of of the income_local fact.
-        A missing fact is null. This object has no credit limit and no interest rate.
+        The latest prequalification.decided of this process. A policy certificate copies its income fields
+        from the facts (income_local, income_currency, income_usd) of the analysis.completed its decision
+        names in caused_by_event_id, and its product from that analysis; as_of is the as_of of the income_local
+        fact. A consultant certificate is the person's decision: its income fields and as_of are null and its
+        product is the case's (PLAN.md D25). This object has no credit limit and no interest rate.
       required: [event_id, decided_by, locale, outcome, body, product, income_local, income_currency, income_usd, as_of]
       properties:
         event_id:
@@ -1164,8 +1190,10 @@ components:
         process names in caused_by_event_id (the opening message through process.started, and a message
         sent before the case existed that joined it). Assistant and template lines come from messages rows.
         A messages row with a null event_id is omitted. Order is the order the linked events were written
-        (events.seq). certificate is null until prequalification.decided exists.
-      required: [process_id, state, end_reason, product, locale, messages, certificate]
+        (events.seq). certificate is null until prequalification.decided exists. appealable is true only when
+        the certificate is a no the policy decided, the case has ended, and no other case of its product is
+        open (PLAN.md D25); the screen offers the review only then.
+      required: [process_id, state, end_reason, product, locale, messages, certificate, appealable]
       properties:
         process_id:
           type: string
@@ -1190,6 +1218,8 @@ components:
           allOf:
             - $ref: "#/components/schemas/Certificate"
           nullable: true
+        appealable:
+          type: boolean
 
     ConsultantQueueItem:
       type: object
