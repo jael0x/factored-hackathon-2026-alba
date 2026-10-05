@@ -3,7 +3,10 @@ from uuid import UUID
 import psycopg
 from psycopg.types.json import Jsonb
 
+from api.application.cycle.ports import EventRow
 from api.domain.process.new_events import AlreadyAppended, Appended, AppendResult, IdempotencyConflict, NewEvent
+
+EVENT_COLUMNS = "id, event_name, customer_id, process_id, process_state, caused_by_event_id, seq, payload"
 
 
 class PostgresEvents:
@@ -57,3 +60,21 @@ class PostgresEvents:
             "SELECT process_id FROM events WHERE idempotency_key = %s", (idempotency_key,)
         ).fetchone()
         return row[0] if row else None
+
+
+class PostgresEventLog:
+    def __init__(self, conn: psycopg.Connection) -> None:
+        self._conn = conn
+
+    def read(self, event_id: UUID) -> EventRow:
+        row = self._conn.execute(f"SELECT {EVENT_COLUMNS} FROM events WHERE id = %s", (event_id,)).fetchone()
+        if row is None:
+            raise LookupError(f"event {event_id} does not exist")
+        return EventRow(*row)
+
+    def earlier(self, process_id: UUID, before_seq: int) -> list[EventRow]:
+        rows = self._conn.execute(
+            f"SELECT {EVENT_COLUMNS} FROM events WHERE process_id = %s AND seq < %s ORDER BY seq",
+            (process_id, before_seq),
+        ).fetchall()
+        return [EventRow(*row) for row in rows]
