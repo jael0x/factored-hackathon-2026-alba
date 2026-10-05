@@ -83,6 +83,7 @@ services:
     build:
       context: .
       dockerfile: docker/test.Dockerfile
+    pull_policy: build
     environment:
       ALBA_TEST_ADMIN_DATABASE_URL: postgresql://alba:alba@postgres:5432/postgres
       ALBA_REQUIRE_POSTGRES: "1"
