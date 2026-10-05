@@ -143,7 +143,7 @@ api/
     mail/smtp.py          # sends the login code by SMTP; the only module that opens SMTP
     llm/                  # the only module that imports the OpenAI SDK, when the model is built
       conversation.py     # one call, JSON schema
-      schema.py           # ConversationTurn
+      schema.py           # ConversationTurn and parse_conversation_turn, the one parse of the model's JSON
   presentation/
     http/
       errors.py           # {error: ...} bodies for 401, 403, 404, 422
@@ -152,6 +152,7 @@ api/
     worker/               # takes commands, when that loop is built
   fixtures/
     oracle_customers.json # the four profiles and César
+    turns/                # one model turn per step of the oracle flows and the spec examples; tests inject them
 web/
   src/api/client.ts             # openapi-fetch client, typed by schema.d.ts; adds the bearer token, ends the session on 401
   src/session/session.ts        # the session in sessionStorage; never renewed; kept in memory for the tab when storage is blocked
@@ -467,7 +468,7 @@ If the key is missing, Postgres, login, and the policy still start. `conversatio
 
 The model is called only from `conversation.generate`, and only if the `generate_while_ai` rule enqueued that command.
 
-One call, no streaming, Structured Outputs with the `ConversationTurn` JSON schema. `temperature` 0 if the model accepts it; GPT-6 Luna is a reasoning model and its docs do not say (`PLAN.md` R11). The response must also validate as `ConversationTurn` in Pydantic. If it does not, one retry. If the second also fails, the turn is written with `reply_ok` false and `reason_code = model_output_invalid`. `hand_off_reply` moves the case to `human_active`. The request and the raw response are stored in `llm_turns` either way, including when parsing fails, with the model id and token usage. pytest does not call OpenAI: it injects the JSON.
+One call, no streaming, Structured Outputs with the `ConversationTurn` JSON schema. `temperature` 0 if the model accepts it; GPT-6 Luna is a reasoning model and its docs do not say (`PLAN.md` R11). The response must also validate as `ConversationTurn` in Pydantic. If it does not, one retry. If the second also fails, the turn is written with `reply_ok` false and `reason_code = model_output_invalid`. `hand_off_reply` moves the case to `human_active`. The request and the raw response are stored in `llm_turns` either way, including when parsing fails, with the model id and token usage. pytest does not call OpenAI: it injects the JSON, the turns in `api/fixtures/turns/`.
 
 ```text
 ConversationTurn
@@ -477,11 +478,13 @@ ConversationTurn
   product: credit_card | personal_loan | null
   declared_income_amount: number | null
   declared_income_currency: MXN | COP | ARS | null
-  language: es | en | pt | other
+  language: es | pt | other
   needs_clarification: bool
   clarification_question: string | null
   reply_text: string
 ```
+
+`api/infrastructure/llm/schema.py` holds `ConversationTurn` and `parse_conversation_turn`, the one parse of the model's JSON, for the adapter and for the test fixtures. Every field is required, and no other field is accepted. `declared_income_amount` is a JSON number of 0 or more, read as an exact decimal. A quoted amount, `NaN`, a repeated key, or a value outside its set is invalid output. The JSON schema sent for Structured Outputs is the one `ConversationTurn` writes, with the amount as a number only.
 
 What goes into the prompt. This is everything that leaves the service for OpenAI; the brief forbids private records in external model requests.
 
@@ -496,7 +499,7 @@ What goes into the prompt. This is everything that leaves the service for OpenAI
 
 `prequalify_card` and `prequalify_loan` do not run the policy. They store the product and trigger `confirm_prequalify` (template). Only `confirm_prequalify` with a product set enqueues `policy.run`. `decline_prequalify` shows the model's `reply_text` and leaves the case open.
 
-A message that says yes to the consent question is `confirm_prequalify`, even when it also states an amount. `provide_income` is an amount with no yes. This is the label in the held-out set too.
+A message that says yes to the consent question is `confirm_prequalify`, even when it also states an amount. `provide_income` is an amount with no yes. This is the label in the held-out set too. A currency word that does not name the country ("pesos") leaves `declared_income_currency` null: the prompt carries no country, and the policy reads a stated amount in the profile's `income_currency`.
 
 `out_of_scope` covers a new mortgage, investments, a limit increase, disputing a transaction, and a third party's balance. A request that names no product ("un crédito", "el crédito") is `clarify` every time; the model is not told how many times it was asked. The rules count the asks and send the third such turn to a person with `out_of_scope` (`hand_off_no_product`).
 

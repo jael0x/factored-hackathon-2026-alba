@@ -73,7 +73,11 @@ Gaps against the contract in what is built (item M0):
   - **Thread source (settled):** customer lines come from the process's `conversation.message_received` events, plus the opening message reached through `process.started.caused_by_event_id`. Assistant and template lines come from `messages` rows.
   - **Updates (settled):** `POST /messages` returns the `Case` after the worker finishes that cycle's commands, so the page does not poll.
   - **Still open:** no route lists a customer's processes. After a reload or a new login, the client cannot find an open case or an issued certificate unless it kept the `process_id` from a `POST /messages` response.
-- [ ] **I3. `ConversationTurn` and turn fixtures.** `api/infrastructure/llm/schema.py` in the contract's shape (`language` is `es`, `pt`, or `other`; D22), plus one JSON turn per step of the four oracle flows and the spec examples. Engine tests inject them. Depends on I1.
+- [x] **I3. `ConversationTurn` and turn fixtures.** `api/infrastructure/llm/schema.py` in the contract's shape (`language` is `es`, `pt`, or `other`; D22), plus one JSON turn per step of the four oracle flows and the spec examples. Engine tests inject them. Depends on I1.
+  - Done Oct 4. `ConversationTurn` takes its sets from `contract_models.py`, is strict and frozen, and refuses any other field. `parse_conversation_turn` is the one parse for M3's adapter and the fixtures: it decodes every number as an exact `Decimal` and refuses a quoted or negative amount, `NaN`, and a repeated key (Pydantic's own JSON parser accepts the first and keeps the last of the second), raising `InvalidConversationTurn`. The JSON schema gives the amount as a number only, for Structured Outputs. `pydantic` is pinned at 2.13.5, the version both images resolved, since `test_schema.py` asserts the whole schema.
+  - 22 turns in `api/fixtures/turns/`, each the message text, its `locale`, and the model's turn. `api/tests/test_turn_fixtures.py` runs each step through `api/tests/turn_harness.py` (the stamps `conversation.generate` adds) and `match_rules`, and asserts the exact rule and command. A bare "sí" carries `product` null, and the stored product reaches the event ("Events"). "pesos" names no country, so its currency is null (written into "How the model is called"). `test_rules.py` keeps its inline payloads: the domain tests stay pure.
+  - Not a fixture: "no" in `05` (refused with 409 before any turn), "¿ya revisaron mi caso?" in `07` (no model call), and "y también un préstamo" in `05`, whose label the spec does not give; E8 chooses it.
+  - Sabotage runs: no `extra="forbid"`, a float decoder, `es-si` with a product, and English labeled `es`; each turns its exact tests red.
 - [ ] **I4. Tooling.** ruff and mypy for Python, `tsc --noEmit` for the web app, all run by the `test` service. `README.md` names the one command. Since Oct 1 `scripts/check.sh` runs ruff, mypy strict, and pytest with coverage floors in the `test` service, and CI runs it plus `tsc` (`ARCHITECTURE.md`, "Quality gate"). Since Oct 4 the `web` job also runs Vitest (`npm test`). Still open: `tsc` and Vitest in the `test` service, whose image has no Node.
 - [x] **I5. Language on the wire (D21).** The switch's language rides on each message and decides what Alba writes. `api-spec/openapi.yaml`: `SendMessageRequest` carries it, and `Locale` names the template locale (`es`, `pt`; D22 dropped the `en` that I5 added). `ARCHITECTURE.md`: the sections where the model's `language` picks the template locale say the message's language picks it, and `other` still hands off. The matching scenarios in `03` to `08` are updated. Blocks the language parts of E3, E5, E8, M3, and M4.
   - Done Oct 2. Names: `locale` (`es`, `pt`) is the switch's choice everywhere Alba writes (the message, the process, the turn, `analysis.completed`, the consultant close, the templates, the certificate, the `Case`, the queue, the packet); `language` (`es`, `pt`, `other`) is only what the model read. `TemplateLocale` is gone; `Locale` is the one set.
@@ -108,7 +112,9 @@ Gaps against the contract in what is built (item M0):
   - takes `pending` commands with `FOR UPDATE SKIP LOCKED`;
   - makes at most 3 attempts, then moves the case to `human_active` with `tool_failed`;
   - runs the eight handlers; `conversation.generate` stamps `product_asked_count` and `income_requested` on the turn from this process's earlier events (D13, D14), and `policy.run` uses the key with the triggering turn (D12);
-  - takes the model call as an injected function, so tests pass turns as JSON;
+  - takes the model call as an injected function, so tests pass turns as JSON: the fixtures in `api/fixtures/turns/` (I3);
+  - builds the `conversation.turn_classified` payload from the turn and its stamps; `classified_turn` in `api/tests/turn_harness.py` then calls that builder instead of its own dict, so one mapping stays. `PayloadValue` in `new_events.py` (`str | None`) cannot hold a turn's amount, booleans, and count yet;
+  - decides what `policy.run` does with a turn's `declared_income_currency` that differs from the profile's `income_currency`: the contract reads the amount in the country's currency and says nothing of a turn that names another;
   - lets the `POST /messages` handler wait until the commands enqueued from its event are done, because the response is the `Case` after that cycle. The handler waits; it does not run commands itself;
   - reads each event through `parse_stored_event`, inserts the `PlannedCommand` rows from `match_rules` in their order and on their keys (a key already present inserts nothing), and stores a payload's amount as an exact decimal: psycopg loads jsonb numbers as `float` unless the loader uses `parse_float=Decimal`, and the rules refuse a float (E3).
 
@@ -136,6 +142,7 @@ Gaps against the contract in what is built (item M0):
   - Specs: `01` and `11` search scenarios; `02` all.
   - Depends on E6.
 - [ ] **E8. Case and consultant routes.** `POST /messages`, `GET /case/{process_id}`, the consultant queue, packet, trace, and close, exactly as in `ARCHITECTURE.md` "HTTP contract", typed with the generated models. That section already fixes the order (`created_at`, then id), the 404 and 409 cases, and the packet with null analysis fields when no `analysis.completed` exists.
+  - The trace declares `declared_income_amount` as a `float` (`TraceTurnClassified`), while the turn and the rules hold an exact decimal; settle how it is written on the wire. The label of "y también un préstamo" (`05`, two messages before the case opens) is chosen here (I3 left it out).
   - Specs: `08` for `REFER` cases; `09` all; the HTTP side of `03` to `07`. `POST /messages` takes `locale` (I5) and passes it to `record_customer_message`; the `Case`, the queue items, and the packet carry the case's `locale`.
   - Depends on E4 and E6. **Blocked** by D15 (3) for closes on non-`REFER` cases.
 - [ ] **E9. Oracle integration test.** The four flows through HTTP and the worker with injected turns:
@@ -161,7 +168,8 @@ Gaps against the contract in what is built (item M0):
 - [ ] **M3. Model adapter and prompt.** `api/infrastructure/llm/conversation.py`:
   - one call with Structured Outputs, the Pydantic check, and one retry;
   - an `llm_turns` row on every call, with the model, tokens, and latency;
-  - forbidden phrases set `reply_forbidden`;
+  - forbidden phrases set `reply_forbidden`; the detector runs over every fixture in `api/fixtures/turns/`, and only `es-si-reply-states-outcome` is withheld. "Events" still lists `pre-qualif` and `prequalif`, which D22 (4) removed, while "Policy" lists the four Spanish and Portuguese phrases: settle the one list here;
+  - the adapter parses with `parse_conversation_turn` and retries on `InvalidConversationTurn` (I3);
   - a turn whose intent names one product and whose `product` names another, or none, is invalid output, so `confirm_prequalify` always has a product to name (E3);
   - the contract says a turn with `model_output_invalid` is written, but `intent` and `language` are required and there is no valid value to write; settle it in `openapi.yaml` here. The rules read only `reason_code` on a withheld turn (E3);
   - a missing key fails the command and names the key.

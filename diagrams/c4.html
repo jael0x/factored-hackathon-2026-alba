@@ -1057,6 +1057,8 @@ spec('llm', 'l-schema', {
     '`intent`: `product_info`, `prequalify_card`, `prequalify_loan`, `confirm_prequalify`, `decline_prequalify`, `provide_income`, `human_request`, `out_of_scope`, `clarify`, `chit_chat`.',
     '`product`: `credit_card`, `personal_loan`, or null. `declared_income_amount`, and `declared_income_currency` (MXN, COP, ARS), or null.',
     '`language`: `es`, `pt`, `other`. Plus `needs_clarification`, `clarification_question`, `reply_text`.',
+    'One parse, `parse_conversation_turn`, for the adapter and the fixtures: every field required, no other field, the amount an exact JSON number of 0 or more. A quoted amount, `NaN`, or a repeated key is invalid output.',
+    'Tests inject the turns in `api/fixtures/turns/`: one per step of the oracle flows and the spec examples.',
   ],
   src: 'ARCHITECTURE.md, "How the model is called"',
 });
