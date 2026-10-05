@@ -3,7 +3,7 @@ from uuid import UUID
 import pytest
 
 from api.application.processes import OpenProcessVanished, start_process
-from api.contract_models import EndReason, Locale, ProcessKey, ProcessState
+from api.contract_models import EndReason, Locale, ProcessKey, ProcessState, ProductKey
 from api.domain.process.lifecycle import ProcessRow
 from api.domain.process.new_events import AppendResult, Cause, NewEvent
 
@@ -22,10 +22,15 @@ class NoEvents:
 
 
 class OpenCaseEndedInBetween:
-    def find_open(self, customer_id: str, process_key: ProcessKey) -> ProcessRow | None:
+    def find_open(self, customer_id: str, process_key: ProcessKey, product: ProductKey) -> ProcessRow | None:
         return None
 
-    def insert_open(self, customer_id: str, process_key: ProcessKey, locale: Locale) -> UUID | None:
+    def read_for_message(self, process_id: UUID) -> ProcessRow | None:
+        raise AssertionError("start reads no message's case")
+
+    def insert_open(
+        self, customer_id: str, process_key: ProcessKey, locale: Locale, product: ProductKey
+    ) -> UUID | None:
         return None
 
     def lock(self, process_id: UUID) -> ProcessRow | None:
@@ -37,4 +42,6 @@ class OpenCaseEndedInBetween:
 
 def test_an_open_case_that_blocked_the_insert_and_then_vanished_fails_loud() -> None:
     with pytest.raises(OpenProcessVanished, match="CLI-9EDEKZ8OUNUR"):
-        start_process(NoEvents(), OpenCaseEndedInBetween(), "CLI-9EDEKZ8OUNUR", "es", Cause(MESSAGE_ID, None))
+        start_process(
+            NoEvents(), OpenCaseEndedInBetween(), "CLI-9EDEKZ8OUNUR", "es", "credit_card", Cause(MESSAGE_ID, None)
+        )
