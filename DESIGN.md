@@ -6,6 +6,8 @@ This file sets how Alba looks and moves on screen. It governs the `web/` app (th
 
 Decided with Jael:
 
+- Oct 5, 2026 (later): with `DEMO_LOGIN=1` the code step fills the code from the local Mailpit; a policy's no on the certificate offers a review by a person; the certificate sits in its place in the thread; the product is bold in the start dialog; the page is `translate="no"` (`PLAN.md` D25).
+- Oct 5, 2026: a product row opens a start dialog that is the consent, and each row continues its open case or shows its result (`PLAN.md` D24). An ended case has no composer.
 - Oct 2, 2026: a language switch (ES, PT) in the app bar of every screen (`PLAN.md` D21; English removed Oct 3, D22). Spanish stays the language this file quotes; Portuguese is in `web/src/i18n/`. On phones the customer's name pill gives way to the switch.
 - Sep 28, 2026: glass for the conversation, a different surface for the record (Principle 1). One sans family; Georgia is dropped. This file also governs `diagrams/c4.html`. The product web ships light only for the Oct 5 demo; the C4 page keeps a dark set.
 - Sep 30, 2026 (later): consultants get their own login page with the same layout, steps, and Demo popover. Each login links to the other with a centered text button under the form.
@@ -180,7 +182,7 @@ Screens fill the browser like the real app. There is no device frame.
 - States: empty (send disabled); ready; sending (spinner in the button, field read-only until the API accepts); error (one line above the pill, the text kept, a retry).
 - Enter sends. Shift+Enter adds a line.
 - In `human_active` the composer stays, because the customer may still write and the message is stored (`ARCHITECTURE.md`, "Process"). A white banner above it reads "Este caso lo ve una persona." No typing indicator shows, because nobody writes in the thread.
-- In `ended` the certificate sits in the thread above the composer. A new message opens a new case (`ARCHITECTURE.md`, "Process").
+- In `ended` there is no composer: the certificate closes the thread, and a secondary "Volver al inicio" button sits where the composer was (`PLAN.md` D24).
 
 ### Messages (`/case/:id`; read-only on `/consultant/case/:id`)
 
@@ -197,20 +199,31 @@ The surface follows `messages.author`:
 - A new message fades in and rises 8px over `--t-enter`. The thread is a polite live region.
 - The screen renders `messages` rows only. A turn whose `reply_ok` is false never reaches it (`ARCHITECTURE.md`, "Events").
 
+### Case screen (`/case/:id`)
+
+- A text button with the back icon, "Inicio", above the thread returns to `/`.
+- The banner, a send error with its retry, and the composer sit together at the bottom of the viewport, 680px wide; the thread scrolls under them and keeps its newest line in view, without smooth scrolling when reduced motion is on.
+- A send that fails keeps the customer's line in the thread and offers a retry with the same `client_message_id` and `locale`, so the API answers it as the same message.
+
 ### Typing indicator (`/case/:id`)
 
 - Shown while the client waits for the API after a customer send, and only in `ai_active` (`ARCHITECTURE.md`, "UI wait state"). In `human_active` nobody writes in the thread, so it does not show.
 - It lasts exactly as long as the wait. No minimum display time and no added delay: the contract forbids a fixed sleep.
-- Look: a glass capsule with the 20px Alba orb (hue turning once every `--t-orb`) and the contract's text, "escribiendo…", in `--muted`. It sits in the thread where the next Alba message will appear.
+- Look: a glass capsule with the 20px Alba orb (hue turning once every `--t-orb`) and the contract's text, "escribiendo…" ("digitando…" in Portuguese), in `--muted`. It sits in the thread where the next Alba message will appear.
 - Never shown with it: reasoning text, a list of steps, a percentage, streamed tokens, or a stop button. Alba cannot cancel a command, so a stop button would lie.
 
-### Product rows (`/`, and `/case/:id` while the thread is empty)
+### Product rows (`/`)
 
 - A glass sheet with two rows, one per product key: `credit_card` "Tarjeta de crédito", `personal_loan` "Préstamo personal". Each row has a 40px glass icon tile, the label, and a chevron.
-- Choosing a row sends a customer message through the same endpoint as typing ("Quiero una tarjeta de crédito"). It does not set `product` on the process: the classified turn does.
-- Consent is a template message, `confirm_prequalify`, that the customer answers in the thread ("sí", "no, gracias"). It is not a button or a sheet.
-- After `which_product` or `confirm_prequalify`, reply rows would need a typed field the API does not return yet. Until then the customer types the answer. See **Open**.
-- Until `POST /messages` is built (`IMPLEMENTATION.md` W4), the rows on `/` show disabled: 45% opacity, not clickable.
+- Each row stands for that product's latest case (`GET /cases`, `PLAN.md` D24): with no case it starts one through the start dialog; with an open case (`ai_active` or `human_active`) a caption under the label reads "Continuar la conversación" and the row opens it; with an ended case the caption reads "Ver resultado" and the row opens its certificate.
+- "Empezar" in the dialog opens `/case` at once with the customer's message and the typing indicator; when the answer arrives the address becomes `/case/{process_id}`. The message is the row's sentence in the chosen language ("Quiero una tarjeta de crédito", "Quero um cartão de crédito"), and it carries the product.
+- Consent for a product chosen on the home is the dialog. A consent question in the thread, `confirm_prequalify`, is asked only when a message switches the case to the other product; the customer answers it by typing ("sí", "no, gracias"). Reply rows would need a typed field the API does not return yet. See **Open**.
+
+### Start dialog (`/`)
+
+- A modal `dialog` on white, `--r-sheet`, at most 480px wide, over a `--tint` backdrop with a light blur. Escape and "Cancelar" close it.
+- Heading: "Conversar con Alba sobre **una tarjeta de crédito**" (the product with its article, in bold here and in the body). Body: Alba checks whether the customer pre-qualifies under the bank's policy with the data the bank holds; it is a simulation that opens no product and changes no account; it may ask for the monthly income.
+- Two buttons, right-aligned: "Cancelar" (secondary, focused first, as in the consultant's confirm dialog) and "Empezar" (primary).
 
 ### Certificate (`/case/:id`)
 
@@ -219,9 +232,11 @@ A certificate exists only for `PREQUALIFIED` and `NOT_PREQUALIFIED` (from the po
 1. The outcome tag: "Precalifica · simulado" or "No precalifica · simulado".
 2. The product, in title size.
 3. The template paragraph, exactly as the API returns it.
-4. "Hechos usados": key-value rows from `facts`. Income shows the local amount, the USD equivalent, and the exchange-rate date beside it (`ARCHITECTURE.md`, "Auth and screens").
-5. "Regla que decide": the `deciding_rule` row.
-6. A caption footer with `policy_version` and the dates of the facts, the way Wirely states that details are kept as of creation. When `decided_by` is `consultant`, the footer adds "Revisado por una persona."
+4. "Datos usados" (a kicker), then key-value rows: "Ingreso mensual" with the local amount and its code, and "Equivale a" with the USD amount and, under it, the exchange-rate date ("al tipo de cambio del 17 de junio de 2026"). The rows show only when the run read an income, and "Equivale a" only for an income on file: a stated income has no USD equivalent (**Open** 4).
+
+The contract's certificate carries no deciding rule, no score, and no `policy_version` (`ARCHITECTURE.md`, "HTTP contract"), so the screen has no rule row and no footer; the template paragraph names the policy. Whether the consultant decided is not on the certificate yet either; "Revisado por una persona." waits for W5.
+
+The certificate sits in the thread where it was decided, in place of its own template line, so a notice that comes after it (a referral after an appeal) reads below it. A no that the policy decided, on an ended case, ends with a hero secondary button, "Pedir que una persona lo revise" ("Pedir que uma pessoa revise"). It is offered once: pressing it moves the case back to a person (`PLAN.md` D25), the button goes away, the referral notice follows, and the composer and the "Este caso lo ve una persona." banner return.
 
 There is no slot for a credit limit, a rate for the new product, or a risk label. The Gen UI "Low risk" badge has no counterpart here: the risk estimate is the `credit_score` fact (`ARCHITECTURE.md`, "Risk estimate"), shown as a fact row, never as a label. The panel enters once over `--t-sheet`, with the same motion for both outcomes.
 
@@ -257,7 +272,7 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 - Step 1: the document field and "Enviar código" (primary).
 - Step 2: the document shown above, a caption "Revisa tu correo y escribe el código." ("Pedimos otro código. Revisa tu correo." after a resend), the code field with focus, a caption with the validity from `expires_in_seconds` (ten minutes), then the actions stacked: "Abrir sesión" (primary, full width), "Pedir otro código" (secondary, the same width), and "Cambiar documento" (text button, centered). Any failed code shows one line, "El código no es válido o venció."
 - The page itself shows nothing of the demo. With `DEMO_LOGIN=1` (read from `GET /config`) the app bar on `/login` carries a "Demo" button: a white pill with a dashed 1px `--field-edge` border, so nobody reads it as a bank feature. Pressing it opens the test-customer search right below it as a popover, not a modal: white, the same dashed border, `--r-card`, with the heading "Usuarios de prueba", a search field that takes focus, white result rows (full name, country, document masked to its last 4 digits; three rows show at a time and the rest scroll inside the list), "Elegir al azar", and "Cerrar". Choosing a row fills the document field and closes it; it never skips the code. Escape, a click outside, or "Cerrar" closes it too.
-- In the local demo the code arrives in Mailpit (http://localhost:8025). The screen never shows it.
+- In the local demo the code arrives in Mailpit (http://localhost:8025). With `DEMO_LOGIN=1` the code step reads that email and fills the code field, with a caption "Demo: el código se completó desde el buzón de prueba."; the tester still presses "Abrir sesión" (`PLAN.md` D25). Without the demo the code is typed from the email.
 - Consultants do not log in here. Under the panel, a centered text button "Acceso para asesores" leads to their own page (Consultant login, below).
 
 ### Consultant login (`/consultant/login`)
