@@ -301,16 +301,20 @@ paths:
       operationId: sendMessage
       summary: Append the customer's message and return the case after that cycle's commands finish.
       description: >
-        Requires role customer. The body is text, client_message_id, and locale, the language chosen with the switch.
+        Requires role customer. The body is text, client_message_id, locale (the language chosen with the switch),
+        and exactly one of product or process_id (PLAN.md D24). product starts a case for that product: the customer
+        confirmed it in the start dialog, which is the consent, and the policy runs at once. process_id sends the
+        message to that case of the token's customer. Neither or both is 422.
         Alba's reply, templates, and certificate for this case are written in the locale of the latest message.
-        The customer does not send process_id or process_state. customer_id comes from the token.
+        customer_id comes from the token; the customer never sends process_state.
         The handler appends conversation.message_received. It does not choose an outcome.
-        The response is sent after the worker has finished the commands enqueued from that event.
-        The same client_message_id with the same text and locale from the same customer returns this case again
-        and does not append a second event. The same client_message_id with another text or locale, or from another
-        customer, is 409 message_id_reused and appends nothing.
-        The first message of a new case still has a null process_id on the event.
-        The returned case uses the process that cycle opened.
+        The response is sent after the worker has finished the commands enqueued from that event, or after
+        30 seconds with the case as it stands.
+        The same client_message_id with the same text, locale, and product from the same customer returns this
+        case again and does not append a second event. The same client_message_id for another message is
+        409 message_id_reused and appends nothing.
+        A start for a product that already has an open case is 409 case_already_open. A message to an ended case
+        is 409 case_ended. Another customer's process_id, or an unknown one, is 404.
       requestBody:
         required: true
         content:
@@ -328,8 +332,67 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/MessageIdReused"
+          $ref: "#/components/responses/MessageConflict"
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+
+  /cases:
+    get:
+      tags: [Customer]
+      operationId: listCases
+      summary: The session customer's cases, newest first.
+      description: >
+        Requires role customer. Every process of the token's customer, open or ended, newest first (PLAN.md D17, D24).
+        The home shows each product's latest case: an open one to continue, an ended one to see its result.
+      responses:
+        "200":
+          description: The customer's cases.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaseList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /case/{process_id}/appeal:
+    post:
+      tags: [Customer]
+      operationId: appealCase
+      summary: Ask a person to review a no the policy decided, which reopens the case for a consultant.
+      description: >
+        Requires role customer (PLAN.md D25). The case must be the token's customer's, ended as not_prequalified
+        by the policy, and not appealed before; otherwise 409 case_not_appealable, or 404 for another customer's
+        or an unknown case. Appends conversation.appeal_requested, keyed appeal:{process_id}; the case moves back
+        to human_active with reason customer_requested_human and the customer gets the referral notice. Sending
+        it again for the same case returns the case and appends nothing. The response is the case after that cycle.
+      parameters:
+        - $ref: "#/components/parameters/ProcessId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppealRequest"
+      responses:
+        "200":
+          description: The case, back with a person.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/MessageConflict"
         "422":
           $ref: "#/components/responses/InvalidRequest"
 
@@ -542,6 +605,16 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/MessageIdReusedError"
+    MessageConflict:
+      description: >
+        Nothing is appended. message_id_reused: this client_message_id was already sent for another message.
+        case_already_open: the product already has an open case. case_ended: the case has ended.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: "#/components/schemas/MessageIdReusedError"
+              - $ref: "#/components/schemas/CaseConflictError"
     AlreadyClosed:
       description: This process was already ended. The outcome does not change.
       content:
@@ -622,6 +695,15 @@ components:
         error:
           type: string
           enum: [message_id_reused]
+
+    CaseConflictError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [case_already_open, case_ended, case_not_appealable]
 
     AlreadyClosedError:
       type: object
@@ -713,7 +795,7 @@ components:
 
     TemplateId:
       type: string
-      enum: [needs_income, refer_notice, which_product, confirm_prequalify]
+      enum: [needs_income, refer_notice, which_product, confirm_prequalify, product_case_open]
 
     DecidedBy:
       type: string
@@ -756,6 +838,7 @@ components:
         - process.started
         - process.state_changed
         - process.ended
+        - conversation.appeal_requested
 
     Config:
       type: object
@@ -967,6 +1050,14 @@ components:
           description: One id per send. The idempotency key is msg:{client_message_id}.
         locale:
           $ref: "#/components/schemas/Locale"
+        product:
+          allOf:
+            - $ref: "#/components/schemas/ProductKey"
+          description: Starts a case for this product, confirmed in the start dialog (the consent). Not with process_id.
+        process_id:
+          type: string
+          format: uuid
+          description: The case this message belongs to. Not with product.
 
     ThreadMessage:
       type: object
@@ -992,8 +1083,14 @@ components:
         Income fields are copied from facts on the analysis.completed for this process
         (names income_local, income_currency, income_usd). as_of is the as_of of the income_local fact.
         A missing fact is null. This object has no credit limit and no interest rate.
-      required: [locale, outcome, body, product, income_local, income_currency, income_usd, as_of]
+      required: [event_id, decided_by, locale, outcome, body, product, income_local, income_currency, income_usd, as_of]
       properties:
+        event_id:
+          type: string
+          format: uuid
+          description: The prequalification.decided event; its messages row places the certificate in the thread (D25).
+        decided_by:
+          $ref: "#/components/schemas/DecidedBy"
         locale:
           $ref: "#/components/schemas/Locale"
         outcome:
@@ -1018,6 +1115,45 @@ components:
           type: string
           format: date
           nullable: true
+
+    AppealRequest:
+      type: object
+      additionalProperties: false
+      required: [locale]
+      properties:
+        locale:
+          $ref: "#/components/schemas/Locale"
+
+    CaseSummary:
+      type: object
+      additionalProperties: false
+      required: [process_id, product, state, end_reason, locale]
+      properties:
+        process_id:
+          type: string
+          format: uuid
+        product:
+          allOf:
+            - $ref: "#/components/schemas/ProductKey"
+          nullable: true
+        state:
+          $ref: "#/components/schemas/ProcessState"
+        end_reason:
+          allOf:
+            - $ref: "#/components/schemas/EndReason"
+          nullable: true
+        locale:
+          $ref: "#/components/schemas/Locale"
+
+    CaseList:
+      type: object
+      additionalProperties: false
+      required: [cases]
+      properties:
+        cases:
+          type: array
+          items:
+            $ref: "#/components/schemas/CaseSummary"
 
     Case:
       type: object
@@ -1246,7 +1382,7 @@ components:
         - $ref: "#/components/schemas/TraceEventBase"
         - type: object
           additionalProperties: false
-          required: [event_name, text, client_message_id, locale]
+          required: [event_name, text, client_message_id, locale, product]
           properties:
             event_name:
               type: string
@@ -1258,6 +1394,11 @@ components:
               format: uuid
             locale:
               $ref: "#/components/schemas/Locale"
+            product:
+              allOf:
+                - $ref: "#/components/schemas/ProductKey"
+              nullable: true
+              description: Set on the message that starts a case from the home (PLAN.md D24); null on every other one.
 
     TraceTurnClassified:
       allOf:
@@ -1277,6 +1418,7 @@ components:
             - reason_code
             - product_asked_count
             - income_requested
+            - open_case_product
           properties:
             event_name:
               type: string
@@ -1311,6 +1453,11 @@ components:
               minimum: 0
             income_requested:
               type: boolean
+            open_case_product:
+              allOf:
+                - $ref: "#/components/schemas/ProductKey"
+              nullable: true
+              description: The other product the turn names when that product already has its own open case (D24).
 
     TraceTemplateSent:
       allOf:
@@ -1424,7 +1571,7 @@ components:
         - $ref: "#/components/schemas/TraceEventBase"
         - type: object
           additionalProperties: false
-          required: [event_name, process_key, customer_id, locale]
+          required: [event_name, process_key, customer_id, locale, product]
           properties:
             event_name:
               type: string
@@ -1435,6 +1582,8 @@ components:
               type: string
             locale:
               $ref: "#/components/schemas/Locale"
+            product:
+              $ref: "#/components/schemas/ProductKey"
 
     TraceProcessStateChanged:
       allOf:
@@ -1472,6 +1621,21 @@ components:
                 - $ref: "#/components/schemas/PolicyVersion"
               nullable: true
 
+    TraceAppealRequested:
+      allOf:
+        - $ref: "#/components/schemas/TraceEventBase"
+        - type: object
+          additionalProperties: false
+          required: [event_name, locale, product]
+          properties:
+            event_name:
+              type: string
+              enum: [conversation.appeal_requested]
+            locale:
+              $ref: "#/components/schemas/Locale"
+            product:
+              $ref: "#/components/schemas/ProductKey"
+
     TraceEvent:
       oneOf:
         - $ref: "#/components/schemas/TraceMessageReceived"
@@ -1484,6 +1648,7 @@ components:
         - $ref: "#/components/schemas/TraceProcessStarted"
         - $ref: "#/components/schemas/TraceProcessStateChanged"
         - $ref: "#/components/schemas/TraceProcessEnded"
+        - $ref: "#/components/schemas/TraceAppealRequested"
       discriminator:
         propertyName: event_name
         mapping:
@@ -1497,6 +1662,7 @@ components:
           process.started: "#/components/schemas/TraceProcessStarted"
           process.state_changed: "#/components/schemas/TraceProcessStateChanged"
           process.ended: "#/components/schemas/TraceProcessEnded"
+          conversation.appeal_requested: "#/components/schemas/TraceAppealRequested"
 
     CaseTrace:
       type: object

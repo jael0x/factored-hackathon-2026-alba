@@ -31,7 +31,9 @@ EXPECTED_PATHS = {
     "/consultant/me",
     "/products",
     "/messages",
+    "/cases",
     "/case/{process_id}",
+    "/case/{process_id}/appeal",
     "/consultant/queue",
     "/consultant/case/{process_id}",
     "/consultant/case/{process_id}/trace",
@@ -138,6 +140,8 @@ def test_close_body_is_only_the_two_outcomes() -> None:
 def test_certificate_income_fields_are_null_when_the_fact_is_missing() -> None:
     certificate = Certificate.model_validate(
         {
+            "event_id": "11111111-1111-4111-8111-111111111111",
+            "decided_by": "policy",
             "locale": "es",
             "outcome": "PREQUALIFIED",
             "body": "Juan precalifica.",
