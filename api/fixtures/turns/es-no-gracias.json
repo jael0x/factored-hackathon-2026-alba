@@ -1,0 +1,14 @@
+{
+  "text": "no, gracias",
+  "locale": "es",
+  "turn": {
+    "intent": "decline_prequalify",
+    "product": null,
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "es",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Entendido. Si cambias de opinión, aquí estoy."
+  }
+}

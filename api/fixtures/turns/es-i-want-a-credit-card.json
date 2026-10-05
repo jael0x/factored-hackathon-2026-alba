@@ -1,0 +1,14 @@
+{
+  "text": "I want a credit card",
+  "locale": "es",
+  "turn": {
+    "intent": "prequalify_card",
+    "product": "credit_card",
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "other",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Una persona del equipo te va a atender."
+  }
+}

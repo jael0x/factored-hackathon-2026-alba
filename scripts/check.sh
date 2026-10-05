@@ -5,5 +5,5 @@ set -eu
 ruff check .
 ruff format --check .
 mypy
-pytest --cov --cov-report=term --cov-report=xml --cov-fail-under=92
+pytest --cov --cov-report=term --cov-report=xml --cov-fail-under=95
 coverage report --include='api/domain/*' --fail-under=94

@@ -1,0 +1,14 @@
+{
+  "text": "gano 45,000 pesos al mes",
+  "locale": "es",
+  "turn": {
+    "intent": "provide_income",
+    "product": null,
+    "declared_income_amount": 45000,
+    "declared_income_currency": null,
+    "language": "es",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Gracias por el dato de tu ingreso."
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "text": "mejor sí quiero la tarjeta de crédito",
+  "locale": "es",
+  "turn": {
+    "intent": "prequalify_card",
+    "product": "credit_card",
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "es",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Claro, retomemos la tarjeta de crédito."
+  }
+}

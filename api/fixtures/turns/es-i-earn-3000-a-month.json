@@ -1,0 +1,14 @@
+{
+  "text": "I earn 3,000 a month",
+  "locale": "es",
+  "turn": {
+    "intent": "provide_income",
+    "product": null,
+    "declared_income_amount": 3000,
+    "declared_income_currency": null,
+    "language": "other",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Una persona del equipo te va a atender."
+  }
+}

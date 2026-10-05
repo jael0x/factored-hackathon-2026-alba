@@ -1,0 +1,14 @@
+{
+  "text": "quiero una tarjeta de crédito",
+  "locale": "pt",
+  "turn": {
+    "intent": "prequalify_card",
+    "product": "credit_card",
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "es",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Claro, vou te ajudar com o cartão de crédito."
+  }
+}
