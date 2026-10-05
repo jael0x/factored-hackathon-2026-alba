@@ -1,6 +1,5 @@
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import TypeVar
 
 from api.contract_models import CloseOutcome, DecidedBy, Locale, Outcome, ProductKey, TemplateId
 from api.domain.closed_sets import parse_member
@@ -20,7 +19,6 @@ PRODUCT_SLOT = "{product}"
 
 
 Texts = Mapping[Locale, str]
-Key = TypeVar("Key")
 
 PRODUCT_NAMES: Mapping[Locale, Mapping[ProductKey, str]] = MappingProxyType(
     {
@@ -145,13 +143,13 @@ def name_product(text: str, locale: Locale, product: ProductKey) -> str:
     return text.replace(PRODUCT_SLOT, PRODUCT_NAMES[locale][product])
 
 
-def require_every_locale(texts: Mapping[Key, Texts], label: str) -> None:
+def require_every_locale[Key](texts: Mapping[Key, Texts], label: str) -> None:
     incomplete = sorted(str(key) for key, by_locale in texts.items() if set(by_locale) != LOCALES)
     if incomplete:
         raise ValueError(f"{label} must have a text for every locale: {incomplete}")
 
 
-def require_slot(texts: Mapping[Key, Texts], expected: int, label: str) -> None:
+def require_slot[Key](texts: Mapping[Key, Texts], expected: int, label: str) -> None:
     wrong = sorted(
         f"{key} {locale}"
         for key, by_locale in texts.items()

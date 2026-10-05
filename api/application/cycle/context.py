@@ -1,6 +1,5 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TypeVar
 from uuid import UUID
 
 from api.application.cycle.ports import CaseFacts, CommandQueue, EventLog, EventRow, Profiles, ReadTurn, Thread
@@ -10,8 +9,6 @@ from api.domain.process.commands import CommandPayload
 from api.domain.process.lifecycle import ProcessRow
 from api.domain.process.new_events import Cause
 from api.domain.process.stored_events import StoredEvent, parse_stored_event
-
-Expected = TypeVar("Expected")
 
 
 @dataclass(frozen=True)
@@ -45,7 +42,7 @@ def stored(row: EventRow) -> StoredEvent:
     return parse_stored_event(row.event_id, row.event_name, row.process_id, row.process_state, row.payload)
 
 
-def expect(value: object, kind: type[Expected]) -> Expected:
+def expect[Expected](value: object, kind: type[Expected]) -> Expected:
     if not isinstance(value, kind):
         raise WrongTrigger(kind.__name__, value)
     return value

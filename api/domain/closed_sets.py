@@ -1,9 +1,4 @@
-from typing import TypeVar
-
-Member = TypeVar("Member", bound=str)
-
-
-def parse_member(value: object, members: frozenset[Member], label: str) -> Member:
+def parse_member[Member: str](value: object, members: frozenset[Member], label: str) -> Member:
     for member in members:
         if value == member:
             return member
