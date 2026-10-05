@@ -24,6 +24,7 @@ from api.domain.policy.engine import (
     HOLDS_PRODUCT,
     INCOME_CURRENCY,
     INCOME_LOCAL,
+    INCOME_USD,
     MAX_DAYS_PAST_DUE,
     NEEDS_INFO,
     NOT_PREQUALIFIED,
@@ -41,8 +42,10 @@ from api.domain.policy.engine import (
     REFER,
     RULES,
     SELF_DECLARED,
+    SOURCE_CURRENCY,
     SOURCE_DAYS,
     SOURCE_INCOME,
+    SOURCE_INCOME_USD,
     SOURCE_PRODUCTS,
     SOURCE_SCORE,
     SOURCE_SELF_DECLARED,
@@ -67,6 +70,7 @@ from api.domain.policy.engine import (
 
 AS_OF = date(2026, 6, 17)
 FILE_INCOME = Decimal(1000)
+FILE_INCOME_USD = Decimal("58.64")
 
 
 def profile(
@@ -75,7 +79,7 @@ def profile(
     credit_score: int | None = 750,
     income_local: Decimal | None = FILE_INCOME,
     income_currency: IncomeCurrency | None = "MXN",
-    income_usd: Decimal | None = Decimal("58.64"),
+    income_usd: Decimal | None = FILE_INCOME_USD,
     max_days_past_due: int = 0,
     has_active_card: bool = False,
     has_active_personal_loan: bool = False,
@@ -95,6 +99,19 @@ def profile(
 
 def fact(name: str, value: TraceValue, source: str) -> PolicyFact:
     return PolicyFact(name=name, value=value, source=source, as_of=AS_OF)
+
+
+def income(
+    amount: Decimal | None = FILE_INCOME,
+    currency: IncomeCurrency | None = "MXN",
+    usd: Decimal | None = FILE_INCOME_USD,
+    source: str = SOURCE_INCOME,
+) -> tuple[PolicyFact, PolicyFact, PolicyFact]:
+    return (
+        fact(INCOME_LOCAL, amount, source),
+        fact(INCOME_CURRENCY, currency, SOURCE_CURRENCY),
+        fact(INCOME_USD, usd, SOURCE_INCOME_USD),
+    )
 
 
 def policy_file(tmp_path: Path, old: str, new: str) -> Path:
@@ -126,6 +143,8 @@ def test_fact_sources_cite_the_contract_columns() -> None:
     assert SOURCE_SCORE == "customer_credit_profile.credit_score"
     assert SOURCE_DAYS == "customer_credit_profile.max_days_past_due"
     assert SOURCE_INCOME == "customer_credit_profile.income_local"
+    assert SOURCE_CURRENCY == "customer_credit_profile.income_currency"
+    assert SOURCE_INCOME_USD == "customer_credit_profile.income_usd"
     assert SOURCE_PRODUCTS == "products"
     assert SOURCE_SELF_DECLARED == "self_declared"
 
@@ -203,7 +222,7 @@ def test_the_score_band_sets_the_outcome_after_every_earlier_rule_passes(score: 
             ),
             TraceStep(R05, {CREDIT_SCORE: score}, outcome),
         ),
-        facts=(fact(CREDIT_SCORE, score, SOURCE_SCORE),),
+        facts=(fact(CREDIT_SCORE, score, SOURCE_SCORE), *income()),
         policy_version="alba-credit-v1",
     )
 
@@ -225,7 +244,7 @@ def test_zero_days_past_due_does_not_close_on_delinquency() -> None:
             ),
             TraceStep(R05, {CREDIT_SCORE: 620}, PREQUALIFIED),
         ),
-        facts=(fact(CREDIT_SCORE, 620, SOURCE_SCORE),),
+        facts=(fact(CREDIT_SCORE, 620, SOURCE_SCORE), *income()),
         policy_version="alba-credit-v1",
     )
 
@@ -240,7 +259,7 @@ def test_days_past_due_from_1_to_29_refer(days: int) -> None:
             TraceStep(R02, {MAX_DAYS_PAST_DUE: days}, PASSED),
             TraceStep(R03, {MAX_DAYS_PAST_DUE: days}, REFER),
         ),
-        facts=(fact(MAX_DAYS_PAST_DUE, days, SOURCE_DAYS),),
+        facts=(fact(MAX_DAYS_PAST_DUE, days, SOURCE_DAYS), fact(CREDIT_SCORE, 750, SOURCE_SCORE), *income()),
         policy_version="alba-credit-v1",
     )
 
@@ -253,7 +272,7 @@ def test_thirty_days_past_due_does_not_prequalify_before_the_score() -> None:
             TraceStep(R01, {CUSTOMER_STATUS: "Active"}, PASSED),
             TraceStep(R02, {MAX_DAYS_PAST_DUE: 30}, NOT_PREQUALIFIED),
         ),
-        facts=(fact(MAX_DAYS_PAST_DUE, 30, SOURCE_DAYS),),
+        facts=(fact(MAX_DAYS_PAST_DUE, 30, SOURCE_DAYS), fact(CREDIT_SCORE, 750, SOURCE_SCORE), *income()),
         policy_version="alba-credit-v1",
     )
 
@@ -267,7 +286,7 @@ def test_customer_status_decides_before_the_score(status: CustomerStatus, outcom
         outcome=outcome,
         deciding_rule=R01,
         rule_trace=(TraceStep(R01, {CUSTOMER_STATUS: status}, outcome),),
-        facts=(fact(CUSTOMER_STATUS, status, SOURCE_STATUS),),
+        facts=(fact(CUSTOMER_STATUS, status, SOURCE_STATUS), fact(CREDIT_SCORE, 750, SOURCE_SCORE), *income()),
         policy_version="alba-credit-v1",
     )
 
@@ -292,7 +311,7 @@ def test_a_customer_who_already_holds_the_card_is_referred() -> None:
             TraceStep(R03, {MAX_DAYS_PAST_DUE: 0}, PASSED),
             TraceStep(R09, {HOLDS_PRODUCT: True}, REFER),
         ),
-        facts=(fact(HOLDS_PRODUCT, True, SOURCE_PRODUCTS),),
+        facts=(fact(HOLDS_PRODUCT, True, SOURCE_PRODUCTS), fact(CREDIT_SCORE, 750, SOURCE_SCORE), *income()),
         policy_version="alba-credit-v1",
     )
 
@@ -318,13 +337,13 @@ def test_holding_a_card_does_not_refer_a_personal_loan() -> None:
             ),
             TraceStep(R05, {CREDIT_SCORE: 750}, PREQUALIFIED),
         ),
-        facts=(fact(CREDIT_SCORE, 750, SOURCE_SCORE),),
+        facts=(fact(CREDIT_SCORE, 750, SOURCE_SCORE), *income()),
         policy_version="alba-credit-v1",
     )
 
 
 def test_an_empty_score_refers_before_income_is_considered() -> None:
-    assert decide(profile(credit_score=None, income_local=None), PERSONAL_LOAN, None) == Decision(
+    assert decide(profile(credit_score=None, income_local=None, income_usd=None), PERSONAL_LOAN, None) == Decision(
         outcome=REFER,
         deciding_rule=R04,
         rule_trace=(
@@ -334,7 +353,7 @@ def test_an_empty_score_refers_before_income_is_considered() -> None:
             TraceStep(R09, {HOLDS_PRODUCT: False}, PASSED),
             TraceStep(R04, {CREDIT_SCORE: None}, REFER),
         ),
-        facts=(fact(CREDIT_SCORE, None, SOURCE_SCORE),),
+        facts=(fact(CREDIT_SCORE, None, SOURCE_SCORE), *income(None, usd=None)),
         policy_version="alba-credit-v1",
     )
 
@@ -350,13 +369,13 @@ def test_an_empty_score_with_income_on_file_still_refers_on_r04() -> None:
             TraceStep(R09, {HOLDS_PRODUCT: False}, PASSED),
             TraceStep(R04, {CREDIT_SCORE: None}, REFER),
         ),
-        facts=(fact(CREDIT_SCORE, None, SOURCE_SCORE),),
+        facts=(fact(CREDIT_SCORE, None, SOURCE_SCORE), *income()),
         policy_version="alba-credit-v1",
     )
 
 
 def test_an_empty_income_with_no_stated_amount_needs_info() -> None:
-    assert decide(profile(credit_score=714, income_local=None), CREDIT_CARD, None) == Decision(
+    assert decide(profile(credit_score=714, income_local=None, income_usd=None), CREDIT_CARD, None) == Decision(
         outcome=NEEDS_INFO,
         deciding_rule=R06,
         rule_trace=(
@@ -371,7 +390,12 @@ def test_an_empty_income_with_no_stated_amount_needs_info() -> None:
                 NEEDS_INFO,
             ),
         ),
-        facts=(fact(INCOME_LOCAL, None, SOURCE_INCOME),),
+        facts=(
+            fact(INCOME_LOCAL, None, SOURCE_INCOME),
+            fact(CREDIT_SCORE, 714, SOURCE_SCORE),
+            fact(INCOME_CURRENCY, "MXN", SOURCE_CURRENCY),
+            fact(INCOME_USD, None, SOURCE_INCOME_USD),
+        ),
         policy_version="alba-credit-v1",
     )
 
@@ -395,8 +419,8 @@ def test_a_stated_income_is_marked_self_declared_and_the_score_then_decides() ->
             TraceStep(R05, {CREDIT_SCORE: 714}, PREQUALIFIED),
         ),
         facts=(
-            fact(INCOME_LOCAL, Decimal(45000), SOURCE_SELF_DECLARED),
             fact(CREDIT_SCORE, 714, SOURCE_SCORE),
+            *income(Decimal(45000), usd=None, source=SOURCE_SELF_DECLARED),
         ),
         policy_version="alba-credit-v1",
     )
@@ -404,7 +428,8 @@ def test_a_stated_income_is_marked_self_declared_and_the_score_then_decides() ->
 
 
 def test_a_stated_income_of_zero_still_continues_to_the_score() -> None:
-    assert decide(profile(credit_score=714, income_local=None), CREDIT_CARD, Decimal(0)) == Decision(
+    customer = profile(credit_score=714, income_local=None, income_usd=None)
+    assert decide(customer, CREDIT_CARD, Decimal(0)) == Decision(
         outcome=PREQUALIFIED,
         deciding_rule=R05,
         rule_trace=(
@@ -421,15 +446,16 @@ def test_a_stated_income_of_zero_still_continues_to_the_score() -> None:
             TraceStep(R05, {CREDIT_SCORE: 714}, PREQUALIFIED),
         ),
         facts=(
-            fact(INCOME_LOCAL, Decimal(0), SOURCE_SELF_DECLARED),
             fact(CREDIT_SCORE, 714, SOURCE_SCORE),
+            *income(Decimal(0), usd=None, source=SOURCE_SELF_DECLARED),
         ),
         policy_version="alba-credit-v1",
     )
 
 
 def test_a_stated_income_does_not_stop_a_failing_score() -> None:
-    assert decide(profile(credit_score=579, income_local=None), CREDIT_CARD, Decimal(45000)) == Decision(
+    customer = profile(credit_score=579, income_local=None, income_usd=None)
+    assert decide(customer, CREDIT_CARD, Decimal(45000)) == Decision(
         outcome=NOT_PREQUALIFIED,
         deciding_rule=R05,
         rule_trace=(
@@ -446,15 +472,16 @@ def test_a_stated_income_does_not_stop_a_failing_score() -> None:
             TraceStep(R05, {CREDIT_SCORE: 579}, NOT_PREQUALIFIED),
         ),
         facts=(
-            fact(INCOME_LOCAL, Decimal(45000), SOURCE_SELF_DECLARED),
             fact(CREDIT_SCORE, 579, SOURCE_SCORE),
+            *income(Decimal(45000), usd=None, source=SOURCE_SELF_DECLARED),
         ),
         policy_version="alba-credit-v1",
     )
 
 
 def test_a_file_income_of_zero_is_income() -> None:
-    assert decide(profile(credit_score=620, income_local=Decimal(0)), CREDIT_CARD, None) == Decision(
+    customer = profile(credit_score=620, income_local=Decimal(0), income_usd=Decimal(0))
+    assert decide(customer, CREDIT_CARD, None) == Decision(
         outcome=PREQUALIFIED,
         deciding_rule=R05,
         rule_trace=(
@@ -470,7 +497,7 @@ def test_a_file_income_of_zero_is_income() -> None:
             ),
             TraceStep(R05, {CREDIT_SCORE: 620}, PREQUALIFIED),
         ),
-        facts=(fact(CREDIT_SCORE, 620, SOURCE_SCORE),),
+        facts=(fact(CREDIT_SCORE, 620, SOURCE_SCORE), *income(Decimal(0), usd=Decimal(0))),
         policy_version="alba-credit-v1",
     )
 
@@ -498,7 +525,7 @@ def test_the_income_on_file_wins_over_a_typed_amount() -> None:
             ),
             TraceStep(R05, {CREDIT_SCORE: 812}, PREQUALIFIED),
         ),
-        facts=(fact(CREDIT_SCORE, 812, SOURCE_SCORE),),
+        facts=(fact(CREDIT_SCORE, 812, SOURCE_SCORE), *income(Decimal("306753.45"), usd=Decimal(17988))),
         policy_version="alba-credit-v1",
     )
 
@@ -526,7 +553,7 @@ def test_juan_prequalifies_by_r05() -> None:
             ),
             TraceStep(R05, {CREDIT_SCORE: 812}, PREQUALIFIED),
         ),
-        facts=(fact(CREDIT_SCORE, 812, SOURCE_SCORE),),
+        facts=(fact(CREDIT_SCORE, 812, SOURCE_SCORE), *income(Decimal("306753.45"), usd=Decimal(17988))),
         policy_version="alba-credit-v1",
     )
 
@@ -554,7 +581,7 @@ def test_alicia_is_referred_by_r05() -> None:
             ),
             TraceStep(R05, {CREDIT_SCORE: 615}, REFER),
         ),
-        facts=(fact(CREDIT_SCORE, 615, SOURCE_SCORE),),
+        facts=(fact(CREDIT_SCORE, 615, SOURCE_SCORE), *income(Decimal("4707334.28"), "COP", Decimal(1167))),
         policy_version="alba-credit-v1",
     )
 
@@ -575,15 +602,35 @@ def test_mariana_is_decided_by_delinquency_before_her_score() -> None:
             TraceStep(R01, {CUSTOMER_STATUS: "Active"}, PASSED),
             TraceStep(R02, {MAX_DAYS_PAST_DUE: 180}, NOT_PREQUALIFIED),
         ),
-        facts=(fact(MAX_DAYS_PAST_DUE, 180, SOURCE_DAYS),),
+        facts=(
+            fact(MAX_DAYS_PAST_DUE, 180, SOURCE_DAYS),
+            fact(CREDIT_SCORE, 515, SOURCE_SCORE),
+            *income(Decimal("801583.70"), "ARS", Decimal(2303)),
+        ),
         policy_version="alba-credit-v1",
     )
 
 
-def test_income_usd_does_not_change_the_decision() -> None:
-    first = profile(credit_score=812, income_usd=Decimal(17988))
-    second = profile(credit_score=812, income_usd=None)
-    assert decide(first, CREDIT_CARD, None) == decide(second, CREDIT_CARD, None)
+def test_income_usd_is_cited_and_does_not_change_the_decision() -> None:
+    first = decide(profile(credit_score=812, income_usd=Decimal(17988)), CREDIT_CARD, None)
+    second = decide(profile(credit_score=812, income_usd=None), CREDIT_CARD, None)
+    assert (first.outcome, first.deciding_rule, first.rule_trace) == (
+        second.outcome,
+        second.deciding_rule,
+        second.rule_trace,
+    )
+    assert first.facts[-1] == fact(INCOME_USD, Decimal(17988), SOURCE_INCOME_USD)
+    assert second.facts[-1] == fact(INCOME_USD, None, SOURCE_INCOME_USD)
+    assert first.facts[:-1] == second.facts[:-1]
+
+
+def test_a_stated_amount_the_policy_never_reached_is_not_cited_as_self_declared() -> None:
+    customer = profile(credit_score=714, income_local=None, income_usd=None, max_days_past_due=30)
+    assert decide(customer, CREDIT_CARD, Decimal(45000)).facts == (
+        fact(MAX_DAYS_PAST_DUE, 30, SOURCE_DAYS),
+        fact(CREDIT_SCORE, 714, SOURCE_SCORE),
+        *income(None, usd=None),
+    )
 
 
 def test_the_same_profile_decides_the_same_way() -> None:
