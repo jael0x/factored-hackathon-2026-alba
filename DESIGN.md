@@ -190,7 +190,7 @@ The surface follows `messages.author`:
 
 | `author` | Side | Surface | Name above |
 |---|---|---|---|
-| `customer` | Right | Glass with `--tint` | The customer's first name |
+| `customer` | Right | Glass with `--tint` | The customer's first name, or "Tú" when the profile did not load |
 | `assistant` | Left | Glass | Alba, with the orb |
 | `template` | Left | White, `--solid-shadow` | Alba, with the orb |
 
@@ -232,11 +232,11 @@ A certificate exists only for `PREQUALIFIED` and `NOT_PREQUALIFIED` (from the po
 1. The outcome tag: "Precalifica · simulado" or "No precalifica · simulado".
 2. The product, in title size.
 3. The template paragraph, exactly as the API returns it.
-4. "Datos usados" (a kicker), then key-value rows: "Ingreso mensual" with the local amount and its code, and "Equivale a" with the USD amount and, under it, the exchange-rate date ("al tipo de cambio del 17 de junio de 2026"). The rows show only when the run read an income, and "Equivale a" only for an income on file: a stated income has no USD equivalent (**Open** 4).
+4. "Datos usados" (a kicker), then key-value rows: "Ingreso mensual" with the local amount and its code, and "Equivale a" with the USD amount and, under it, the exchange-rate date ("al tipo de cambio del 17 de junio de 2026"). The rows show only on a policy certificate whose analysis read an income, and "Equivale a" only for an income on file: a stated income has no USD equivalent (**Open** 4). A consultant's certificate has no rows: the decision is the person's (`PLAN.md` D25).
 
 The contract's certificate carries no deciding rule, no score, and no `policy_version` (`ARCHITECTURE.md`, "HTTP contract"), so the screen has no rule row and no footer; the template paragraph names the policy. Whether the consultant decided is not on the certificate yet either; "Revisado por una persona." waits for W5.
 
-The certificate sits in the thread where it was decided, in place of its own template line, so a notice that comes after it (a referral after an appeal) reads below it. A no that the policy decided, on an ended case, ends with a hero secondary button, "Pedir que una persona lo revise" ("Pedir que uma pessoa revise"). It is offered once: pressing it moves the case back to a person (`PLAN.md` D25), the button goes away, the referral notice follows, and the composer and the "Este caso lo ve una persona." banner return.
+The certificate sits in the thread where it was decided, in place of its own template line, so a notice that comes after it (a referral after an appeal) reads below it. When the API marks the case `appealable` (a no the policy decided, on an ended case, with no other open case of its product), the certificate ends with a hero secondary button, "Pedir que una persona lo revise" ("Pedir que uma pessoa revise"). The page does not work that out itself. It is offered once: pressing it moves the case back to a person (`PLAN.md` D25), the button goes away, the referral notice follows, and the composer and the "Este caso lo ve una persona." banner return.
 
 There is no slot for a credit limit, a rate for the new product, or a risk label. The Gen UI "Low risk" badge has no counterpart here: the risk estimate is the `credit_score` fact (`ARCHITECTURE.md`, "Risk estimate"), shown as a fact row, never as a label. The panel enters once over `--t-sheet`, with the same motion for both outcomes.
 
@@ -272,7 +272,7 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 - Step 1: the document field and "Enviar código" (primary).
 - Step 2: the document shown above, a caption "Revisa tu correo y escribe el código." ("Pedimos otro código. Revisa tu correo." after a resend), the code field with focus, a caption with the validity from `expires_in_seconds` (ten minutes), then the actions stacked: "Abrir sesión" (primary, full width), "Pedir otro código" (secondary, the same width), and "Cambiar documento" (text button, centered). Any failed code shows one line, "El código no es válido o venció."
 - The page itself shows nothing of the demo. With `DEMO_LOGIN=1` (read from `GET /config`) the app bar on `/login` carries a "Demo" button: a white pill with a dashed 1px `--field-edge` border, so nobody reads it as a bank feature. Pressing it opens the test-customer search right below it as a popover, not a modal: white, the same dashed border, `--r-card`, with the heading "Usuarios de prueba", a search field that takes focus, white result rows (full name, country, document masked to its last 4 digits; three rows show at a time and the rest scroll inside the list), "Elegir al azar", and "Cerrar". Choosing a row fills the document field and closes it; it never skips the code. Escape, a click outside, or "Cerrar" closes it too.
-- In the local demo the code arrives in Mailpit (http://localhost:8025). With `DEMO_LOGIN=1` the code step reads that email and fills the code field, with a caption "Demo: el código se completó desde el buzón de prueba."; the tester still presses "Abrir sesión" (`PLAN.md` D25). Without the demo the code is typed from the email.
+- In the local demo the code arrives in Mailpit (http://localhost:8025). With `DEMO_LOGIN=1` the code step reads the newest code sent after the request and fills the code field, with a caption "Demo: el código se completó desde el buzón de prueba."; the tester still presses "Abrir sesión" (`PLAN.md` D25). The consultant login does the same with the code sent to the email typed. Without the demo the web server has no `/mailpit` route. Without the demo the code is typed from the email.
 - Consultants do not log in here. Under the panel, a centered text button "Acceso para asesores" leads to their own page (Consultant login, below).
 
 ### Consultant login (`/consultant/login`)
