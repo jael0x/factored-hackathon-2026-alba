@@ -7,6 +7,7 @@ from api.infrastructure.config.settings import require_jwt_secret, settings
 from api.infrastructure.db.pool import open_pool
 from api.presentation.http.errors import install_error_handlers
 from api.presentation.http.routes import config, consultants, customers, health, products, session
+from api.presentation.worker.loop import Worker, model_not_built
 
 
 @asynccontextmanager
@@ -14,9 +15,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     require_jwt_secret(settings.jwt_secret)
     pool = open_pool(settings.database_url, settings.db_pool_min, settings.db_pool_max)
     app.state.pool = pool
+    worker = Worker(pool, model_not_built) if settings.run_worker else None
+    app.state.worker = worker
+    if worker is not None:
+        worker.start()
     try:
         yield
     finally:
+        if worker is not None:
+            worker.stop()
         pool.close()
 
 
