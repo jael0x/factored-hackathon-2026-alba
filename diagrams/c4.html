@@ -337,7 +337,7 @@ node('web', {
   ],
   files: ['web/src/pages/', 'docker/web.Dockerfile'],
   fixed: [
-    'Business logic does not live in the client. Vitest only if the client has logic.',
+    'Business logic does not live in the client. Vitest with jsdom covers the logic the client owns: browser storage, the session, the language choice.',
     'Every fetch handles loading, error, and success.',
     'An expired JWT returns 401 and the customer sees that the session ended. It is not silently renewed.',
   ],
