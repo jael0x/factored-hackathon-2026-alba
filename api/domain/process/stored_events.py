@@ -28,6 +28,7 @@ from api.domain.process.events import (
     CONSULTANT_CLOSED,
     MESSAGE_RECEIVED,
     PREQUALIFICATION_DECIDED,
+    PROCESS_STARTED,
     TEMPLATE_SENT,
     TURN_CLASSIFIED,
 )
@@ -141,6 +142,13 @@ class AppealRequested:
 
 
 @dataclass(frozen=True)
+class ProcessStarted:
+    event_id: UUID
+    locale: Locale
+    product: ProductKey
+
+
+@dataclass(frozen=True)
 class NoRuleEvent:
     event_id: UUID
     event_name: EventName
@@ -155,6 +163,7 @@ StoredEvent = (
     | PrequalificationDecided
     | ConsultantClosed
     | AppealRequested
+    | ProcessStarted
     | NoRuleEvent
 )
 
@@ -185,6 +194,10 @@ def parse_stored_event(
         return ConsultantClosed(event_id, outcome=parse_close_outcome(payload), locale=parse_locale(payload))
     if name == APPEAL_REQUESTED:
         return parse_appeal(event_id, process_id, payload)
+    if name == PROCESS_STARTED:
+        return ProcessStarted(
+            event_id, parse_locale(payload), parse_member(field(payload, "product"), PRODUCT_KEYS, "product")
+        )
     return NoRuleEvent(event_id, name)
 
 
@@ -262,19 +275,19 @@ def parse_optional_product(value: object) -> ProductKey | None:
     return None if value is None else parse_member(value, PRODUCT_KEYS, "product")
 
 
-def parse_optional_currency(value: object) -> IncomeCurrency | None:
-    return None if value is None else parse_member(value, INCOME_CURRENCIES, "declared_income_currency")
+def parse_optional_currency(value: object, label: str = "declared_income_currency") -> IncomeCurrency | None:
+    return None if value is None else parse_member(value, INCOME_CURRENCIES, label)
 
 
-def parse_amount(value: object) -> Decimal | None:
+def parse_amount(value: object, label: str = "declared_income_amount") -> Decimal | None:
     if value is None:
         return None
     if type(value) is int:
         value = Decimal(value)
     if type(value) is not Decimal:
-        raise TypeError(f"declared_income_amount must be read as Decimal, got {type(value).__name__}")
+        raise TypeError(f"{label} must be read as Decimal, got {type(value).__name__}")
     if not value.is_finite() or value < 0:
-        raise ValueError(f"declared_income_amount {value} is not an income")
+        raise ValueError(f"{label} {value} is not an income")
     return value
 
 

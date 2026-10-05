@@ -31,6 +31,7 @@ from api.domain.process.events import (
     CONSULTANT_CLOSED,
     MESSAGE_RECEIVED,
     PREQUALIFICATION_DECIDED,
+    PROCESS_STARTED,
     TURN_CLASSIFIED,
 )
 from api.domain.process.lifecycle import (
@@ -63,6 +64,7 @@ from api.domain.process.stored_events import (
     MessageReceived,
     NoRuleEvent,
     PrequalificationDecided,
+    ProcessStarted,
     ShownTurn,
     StoredEvent,
     TemplateSent,
@@ -174,10 +176,6 @@ def start_in_message_locale(message: MessageReceived) -> tuple[Command, ...]:
     return (start_process(message.locale, requested_product(message)),)
 
 
-def policy_run_from_start(message: MessageReceived) -> tuple[Command, ...]:
-    return (run_policy(requested_product(message), None, None),)
-
-
 def requested_product(message: MessageReceived) -> ProductKey:
     if message.product is None:
         raise ValueError("a start names its product")
@@ -287,7 +285,6 @@ def close_for_consultant(closed: ConsultantClosed) -> tuple[Command, ...]:
 
 MESSAGE_RULES: tuple[Rule[MessageReceived], ...] = (
     Rule(OPEN_PROCESS, MESSAGE_RECEIVED, is_start, start_in_message_locale),
-    Rule(RUN_REQUESTED_POLICY, MESSAGE_RECEIVED, is_start, policy_run_from_start),
     Rule(GENERATE_WHILE_AI, MESSAGE_RECEIVED, stamped(AI_ACTIVE), emits(GENERATE_COMMAND)),
     Rule(RECORD_ONLY_WHEN_HUMAN, MESSAGE_RECEIVED, stamped(HUMAN_ACTIVE), emits()),
 )
@@ -359,6 +356,16 @@ CLOSE_RULES: tuple[Rule[ConsultantClosed], ...] = (
 )
 
 
+def run_requested_policy(started: ProcessStarted) -> tuple[Command, ...]:
+    return (run_policy(started.product, None, None),)
+
+
+# Only the start that opened its case runs the policy, so two starts for one product make one run (D24).
+STARTED_RULES: tuple[Rule[ProcessStarted], ...] = (
+    Rule(RUN_REQUESTED_POLICY, PROCESS_STARTED, lambda _started: True, run_requested_policy),
+)
+
+
 # An appeal reopens the case for a person, then tells the customer a person will review it (D25).
 APPEAL_RULES: tuple[Rule[AppealRequested], ...] = (
     Rule(REOPEN_ON_APPEAL, APPEAL_REQUESTED, lambda _appeal: True, emits(hand_off(CUSTOMER_REQUESTED_HUMAN))),
@@ -373,6 +380,7 @@ RuleTable = (
     | tuple[Rule[PrequalificationDecided], ...]
     | tuple[Rule[ConsultantClosed], ...]
     | tuple[Rule[AppealRequested], ...]
+    | tuple[Rule[ProcessStarted], ...]
 )
 
 
@@ -405,6 +413,8 @@ def fired_rules(event: StoredEvent) -> tuple[Firing, ...]:
             return fire(CLOSE_RULES, event)
         case AppealRequested():
             return fire(APPEAL_RULES, event)
+        case ProcessStarted():
+            return fire(STARTED_RULES, event)
         case TemplateSent() | NoRuleEvent():
             return ()
         case _:
@@ -452,6 +462,7 @@ RULE_TABLES: Mapping[EventName, RuleTable] = MappingProxyType(
         PREQUALIFICATION_DECIDED: DECIDED_RULES,
         CONSULTANT_CLOSED: CLOSE_RULES,
         APPEAL_REQUESTED: APPEAL_RULES,
+        PROCESS_STARTED: STARTED_RULES,
     }
 )
 

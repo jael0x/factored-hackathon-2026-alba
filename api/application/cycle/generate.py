@@ -1,6 +1,6 @@
 import logging
 
-from api.application.cycle.context import Cycle, Trigger, expect, require_case, require_profile, stored
+from api.application.cycle.context import Cycle, Trigger, expect, process_of, require_profile, stored
 from api.application.cycle.ports import TurnRequest
 from api.domain.policy.engine import CreditProfile
 from api.domain.process.commands import CommandPayload, NoPayload
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def classify_message(cycle: Cycle, trigger: Trigger, payload: CommandPayload) -> None:
     expect(payload, NoPayload)
     message = expect(trigger.event, MessageReceived)
-    process = require_case(cycle, trigger)
+    process = process_of(cycle, trigger)
     if process.state != AI_ACTIVE:
         logger.info("message %s reached a %s case; the model is not called", message.event_id, process.state)
         return

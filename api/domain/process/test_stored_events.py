@@ -11,6 +11,7 @@ from api.domain.process.stored_events import (
     NoRuleEvent,
     Payload,
     PrequalificationDecided,
+    ProcessStarted,
     ShownTurn,
     TemplateSent,
     WithheldTurn,
@@ -253,7 +254,6 @@ def test_a_close_carries_its_outcome() -> None:
     "event_name",
     [
         "conversation.thread_taken",
-        "process.started",
         "process.state_changed",
         "process.ended",
     ],
@@ -261,6 +261,17 @@ def test_a_close_carries_its_outcome() -> None:
 def test_an_event_no_rule_reads_keeps_only_its_name(event_name: EventName) -> None:
     event = parse_stored_event(EVENT_ID, event_name, PROCESS_ID, "ai_active", {})
     assert event == NoRuleEvent(EVENT_ID, event_name)
+
+
+def test_a_started_case_carries_its_locale_and_product() -> None:
+    payload = {
+        "process_key": "credit_prequalification",
+        "customer_id": "CLI-9",
+        "locale": "pt",
+        "product": "credit_card",
+    }
+    event = parse_stored_event(EVENT_ID, "process.started", PROCESS_ID, "ai_active", payload)
+    assert event == ProcessStarted(EVENT_ID, "pt", "credit_card")
 
 
 @pytest.mark.parametrize("template_id", ["confirm_prequalify", "which_product", "needs_income", "refer_notice"])

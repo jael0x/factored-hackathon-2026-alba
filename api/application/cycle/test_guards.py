@@ -15,7 +15,6 @@ from api.application.cycle.context import (
     expect,
     process_id_of,
     read_process,
-    require_case,
     stored,
 )
 from api.application.cycle.handlers import HANDLERS, require_handlers
@@ -84,7 +83,7 @@ class OneCase:
     def find_open(self, *_args: object) -> ProcessRow | None:
         return self.process
 
-    def read_for_message(self, process_id: UUID) -> ProcessRow | None:
+    def read_for_message(self, customer_id: str, process_id: UUID) -> ProcessRow | None:
         raise AssertionError("not called")
 
     def insert_open(self, *_args: object) -> UUID | None:
@@ -154,14 +153,8 @@ def test_an_event_with_no_process_cannot_be_acted_on() -> None:
         process_id_of(trigger("conversation.message_received", MESSAGE, process_id=None))
 
 
-def test_a_message_with_no_process_and_no_product_belongs_to_no_case() -> None:
-    message = trigger("conversation.message_received", MESSAGE, process_id=None)
-    with pytest.raises(LookupError, match=f"event {EVENT_ID} belongs to no case"):
-        require_case(cycle(Recorder()), message)
-
-
-def test_a_policy_run_follows_only_a_consented_turn_or_a_start() -> None:
-    with pytest.raises(WrongTrigger, match="needs a shown turn or a start, got AnalysisCompleted"):
+def test_a_policy_run_follows_only_a_consented_turn_or_a_started_case() -> None:
+    with pytest.raises(WrongTrigger, match="needs a shown turn or a started case, got AnalysisCompleted"):
         run_policy(
             cycle(Recorder()), trigger("analysis.completed", ANALYSIS), PolicyRunPayload("credit_card", None, None)
         )
