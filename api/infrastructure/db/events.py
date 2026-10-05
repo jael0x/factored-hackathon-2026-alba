@@ -76,12 +76,16 @@ class PostgresEventLog:
     def process_named_by(self, event_id: UUID) -> UUID | None:
         row = self._conn.execute(
             """
-            SELECT process_id FROM events WHERE id = %s AND process_id IS NOT NULL
-            UNION ALL
-            (SELECT process_id FROM events WHERE caused_by_event_id = %s AND process_id IS NOT NULL ORDER BY seq LIMIT 1)
+            SELECT process_id FROM (
+                SELECT process_id, 0 AS named_by_cause, seq FROM events WHERE id = %(event)s
+                UNION ALL
+                SELECT process_id, 1, seq FROM events WHERE caused_by_event_id = %(event)s
+            ) named
+            WHERE process_id IS NOT NULL
+            ORDER BY named_by_cause, seq
             LIMIT 1
             """,
-            (event_id, event_id),
+            {"event": event_id},
         ).fetchone()
         return row[0] if row else None
 
