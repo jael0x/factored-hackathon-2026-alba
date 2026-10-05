@@ -20,7 +20,7 @@ This file is in English. Dataset literals, the customer-facing copy quoted here,
 
 ## What gets built
 
-A web service. The customer asks about a credit card or a personal loan. If the request is ambiguous, the assistant asks which of the two and does not decide. When the product is known, the assistant asks for explicit consent before any `policy.run`. If the customer declines, the process stays `ai_active` and the policy is not called. If they confirm and the data is enough, the policy issues a certificate (`constancia` in the UI): pre-qualifies, does not pre-qualify, or goes to a person. The certificate is a template filled with the policy result.
+A web service. The customer asks about a credit card or a personal loan from a row on the home (`PLAN.md` D24). A dialog names the product, the bank's policy, and that it is a simulation; "Empezar" is the explicit consent, and the policy runs at once on that product. If the data is enough, the policy issues a certificate (`constancia` in the UI): pre-qualifies, does not pre-qualify, or goes to a person; if the income is missing, the assistant asks for it in the thread. Inside a case the customer can keep writing: the model classifies each message, a request for the other product switches the case and asks for consent in the thread, and an unclear request is clarified before anything is decided. If the customer declines, the process stays `ai_active` and the policy is not called. The certificate is a template filled with the policy result.
 
 Four outcomes, from real rows of the file (snapshot of June 17, 2026):
 
@@ -117,6 +117,7 @@ api/
       turns.py            # the model's reading in domain terms, and the two stamps on a turn
       thread.py           # the authors of a thread line
       rules.py            # rule ids, the command key, and the pure match over the event already written
+      case.py             # the case row and the thread line a customer reads
   application/            # one file per use case. Defines the ports
     session/
       ports.py
@@ -132,6 +133,7 @@ api/
       list_products.py    # the session customer's products; another customer_id gets none
     processes.py          # record a customer message, start, hand off, end; the Events and Processes ports
     cycle/                # the command loop: ports, PlanningEvents, one handler per command, the attempts
+    cases.py              # read the customer's case and cases, and the appeal of a policy's no (D25)
   infrastructure/
     config/settings.py    # env, including DB_POOL_MIN and DB_POOL_MAX
     db/
@@ -146,16 +148,18 @@ api/
       json_codec.py       # jsonb both ways with exact decimals, set on every pooled connection
       processes.py        # SQL for processes: the open case, the insert, the row lock, the state
       profile.py          # gold by customer_id, for the policy and the model's booleans
+      cases.py            # the thread of one case, in the seq of its events, and its latest certificate
       products.py         # SQL for products, filtered on the session customer, ordered by product_id
     mail/smtp.py          # sends the login code by SMTP; the only module that opens SMTP
-    llm/                  # the only module that imports the OpenAI SDK, when the model is built
+    llm/                  # the classifiers; only conversation.py imports the OpenAI SDK, when that adapter is built
+      keywords.py         # B0, the keyword baseline: a TurnRequest read from word lists (PLAN.md D23)
       conversation.py     # one call, JSON schema
       schema.py           # ConversationTurn and parse_conversation_turn, the one parse of the model's JSON
   presentation/
     http/
       errors.py           # {error: ...} bodies for 401, 403, 404, 422
       dependencies.py     # wires a request to a use case. get_session lives here
-      routes/             # session (/session and /consultant/session), customers (/me and /customers), products (/products), consultants (/consultant/me and /consultants), config, health
+      routes/             # session (/session and /consultant/session), customers (/me and /customers), products (/products), cases (/messages and /case), consultants (/consultant/me and /consultants), config, health
     worker/loop.py        # the worker thread, run_next, and the wait for one cycle
   fixtures/
     oracle_customers.json # the four profiles and César
@@ -173,7 +177,10 @@ web/
   src/components/LanguageSwitch.tsx # ES, PT in the app bar of every screen
   src/pages/Home.tsx            # greeting, product cards, and the Preguntar por rows
   src/pages/ConsultantHome.tsx  # greeting from GET /consultant/me until the queue is built
-  src/pages/Case.tsx            # customer: chat, plus the certificate if it exists
+  src/pages/Case.tsx            # customer: /case opens a case from the start dialog, /case/:id is the thread, the composer, and the certificate
+  src/components/StartDialog.tsx # the consent before a case starts (D24)
+  src/components/Certificate.tsx # the hero: outcome tag, product, sentence, and the income the run read
+  src/chat.ts                   # one send (text, id, locale), the bubble of each author, when the typing indicator shows
   src/pages/ConsultantQueue.tsx
   src/pages/ConsultantCase.tsx  # handoff packet and the two close actions
   src/pages/Trace.tsx           # the process's events table
@@ -190,6 +197,8 @@ db/migrations/006_process_locale.sql
 db/migrations/007_process_locale_es_pt.sql
 db/migrations/008_events_locale_check.sql
 db/migrations/009_command_queue.sql
+db/migrations/010_one_open_case_per_product.sql
+db/migrations/011_case_read_indexes.sql
 eval/                       # comes later; does not block the flow
 compose.yaml
 docker/api.Dockerfile
@@ -251,17 +260,17 @@ Allowed transitions. Any other is an error and is not written.
 | `ai_active` | `ended` | `not_prequalified` | policy `NOT_PREQUALIFIED` |
 | `ai_active` | `human_active` | none | policy `REFER`, request for a human, tool failure, unsupported language |
 | `human_active` | `ended` | `prequalified` or `not_prequalified` | the consultant closes with that choice |
-| `ended` | none | none | not reopened. Another message creates a new process |
+| `ended` | `human_active` | none | the customer appeals a `NOT_PREQUALIFIED` the policy decided, once (`PLAN.md` D25). The only move out of `ended` |
 
-Staying in `ai_active` is not a move: nothing is written for it. The three moves are in `api/domain/process/lifecycle.py`. `process.transition` makes the one move without an `end_reason`, to `human_active`; `process.end` makes the two moves to `ended`, each with its `end_reason`. A move takes the process row `FOR UPDATE`, checks its own key first (a replay returns without writing, even if the case moved on since), then the table. Anything else raises, and the transaction writes nothing.
+Staying in `ai_active` is not a move: nothing is written for it. The moves are in `api/domain/process/lifecycle.py`. `process.transition` moves a case to `human_active` without an `end_reason`: a handoff from `ai_active` (`check_move`), or, only when its trigger is `conversation.appeal_requested`, the reopen from `ended` (`check_reopen`). The reopen is not in the move table, so no other handoff can reopen an ended case. `process.end` makes the two moves to `ended`, each with its `end_reason`. A move takes the process row `FOR UPDATE`, checks its own key first (a replay returns without writing, even if the case moved on since), then the table. Anything else raises, and the transaction writes nothing.
 
 `reason_code` is a closed list: `customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`. No others. The policy rule that fired stays on `deciding_rule` (R05, R06, and the rest). `policy_refer` is the one code for every policy `REFER`.
 
 `started` is not persisted. The process `INSERT` is born in `ai_active`, and the `process.started` event records it.
 
-The process row also holds `product` (`credit_card` | `personal_loan` | null), null until a turn sets it, and `locale` (`es` | `pt`), the language the customer chose with the switch (`PLAN.md` D21, D22). `process.start` stores the opening message's `locale`, and each turn stores its own message's, so `locale` is never null and a switch changed mid-case applies from the next message on.
+The process row also holds `product` (`credit_card` | `personal_loan` | null), set by the start that opened it and switched by a turn that names the other product (null only on a case from before D24), and `locale` (`es` | `pt`), the language the customer chose with the switch (`PLAN.md` D21, D22). `process.start` stores the opening message's `locale`, and each turn stores its own message's, so `locale` is never null and a switch changed mid-case applies from the next message on.
 
-A customer has at most one process with `state <> 'ended'`. A partial unique index guarantees it. `process.start` inserts with `ON CONFLICT` on that index. If its own `process.started` key already exists, it returns that process and writes nothing, even if the case has ended since. If another case is open, for example when two first messages arrive before the case exists, it writes nothing and the message joins that case: its turn names the open process, and the message reaches the thread through the turn's `caused_by_event_id`.
+A customer has at most one process with `state <> 'ended'` per product (`PLAN.md` D24). The partial unique index on `(customer_id, process_key, product)` (`010_one_open_case_per_product.sql`) guarantees it. A case starts from a message that names its product (the home's dialog), and every later message names its case's `process_id`. `process.start` inserts with that product and `ON CONFLICT` on that index. If its own `process.started` key already exists, it returns that process and writes nothing, even if the case has ended since. If that product already has an open case, for example when two starts arrive before the case exists, it writes nothing: that start opens no case and runs no policy, since only `process.started` runs it, and `POST /messages` answers it 409 `case_already_open` once its cycle settles. `POST /messages` refuses a start for a product with an open case (409 `case_already_open`) and a message to an ended case (409 `case_ended`).
 
 ### Consultant close
 
@@ -290,14 +299,15 @@ Closed names. No others are invented in v1. They are the `EventName` enum in `ap
 
 | `event_name` | When it is written | Minimum payload |
 |---|---|---|
-| `conversation.message_received` | `POST /messages` | `text`, `client_message_id`, `locale` |
+| `conversation.message_received` | `POST /messages` | `text`, `client_message_id`, `locale`, `product` (set on a start from the home, null otherwise) |
 | `conversation.turn_classified` | `conversation.generate` finished | `intent`, `product`, `language`, `locale`, `declared_income_amount`, `declared_income_currency`, `reply_text`, `reply_ok`, `reason_code`, `product_asked_count`, `income_requested` |
 | `conversation.template_sent` | a non-terminal template was sent | `locale`, `template_id`, `body` |
 | `conversation.consultant_closed` | the consultant closes the case | `outcome`, `consultant_id`, `locale` |
 | `conversation.thread_taken` | the transition to `human_active` | `reason_code`, `from_state`, `to_state` |
 | `analysis.completed` | `policy.run` finished | `policy_version`, `product`, `outcome`, `deciding_rule`, `rule_trace`, `facts`, `locale` |
 | `prequalification.decided` | the certificate template was rendered | `locale`, `outcome`, `body`, `decided_by` |
-| `process.started` | the process was inserted | `process_key`, `customer_id`, `locale` |
+| `process.started` | the process was inserted | `process_key`, `customer_id`, `locale`, `product` |
+| `conversation.appeal_requested` | `POST /case/{process_id}/appeal` | `locale`, `product` |
 | `process.state_changed` | `processes.state` changed | `from_state`, `to_state`, `end_reason` |
 | `process.ended` | reached `ended` | `end_reason`, `policy_version`: the version of the `analysis.completed` the policy certificate names in `caused_by_event_id`, null after a consultant close |
 
@@ -314,8 +324,9 @@ Idempotency keys:
 | Run policy | `policy:{process_id}:alba-credit-v1:{product}:{triggered_by_event_id}` |
 | Transition | `transition:{process_id}:{to_state}:{caused_by_event_id}` |
 | Consultant close | `consultant_close:{process_id}` |
-| Certificate | `decision:{process_id}` |
-| End process | `end:{process_id}` |
+| Certificate | `decision:{process_id}:{decided_by}`: one per decider, so an appealed case can hold the policy's and a consultant's (D25) |
+| End process | `end:{process_id}:{triggered_by_event_id}`: an appealed case ends twice, once per certificate (D25) |
+| Appeal | `appeal:{process_id}` |
 
 The run-policy key carries the turn that triggered it (`PLAN.md` D12). Juliana's run after her income is a second run for the same process and product, triggered by another turn, so it has its own key. A message delivered twice is one turn and still makes one run, and a retried `policy.run` writes the same payload under the same key.
 
@@ -323,16 +334,16 @@ The key in this table belongs to the action. An action that writes one event giv
 
 The frontend sends `client_message_id` (one uuid per send). The message key is that uuid. It does not wait for a `process_id`. Repeating the POST creates no new event and no new decision. A key names one fact: the same key with the same `event_name`, `customer_id`, and `payload` returns the stored event; the same key with anything else raises `IdempotencyConflict` and writes nothing. For a message, that is another text, another `locale`, or another customer, and `POST /messages` answers 409 `message_id_reused`.
 
-When `conversation.message_received` is inserted, the API stamps the two columns. It reads the open process `FOR SHARE`, so a message sent while that process moves waits for the move and carries its result:
+When `conversation.message_received` is inserted, the API stamps the two columns:
 
-- If the customer already has a process with `state <> 'ended'`, `process_id` is that process and `process_state` is its state.
-- If not, `process_id` stays null and `process_state` is `ai_active`, the state a new process is born in. The event does not open the process. The `open_process` rule does.
+- A message to a case reads that process `FOR SHARE`, so a message sent while the process moves waits for the move and carries its result. `process_id` is that process and `process_state` is its state. Another customer's or an unknown process is 404.
+- A start (the message names a `product`) has `process_id` null and `process_state` `ai_active`, the state a new process is born in. The event does not open the process. The `open_process` rule does.
 
 The message is an event. It is not the case. The case is the process. A new thread is born `ai_active`, so the model rule matches the first message of a new case. The customer message is not copied into a second event.
 
-`conversation.generate` writes `conversation.turn_classified` and does not enqueue the next command. Rules on that event do. When the message column `process_id` is set, the turn copies it. When that column is null, the turn takes the id of the process `process.start` just inserted in this same cycle, the one open process for that `customer_id`. The first message is always the customer's. The partial unique index makes a second open process impossible. The message row is not updated.
+`conversation.generate` writes `conversation.turn_classified` and does not enqueue the next command. Rules on that event do. The turn copies the message's `process_id`: a start, the only message with a null `process_id`, never reaches `conversation.generate` (`PLAN.md` D24). The message row is not updated.
 
-`reply_ok` is false when `reply_text` contains `precalifica`, `no precalifica`, `pré-qualificado`, `não pré-qualifica`, `pre-qualif`, or `prequalif`, and when the JSON does not validate. That text is not shown. `reason_code` on the turn is `reply_forbidden` or `model_output_invalid`. Otherwise `reason_code` is null and `reply_ok` is true.
+`reply_ok` is false when `reply_text` contains `precalifica`, `no precalifica`, `pré-qualificado`, or `não pré-qualifica` (in any letter case), and when the JSON does not validate. That text is not shown. `reason_code` on the turn is `reply_forbidden` or `model_output_invalid`. Otherwise `reason_code` is null and `reply_ok` is true.
 
 If the model sends no product and the process already has one, the turn's `product` is the stored one. If the turn's `product` is set, the process stores it. The turn copies `locale` from its message, and the process stores it. The turn's `language` is what the model read in the text; it only decides whether Alba can read the message and is not stored on the process.
 
@@ -340,6 +351,7 @@ If the model sends no product and the process already has one, the turn's `produ
 
 - `product_asked_count`: how many times the customer was already asked which product. It counts the `conversation.template_sent` events with `template_id = which_product`, plus the `conversation.turn_classified` events with intent `clarify`, `product` null, `reply_ok` true, and `language` `es` or `pt` (a clarification that was shown).
 - `income_requested`: true when the latest `analysis.completed` has outcome `NEEDS_INFO` and the same `product` as this turn (after the stored product is copied), and no `conversation.template_sent` with `template_id = confirm_prequalify` and no `conversation.turn_classified` with intent `decline_prequalify` comes after it. Otherwise false, including when there is no analysis.
+- `open_case_product`: the product the turn names when it is not the case's product and that product has its own open case for this customer (`PLAN.md` D24). Null otherwise. When it is set, the process keeps its product and the turn's `product` is the stored one.
 
 ## Process rules
 
@@ -349,9 +361,11 @@ A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function o
 
 | Id | Trigger | When | Commands |
 |---|---|---|---|
-| `open_process` | `conversation.message_received` | the `process_id` column is null | `process.start` with the message's `locale` |
-| `generate_while_ai` | `conversation.message_received` | the `process_state` column is `ai_active` | `conversation.generate` |
-| `record_only_when_human` | `conversation.message_received` | the `process_state` column is `human_active` | none. The message is already in the event |
+| `open_process` | `conversation.message_received` | a start: the `process_id` column is null and `product` is set | `process.start` with the message's `locale` and `product` |
+| `run_requested_policy` | `process.started` | always: only a start opens a case | `policy.run` with the case's `product` and no declared amount. The dialog was the consent; the model is not called. A second start for the product opens no case, so it runs no policy |
+| `generate_while_ai` | `conversation.message_received` | not a start, and the `process_state` column is `ai_active` | `conversation.generate` |
+| `record_only_when_human` | `conversation.message_received` | not a start, and the `process_state` column is `human_active` | none. The message is already in the event |
+| `point_to_open_case` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `open_case_product` is set | `template.send` for `product_case_open`, naming that product. Nothing switches. Every other turn rule below that requires `language` `es` or `pt` also requires `open_case_product` null |
 | `ask_confirm_prequalify` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `prequalify_card` or `prequalify_loan` | `template.send` for `confirm_prequalify`. The product is already on the process: `conversation.generate` stored it with the turn. Stays `ai_active`. The policy is not called |
 | `run_policy` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `confirm_prequalify` and `product` is set | `policy.run` with that `product` and the turn's declared amount, null when none |
 | `decline_prequalify` | `conversation.turn_classified` | `reply_ok` and `language` is `es` or `pt` and `intent` is `decline_prequalify` | `conversation.show_reply`. Stays `ai_active`. The policy is not called |
@@ -370,6 +384,8 @@ A rule is `{id, trigger_event_name, when, actions}`. `when` is a pure function o
 | `render_decision` | `analysis.completed` | `outcome` is `PREQUALIFIED` or `NOT_PREQUALIFIED` | `decision.render`, with `decided_by = policy` |
 | `end_after_decision` | `prequalification.decided` | `payload.decided_by == "policy"` | `process.end` |
 | `close_on_consultant_decision` | `conversation.consultant_closed` | `outcome` is `PREQUALIFIED` or `NOT_PREQUALIFIED` | `decision.render` with `decided_by = consultant`, then `process.end` |
+| `reopen_on_appeal` | `conversation.appeal_requested` | always | `process.transition` to `human_active`, `reason_code = customer_requested_human` (`PLAN.md` D25) |
+| `notify_appeal` | `conversation.appeal_requested` | always | `template.send` for `refer_notice` |
 
 `generate_while_ai` does not run if the `process_state` column is `human_active`. The prompt is not the brake.
 
@@ -377,7 +393,7 @@ Every `conversation.turn_classified` matches exactly one rule, for every combina
 
 A customer gets at most three tries to name a product (`PLAN.md` D13): the first two turns that name none are asked which product, by `which_product` or by the shown clarification, and the third goes to a person with `out_of_scope`.
 
-The first message of a new case is stamped `ai_active` with `process_id` null. Both `open_process` and `generate_while_ai` match. The loop inserts those commands in the order of the table and runs them in that order before taking another event. `process.start` creates the process. Then `conversation.generate` classifies the sentence and writes the turn with that new `process_id`.
+The first message of a new case is a start, stamped `ai_active` with `process_id` null, and only `open_process` matches it. `process.start` creates the process and writes `process.started`, whose `run_requested_policy` runs `policy.run` on that case (`PLAN.md` D24). The model is not called for a start.
 
 ## Commands
 
@@ -396,18 +412,19 @@ How the loop runs (built Oct 5, E4):
 - **The thread.** `conversation.show_reply` writes the turn's `reply_text` with `author = assistant` and the turn as its `event_id`. `template.send` and `decision.render` write their body with `author = template` and the event they wrote. One event has at most one line (unique `messages.event_id`).
 - **`conversation.generate` re-reads the case.** A message stamped `ai_active` may reach a case a queued handoff moved to `human_active` first. The command then writes nothing and is done: the model is not called. The model call comes before any write, so it holds no lock on the process row.
 - **The process.** The API process runs one worker thread when `RUN_WORKER` is set (`compose.yaml` sets it). It wakes when work is enqueued and polls every second otherwise. `wait_for_cycle(event_id)` returns once no command in that event's chain (command, event it wrote, its commands) is pending, so `POST /messages` waits without running commands. Tests run the same commands with `run_until_idle`, with no thread and no sleep.
-- **The model is injected.** `conversation.generate` calls a function that takes a `TurnRequest` (the text, the message's `locale`, the process state, and the four booleans) and returns the reading. Until the adapter of `api/infrastructure/llm/conversation.py` is built, the wired function fails with an error that names it, and each case goes to a person with `tool_failed`.
+- **The model is injected.** `conversation.generate` calls a function that takes a `TurnRequest` (the text, the message's `locale`, the process state, and the four booleans) and returns the reading. `LLM_MODEL` picks it (`read_turn_for` in `api/presentation/worker/loop.py`): `b0-keywords` is B0, the keyword baseline, which `compose.yaml` sets while there is no `OPENAI_API_KEY` (`PLAN.md` D23); `gpt-6-luna` is the model. Until the adapter of `api/infrastructure/llm/conversation.py` is built, the model's function fails with an error that names it, and each case goes to a person with `tool_failed`.
+- **A start runs the policy.** A message with a `product` and no case is the home's dialog with the consent already given (`PLAN.md` D24): `open_process` opens the case for that product, and `run_requested_policy` on its `process.started` runs `policy.run`. So only the start that opened the case runs the policy, and every command after `process.start` finds its case on its triggering event, never by looking up an open case. A start whose `process.start` fails for good has no case, so nothing is handed to a person.
 
 | `command_name` | Does | Does not |
 |---|---|---|
 | `process.start` | inserts `processes` with the opening message's `locale`, and `process.started`. Writes nothing when its key exists or another case is open | call the model |
 | `process.transition` | changes `state`, writes `process.state_changed` and, if the target is `human_active`, `conversation.thread_taken` | call the model |
-| `process.end` | `state = ended`. Writes `process.state_changed` and `process.ended`, both with the same `end_reason` | call the model, and does not run the policy again |
+| `process.end` | `state = ended`. Writes `process.state_changed` and `process.ended`, both with the same `end_reason`, and `policy_version` from the `analysis.completed` the policy certificate names in `caused_by_event_id`, null after a consultant close | call the model, and does not run the policy again |
 | `conversation.generate` | one LLM call, persists the JSON, writes `conversation.turn_classified`. If the message `process_id` is null, the turn uses the process this cycle just opened for that customer. Stores the message's `locale` and, when set, `product` on the process | write `analysis.completed`, enqueue `policy.run` or `process.transition`, copy the customer message, update the message row |
 | `conversation.show_reply` | inserts `messages` with `author = assistant` and the turn's `reply_text` | call the model |
-| `template.send` | writes `conversation.template_sent`. `template_id` is `needs_income`, `refer_notice`, `which_product`, or `confirm_prequalify`. Locale comes from the triggering event's `locale` | call the model, end the process. The sentences are in `api/domain/policy/templates.py` |
-| `policy.run` | reads the profile by the event's `customer_id`, runs the engine, writes `analysis.completed`, and copies `locale` from the triggering turn | write the certificate |
-| `decision.render` | reads `locale` from the triggering event, picks the ES or PT template, writes `prequalification.decided` | call the model. The sentences are in `api/domain/policy/templates.py` |
+| `template.send` | writes `conversation.template_sent`. `template_id` is `needs_income`, `refer_notice`, `which_product`, `confirm_prequalify`, or `product_case_open`. Locale comes from the triggering event's `locale`; each template but `which_product` names the event's `product` (`product_case_open` names the turn's `open_case_product`) | call the model, end the process. The sentences are in `api/domain/policy/templates.py` |
+| `policy.run` | reads the profile by the event's `customer_id`, runs the engine, writes `analysis.completed`, and copies `locale` from the triggering turn, or from the start that ran it (D24) | write the certificate |
+| `decision.render` | reads `locale` from the triggering event, picks the ES or PT template, writes `prequalification.decided` keyed by who decided (D25) | call the model. The sentences are in `api/domain/policy/templates.py` |
 
 Order inside `policy.run`: read profile → engine → insert the event. Whether the engine returns `PREQUALIFIED`, `NOT_PREQUALIFIED`, `REFER`, or `NEEDS_INFO`, the worker interprets nothing more. The rules above react to the new event.
 
@@ -455,14 +472,14 @@ Three things, and no others.
 | Asked | When |
 |---|---|
 | Which product, credit card or personal loan | the turn names no product. At most twice; the third turn that names none goes to a person |
-| Whether to start this run's pre-qualification | the turn is `prequalify_card` or `prequalify_loan` (product known). Soft consent before any `policy.run` for that product request |
+| Whether to start this run's pre-qualification | the home's dialog, before the case starts (`PLAN.md` D24); in the thread, when a turn switches the case to the other product (`prequalify_card` or `prequalify_loan`). Consent before any `policy.run` for that product request |
 | Monthly income | `income_local` is null after a consented `policy.run` returned `NEEDS_INFO` |
 
 The income amount is read in the country's currency. The gold row is not filled in. An amount whose `declared_income_currency` names another country's currency (COP for a customer in Mexico) is not an income for the run: `policy.run` passes none, R06 returns `NEEDS_INFO`, and the customer is asked again (`api/domain/policy/declared_income.py`, decided Oct 5). No amount is converted between currencies.
 
 The customer is not asked for `credit_score`, `days_past_due`, `customer_status`, or whether they already hold the product. Those stay on the file. A null score is `REFER` with no question.
 
-Consent is once per product request on the process. A `confirm_prequalify` is what first enqueues `policy.run`. A later `provide_income` on the same process does not ask again. `decline_prequalify` leaves the process `ai_active`; a later `prequalify_card` or `prequalify_loan` asks for consent again.
+Consent is once per product request on the process. "Empezar" in the home's dialog, or a `confirm_prequalify` after a switch, is what first enqueues `policy.run`. A later `provide_income` on the same process does not ask again. `decline_prequalify` leaves the process `ai_active`; a later `prequalify_card` or `prequalify_loan` asks for consent again.
 
 An income stated instead of answering the consent question does not start the policy (`PLAN.md` D14). The turn has `income_requested` false, so `ask_consent_for_income` asks the consent question again, and that amount is not used. A yes that also states an amount ("sí, gano 45,000 pesos al mes") is `confirm_prequalify`, and `run_policy` passes the amount.
 
@@ -489,7 +506,7 @@ Outcome phrases the template may emit, and the model is forbidden to emit on its
 
 The model is GPT-6 Luna on the OpenAI API, model id `gpt-6-luna`. It only classifies the sentence and drafts the clarification. Juan pre-qualifies the same with this model or with the test JSON, because `api/domain/policy/engine.py` decides that.
 
-`OPENAI_API_KEY` lives in `.env`. It never enters git, the image, a log, or a prompt. `LLM_MODEL` defaults to `gpt-6-luna`. Only `api/infrastructure/llm/conversation.py` imports the OpenAI SDK. Whether it calls Chat Completions or Responses is an adapter detail: both support Structured Outputs for this model.
+`OPENAI_API_KEY` lives in `.env`. It never enters git, the image, a log, or a prompt. `LLM_MODEL` names the classifier and defaults to `gpt-6-luna`. `b0-keywords` is B0, the keyword baseline, as a named classifier (`PLAN.md` D23): it needs no key, writes a fixed `reply_text` per intent in the message's `locale`, and is parsed by the same `parse_conversation_turn`. The compose stack sets `b0-keywords` until a key exists. The worker is given the reader `LLM_MODEL` names (`read_turn_for`); a B0 turn writes no `llm_turns` row, which M3's adapter writes. `gpt-6-luna` fails `conversation.generate` until its adapter (M3) is built; B0 is never used in its place. Any other value stops the API at startup. Only `api/infrastructure/llm/conversation.py` imports the OpenAI SDK. Whether it calls Chat Completions or Responses is an adapter detail: both support Structured Outputs for this model.
 
 If the key is missing, Postgres, login, and the policy still start. `conversation.generate` fails with an error that says the key is missing. A failed API call (timeout, rate limit, server error) is a failed attempt of the command, under the worker's limit of 3 attempts; after the third, `human_active` with `reason_code = tool_failed`. The model is not silently replaced with another one.
 
@@ -562,7 +579,7 @@ The email is written in `api/infrastructure/mail/smtp.py` in the request's `loca
 
 Email is the channel, not the identifier. 24,203 addresses are shared by 2 to 31 customers, 79,930 rows in all, Juliana's and Mariana's among them (`PLAN.md` §4.3). `document_number` is unique. The 2,984 customers with no email (2.0%) cannot log in: their request gets the same answer and no code. That one answer tells anyone who gets no code to register an email at a branch (`DESIGN.md`, "Login"); it does not single them out. That is a stated limitation.
 
-Demo helpers. With `DEMO_LOGIN=1`, `GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20, ordered by `last_name`, `first_name`, `customer_id`, and `GET /customers/search?random=true` returns one customer with an email on file, at random. The login screen uses them only to fill the document field; the code still goes by mail. `GET /consultants/search?q=` and `GET /consultants/search?random=true` do the same over `Active` consultants only, by name, employee code, or `consultant_id`, ordered by `last_name`, `first_name`, `consultant_id`. They also return the email, so a pick fills both fields of the consultant login; the code still goes by mail. With `DEMO_LOGIN` off those routes are 404. `GET /config` tells the web app whether the helpers are on. The local compose stack sets `DEMO_LOGIN=1`.
+Demo helpers. With `DEMO_LOGIN=1`, `GET /customers/search?q=` searches by name, document, or `customer_id`, limit 20, ordered by `last_name`, `first_name`, `customer_id`, and `GET /customers/search?random=true` returns one customer with an email on file, at random. The login screen uses them only to fill the document field; the code still goes by mail. `GET /consultants/search?q=` and `GET /consultants/search?random=true` do the same over `Active` consultants only, by name, employee code, or `consultant_id`, ordered by `last_name`, `first_name`, `consultant_id`. They also return the email, so a pick fills both fields of the consultant login; the code still goes by mail. With `DEMO_LOGIN` off those routes are 404. `GET /config` tells the web app whether the helpers are on. The local compose stack sets `DEMO_LOGIN=1`. With `DEMO_LOGIN=1`, and only then, the web server proxies `/mailpit` to the local Mailpit (compose sets `DEMO_LOGIN` on the web service too), and the code step fills the code field (`PLAN.md` D25): on the consultant login, the newest code sent to the email typed; on the customer login, which knows no address, the newest code sent after the request, which holds on a local stack with one tester. The tester still opens the session. The API never returns a code, and the code still travels by email.
 
 Consultants log in on their own page, `/consultant/login` (`PLAN.md` D18, decided and built Sep 30), and land on `/consultant`. The consultant types their email and employee code. Neither is unique alone (13 employee codes and 12 emails are each shared by two consultants), but the pair is unique for all 1,200, also with case ignored. The API trims both fields and compares the email in lower case and the employee code in upper case. A unique index on that pair keeps it unique.
 
@@ -580,7 +597,7 @@ Expired JWT: 401. The customer sees that the session ended. It is not silently r
 |---|---|---|
 | `/login` | customer | document number, then the code from the email. The demo helpers when `DEMO_LOGIN=1` |
 | `/consultant/login` | consultant | email and employee code, then the code from the email. The demo helpers when `DEMO_LOGIN=1` |
-| `/` | customer | their products, in the row's currency |
+| `/` | customer | their products, in the row's currency, and one row per product: start (the consent dialog), continue the open case, or see the ended case's result |
 | `/case/:id` | customer | thread, plus the certificate if `prequalification.decided` exists |
 | `/consultant` | consultant | processes in `human_active` |
 | `/consultant/case/:id` | consultant | the handoff packet read from `analysis.completed`, and two actions: prequalify or do not. No reply box |
@@ -610,8 +627,10 @@ Regenerate after every edit to `openapi.yaml`. `api/tests/test_contract.py` fail
 | `GET /me` | customer | | `{customer_id, first_name, last_name}` of the token's customer. The login responses never carry a name |
 | `GET /consultant/me` | consultant | | `{consultant_id, employee_code, first_name, last_name, specialty}` of the token's consultant. `specialty` may be null |
 | `GET /products` | customer | optional `customer_id` query | that customer's products, or `[]` if the query id is not the token `sub` |
-| `POST /messages` | customer | `{text, client_message_id, locale}` | the `Case` after the worker finishes that cycle's commands. 409 if the id was sent with another text, another `locale`, or by another customer |
+| `POST /messages` | customer | `{text, client_message_id, locale}` and exactly one of `product` (a start) and `process_id` | the `Case` after the worker finishes that cycle's commands, or 503 `cycle_pending` if it has not after 30 seconds. 409 if the id was sent with another text, another `locale`, or by another customer. 409 `case_already_open` for a start whose product has an open case, or whose case another start opened first, 409 `case_ended` for a message to an ended case, 404 for another customer's case, 422 for neither or both |
+| `GET /cases` | customer | | the token's customer's cases, newest first: `{process_id, product, state, end_reason, locale}` (`PLAN.md` D17, D24) |
 | `GET /case/{process_id}` | customer | | `Case` for the token's customer. Another customer's id is 404 |
+| `POST /case/{process_id}/appeal` | customer | `{locale}` | the `Case` after that cycle, back with a person. 409 `case_not_appealable` unless the case ended as `not_prequalified` by the policy, and 409 `case_already_open` while another case of its product is open; sent again, the same case with nothing appended; 503 `cycle_pending` as for `POST /messages` (`PLAN.md` D25) |
 | `GET /consultant/queue` | consultant | | processes in `human_active` |
 | `GET /consultant/case/{process_id}` | consultant | | handoff packet. 404 unless the process is `human_active` |
 | `GET /consultant/case/{process_id}/trace` | consultant | | events, discriminated on `event_name` |
@@ -621,11 +640,11 @@ A customer token on a consultant route is 403. A consultant token on a customer 
 
 `GET /products` returns `product_id`, `product_type` (the dataset literal), `product_number`, `currency`, `current_balance`, `product_status`, ordered by `product_id`. It does not return `days_past_due`, `credit_limit`, or `interest_rate`. It leaves out products whose `product_status` is `Closed`, and loans (`Préstamo Personal`, `Préstamo Hipotecario`) whose balance is 0: a loan at 0 is paid. The status in `products` is not changed, so a paid loan still marked `Active` counts as held for R09.
 
-`POST /messages` appends `conversation.message_received` and does not choose an outcome. The response waits until the worker has finished the commands enqueued from that event. The same `client_message_id` with the same text from the same customer returns the case again and appends nothing. With another text or from another customer it is 409 `message_id_reused` and appends nothing.
+`POST /messages` appends `conversation.message_received` and does not choose an outcome. The response waits until the worker has finished the commands enqueued from that event. Those are the commands enqueued from the message and from every event a command of that cycle wrote. A cycle still running after 30 seconds answers 503 `cycle_pending`. Nothing is undone: the page sends the same `client_message_id` again, which waits for the same cycle. With no worker running (`RUN_WORKER` off), it answers 503 at once. The request holds no pooled connection while it waits: the write and the read each take one. A settled start that opened no case lost to another start for its product and is 409 `case_already_open`; one whose `process.start` failed for good has no case, and the request fails loud. The same `client_message_id` with the same text from the same customer returns the case again and appends nothing. With another text or from another customer it is 409 `message_id_reused` and appends nothing.
 
 `Case.messages` is one list. Customer lines are the `conversation.message_received` events for that process, plus each such event with a null `process_id` that an event of the process names in `caused_by_event_id`: the opening message through `process.started`, and a message sent before the case existed that joined it. Assistant and template lines are `messages` rows. A row with a null `event_id` is omitted and logged, not attached by time. Order is the linked event's `seq`.
 
-`Case.certificate` is null until `prequalification.decided` exists. It carries `locale`, `outcome`, `body`, `product`, and the income fields copied from `analysis.completed` facts named `income_local`, `income_currency`, and `income_usd`. `as_of` is the `as_of` of the `income_local` fact. A missing fact is null. The certificate has no credit limit and no rate. It does not include the score or the deciding rule.
+`Case.certificate` is the case's latest `prequalification.decided` (by `seq`), null until one exists. It carries `locale`, `outcome`, and `body`. A policy certificate reads its `product` and income fields from the `analysis.completed` its decision names in `caused_by_event_id`: the facts `income_local`, `income_currency`, and `income_usd` every decision cites, with `as_of` from the `income_local` fact. A decision that names no analysis fails loud. A consultant certificate is the person's decision: its income fields and `as_of` are null and its `product` is the case's (`PLAN.md` D25). `api/domain/process/case.py` builds both. `Case.appealable` is true only when the certificate is a no the policy decided, the case has ended, and no other case of its product is open; the screen offers the review only then (`PLAN.md` D25). The certificate has no credit limit and no rate. It does not include the score or the deciding rule. It also carries `event_id` (that event) and `decided_by`: `decision.render` writes the certificate's `messages` row with `author = template`, so the screen shows the certificate in its place in the thread (`PLAN.md` D25).
 
 The consultant queue is ordered by `processes.created_at`, then process id. Each item carries the customer name, `product`, `reason_code` from `conversation.thread_taken`, and the case's `locale`.
 
@@ -639,7 +658,7 @@ The trace includes events with this `process_id`, plus each message with a null 
 
 PostgreSQL 16. `load` is the only process that reads S3. The API and `policy.run` read Postgres.
 
-`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. `004_event_sequence.sql` adds `events.seq`. `005_products_balance_required.sql` sets an empty `products.current_balance` to 0 and makes the column `NOT NULL`. `006_process_locale.sql` renames `processes.language` to `locale`, makes it `NOT NULL`, and limits it to `es`, `en`, and `pt`. `007_process_locale_es_pt.sql` narrows that to `es` and `pt` (`PLAN.md` D22) and moves any local `en` case to `es`. `008_events_locale_check.sql` holds every event's `payload.locale` to `es` or `pt` (or none). `009_command_queue.sql` adds `commands.seq`, the indexes the queue and the cycle wait read, and a unique `messages.event_id`. A database that still has an `en` event from before D22 fails that migration, and `load` stops: reset its volume. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
+`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. `004_event_sequence.sql` adds `events.seq`. `005_products_balance_required.sql` sets an empty `products.current_balance` to 0 and makes the column `NOT NULL`. `006_process_locale.sql` renames `processes.language` to `locale`, makes it `NOT NULL`, and limits it to `es`, `en`, and `pt`. `007_process_locale_es_pt.sql` narrows that to `es` and `pt` (`PLAN.md` D22) and moves any local `en` case to `es`. `008_events_locale_check.sql` holds every event's `payload.locale` to `es` or `pt` (or none). `009_command_queue.sql` adds `commands.seq`, the indexes the queue and the cycle wait read, and a unique `messages.event_id`. `010_one_open_case_per_product.sql` replaces the one-open-case index with one per customer and product (D24). `011_case_read_indexes.sql` indexes `events.caused_by_event_id` and `messages.process_id`. A database that still has an `en` event from before D22 fails that migration, and `load` stops: reset its volume. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
 
 ### Read tables
 
@@ -679,7 +698,8 @@ The customer API does not list this table. `policy.run` reads one row, the one f
 - `events (caused_by_command_id)`
 - a unique index on `messages (event_id)`
 - `events (process_id, created_at)`, `events (process_id, seq)`, and a unique index on `events (seq)`
-- a partial unique index on `processes (customer_id, process_key) where state <> 'ended'`
+- a partial unique index on `processes (customer_id, process_key, product) where state <> 'ended'` (`010_one_open_case_per_product.sql`)
+- `events (caused_by_event_id)` and `messages (process_id)`, which the thread and the cycle wait read (`011_case_read_indexes.sql`)
 
 The filter `customer_id = jwt.sub` is in every API query. A test calls `products` with Juan's JWT and asks for Alicia's id: the response carries no rows of Alicia's.
 
@@ -782,26 +802,26 @@ No model is trained on the transcripts. They are templates. They do not feed the
 
 1. Login with his document number and the code emailed to him. JWT `sub = CLI-9EDEKZ8OUNUR`.
 2. Home. Savings `1,559.57 USD`, mortgage `109,159.57 USD`, 0 days past due. No credit card.
-3. He writes "quiero una tarjeta de crédito". Event `conversation.message_received`. Columns: `customer_id` from the JWT, `process_id` null, `process_state` `ai_active`. Payload: the text, the `client_message_id`, and `locale = es` from the switch.
-4. `open_process` inserts the process in `ai_active` with `locale = es`.
-5. `generate_while_ai` calls the model. It writes `conversation.turn_classified` with `prequalify_card` and the `process_id` from step 4. The message row stays `process_id` null. The process stores `product = credit_card`. `reply_text` does not say he pre-qualifies.
-6. `ask_confirm_prequalify` sends `confirm_prequalify` (template). The policy is not called. The process stays `ai_active`.
-7. He writes "sí". The turn is `confirm_prequalify` with `product = credit_card`. `run_policy` enqueues `policy.run`. It reads the profile: score 812, income 306,753.45 MXN (17,988 USD), 0 days past due, no active card. R05 wins. Event `analysis.completed`, with `locale` copied from the turn.
-8. `render_decision` writes the certificate in Spanish, the case's `locale`. Event `prequalification.decided`.
-9. `end_after_decision` leaves the process `ended` / `prequalified`.
-10. The customer screen shows the certificate. César does not see it.
+3. He chooses "Tarjeta de crédito" under "Preguntar por". The dialog names the product and the policy; he presses "Empezar". Event `conversation.message_received`. Columns: `customer_id` from the JWT, `process_id` null, `process_state` `ai_active`. Payload: the text "Quiero una tarjeta de crédito", the `client_message_id`, `locale = es` from the switch, and `product = credit_card`.
+4. `open_process` inserts the process in `ai_active` with `locale = es` and `product = credit_card`.
+5. `process.start` writes `process.started`, and `run_requested_policy` on it enqueues `policy.run`. The model is not called.
+6. `policy.run` reads the profile: score 812, income 306,753.45 MXN (17,988 USD), 0 days past due, no active card. R05 wins. Event `analysis.completed`, with `locale` copied from the start and the facts every decision cites.
+7. `render_decision` writes the certificate in Spanish, the case's `locale`. Event `prequalification.decided`.
+8. `end_after_decision` leaves the process `ended` / `prequalified`.
+9. The customer screen shows the certificate with his income, 306,753.45 MXN (17,988 USD at the June 17 rate). César does not see it.
+10. Back on the home, the card row reads "Ver resultado".
 
-If the text had been "quiero un crédito", step 5 returns `clarify` and `product` null. There is no consent ask and no policy. The process stays `ai_active`. The question is which of the two products: credit card or personal loan. When he later names a product (`prequalify_card` or `prequalify_loan`), step 6 asks for consent. If he writes "el crédito" again, he is asked a second time. A third turn that names no product moves the case to `human_active` with `out_of_scope`.
+Inside a case, if he wrote "quiero un crédito", the turn is `clarify` with no product. There is no consent ask and no policy. The process stays `ai_active`. The question is which of the two products: credit card or personal loan. When he later names a product (`prequalify_card` or `prequalify_loan`), step 6 asks for consent. If he writes "el crédito" again, he is asked a second time. A third turn that names no product moves the case to `human_active` with `out_of_scope`.
 
-If at step 7 he writes "no", the intent is `decline_prequalify`. The policy is not called. The process stays `ai_active`.
+If he wrote "quiero un préstamo personal" inside the card case, the case switches to the loan and asks for consent in the thread, unless the loan already has its own open case: then Alba points to it with `product_case_open`. A "no" to a consent question is `decline_prequalify`; the policy is not called and the process stays `ai_active`.
 
 ## The other three flows
 
-Juliana, `CLI-MD60UR8PNJDI`, score 714, income null, account `2,528.58 USD`. She asks for a card. After she confirms pre-qualification, R06 returns `NEEDS_INFO`. `template.send` writes `conversation.template_sent` (`needs_income`). She stays `ai_active`. The message asks for her monthly income in pesos. If she answers with an amount, that amount is this run's income, marked `self_declared`, and the gold row stays null. The process already holds `credit_card`, and the turn carries `income_requested` because the latest analysis for that product was `NEEDS_INFO`, so `run_policy_income` runs the policy with that product (no second consent). Its key carries her income turn, not her "sí", so it is a new run. Score 714 continues to R05 and the result is `PREQUALIFIED`. She does not go to César.
+Juliana, `CLI-MD60UR8PNJDI`, score 714, income null, account `2,528.58 USD`. She starts a card request from the home (D24). R06 returns `NEEDS_INFO`. `template.send` writes `conversation.template_sent` (`needs_income`). She stays `ai_active`. The message asks for her monthly income in pesos. If she answers with an amount, that amount is this run's income, marked `self_declared`, and the gold row stays null. The process already holds `credit_card`, and the turn carries `income_requested` because the latest analysis for that product was `NEEDS_INFO`, so `run_policy_income` runs the policy with that product (no second consent). Its key carries her income turn, not her "sí", so it is a new run. Score 714 continues to R05 and the result is `PREQUALIFIED`. She does not go to César.
 
-Alicia, `CLI-440CO5FZIY6A`, score 615, income 4,707,334.28 COP (1,167 USD), no card. After she confirms, R05 `REFER`. `template.send` writes `conversation.template_sent` (`refer_notice`): a person will review. The notice does not include the score and does not say whether she pre-qualifies. Then `conversation.thread_taken` with `reason_code = policy_refer`. César sees the packet: request, score, income, rule R05, policy `alba-credit-v1`. He does not answer in the thread. His only action is to close with `PREQUALIFIED` or `NOT_PREQUALIFIED`. That writes `conversation.consultant_closed`, then the automatic message and `process.end`. Which of the two he picks for Alicia is not fixed here. A message from Alicia while the case is still `human_active` is stored and does not call the model.
+Alicia, `CLI-440CO5FZIY6A`, score 615, income 4,707,334.28 COP (1,167 USD), no card. She starts a card request; R05 `REFER`. `template.send` writes `conversation.template_sent` (`refer_notice`): a person will review. The notice does not include the score and does not say whether she pre-qualifies. Then `conversation.thread_taken` with `reason_code = policy_refer`. César sees the packet: request, score, income, rule R05, policy `alba-credit-v1`. He does not answer in the thread. His only action is to close with `PREQUALIFIED` or `NOT_PREQUALIFIED`. That writes `conversation.consultant_closed`, then the automatic message and `process.end`. Which of the two he picks for Alicia is not fixed here. A message from Alicia while the case is still `human_active` is stored and does not call the model.
 
-Mariana, `CLI-ZGOY1V6ZC46J`, active card ending in 5476, `days_past_due` 180, balance 111,079.25 ARS, score 515. After she confirms, R02 wins before R05. Certificate: does not pre-qualify. Process `ended`. She does not enter the queue.
+Mariana, `CLI-ZGOY1V6ZC46J`, active card ending in 5476, `days_past_due` 180, balance 111,079.25 ARS, score 515. She starts a card request; R02 wins before R05. Certificate: does not pre-qualify. Process `ended`. She does not enter the queue.
 
 ## Not decided
 
@@ -822,7 +842,7 @@ These points are left open on purpose. Implementing them on your own breaks the 
 - A separate intent router beside `ConversationTurn`.
 - Full pandera/Great Expectations suites or a policy freshness rule (R10).
 
-Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D15 (handoffs that are not a policy `REFER`), and D17 (no route lists a customer's cases). D12, D13, D14, and D16 (1) are closed (Oct 2): the run-policy key carries the triggering turn, the third turn with no product goes to a person, an income before consent asks for consent again, and `ask_which_product` checks `language` like the other turn rules. D16 (2) is closed: `decide` takes `declared_income`. D16 (3) is closed (Oct 5): `process.transition` and `process.end` change `processes.state`. D21 is closed: the switch picks the `locale` Alba writes in, and the model's `language` only gates an unreadable message. D19 is closed: the keys of two-event actions, the actor of each event, and where event names live. D20 is closed: `process_state` on every event, the write order, a second start, and a reused message id. Each one that gets decided is written into this file.
+Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D15 (handoffs that are not a policy `REFER`). D17 is closed by D24: `GET /cases` lists the customer's cases. D12, D13, D14, and D16 (1) are closed (Oct 2): the run-policy key carries the triggering turn, the third turn with no product goes to a person, an income before consent asks for consent again, and `ask_which_product` checks `language` like the other turn rules. D16 (2) is closed: `decide` takes `declared_income`. D16 (3) is closed (Oct 5): `process.transition` and `process.end` change `processes.state`. D21 is closed: the switch picks the `locale` Alba writes in, and the model's `language` only gates an unreadable message. D19 is closed: the keys of two-event actions, the actor of each event, and where event names live. D20 is closed: `process_state` on every event, the write order, a second start, and a reused message id. Each one that gets decided is written into this file.
 
 ## Known gaps
 
@@ -843,7 +863,7 @@ The open-process key includes the triggering event id, so a later message after 
 7. **`locale` travels on the event.** The message carries the switch's choice. `process.start` and each turn store it on the process. The turn copies it, `policy.run` copies it onto `analysis.completed`, and `decision.render` and `template.send` read it from the triggering event. The consultant close copies it from the process onto `conversation.consultant_closed`. Nothing reads `llm_turns` for the locale, and the model's `language` never picks it.
 8. **`provide_income` carries the product on the turn.** A turn that names a product stores it on the process. A later `provide_income` copies that stored product onto the turn when the model sends none. If it is still null, `ask_which_product` sends `which_product` and the policy waits, at most twice.
 10. **`reason_code` is a closed list.** `customer_requested_human`, `out_of_scope`, `language_unsupported`, `model_output_invalid`, `tool_failed`, `policy_refer`, `reply_forbidden`. The policy rule stays on `deciding_rule`. See the list under **Process**.
-4. **The first turn takes the process this cycle just opened.** The first message is always the customer's, and its `process_id` column stays null. `process.start` runs first. `conversation.generate` then writes `conversation.turn_classified` with that process id. There is one open process per customer. The message row is not updated, and the message is not copied. See **Events**, the `conversation.generate` command, and Juan's flow step 5.
+4. **A start opens its case; every later message names it.** The first message of a case is a start with a null `process_id` (`PLAN.md` D24). `process.start` opens the case, and `run_requested_policy` on `process.started` runs the policy; a start never reaches `conversation.generate`. Every later message carries its case's `process_id`. There is one open process per customer and product. The message row is not updated, and the message is not copied. See **Events**, the `conversation.generate` command, and Juan's flow step 5.
 
 ## What we take from Sxxxxx, and what we don't
 

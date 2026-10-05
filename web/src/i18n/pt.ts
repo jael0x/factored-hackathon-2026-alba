@@ -44,6 +44,7 @@ export const pt: Messages = {
     rejected: "O código não é válido ou expirou.",
     unreachable: "Não conseguimos abrir a sessão. Tente novamente.",
     resendFailed: "Não conseguimos pedir outro código. Tente novamente.",
+    demoFilled: "Demonstração: o código foi preenchido pela caixa de teste.",
   },
   demo: {
     close: "Fechar",
@@ -80,11 +81,46 @@ export const pt: Messages = {
     loadFailed: "Não conseguimos carregar seus produtos.",
     empty: "Você ainda não tem produtos conosco.",
     askAbout: "Perguntar sobre",
+    continueCase: "Continuar a conversa",
+    seeResult: "Ver resultado",
+  },
+  start: {
+    title: "Conversar com a Alba sobre",
+    lead: "A Alba vai verificar se você pré-qualifica para",
+    rest:
+      "com a política do banco e os dados que ele já tem sobre você. É uma simulação: não abre nenhum produto nem " +
+      "muda sua conta. Se faltar sua renda mensal, ela vai perguntar.",
+    begin: "Começar",
+    cancel: "Cancelar",
+  },
+  certificate: {
+    tag: { PREQUALIFIED: "Pré-qualifica · simulado", NOT_PREQUALIFIED: "Não pré-qualifica · simulado" },
+    facts: "Dados usados",
+    income: "Renda mensal",
+    incomeUsd: "Equivale a",
+    rateOn: (date: string) => `pelo câmbio de ${date}`,
+    appeal: "Pedir que uma pessoa revise",
+    appealFailed: "Não conseguimos pedir a revisão. Tente novamente.",
   },
   consultantHome: {
     loadFailed: "Não conseguimos carregar seus dados.",
     lede: "Os casos em análise aparecerão aqui.",
     employee: "funcionário",
+  },
+  chat: {
+    opening: { credit_card: "Quero um cartão de crédito", personal_loan: "Quero um empréstimo pessoal" },
+    back: "Início",
+    thread: "Conversa",
+    assistant: "Alba",
+    you: "Você",
+    typing: "digitando…",
+    composer: "Escreva sua mensagem",
+    send: "Enviar",
+    sendFailed: "Não conseguimos enviar sua mensagem. Tente novamente.",
+    loadFailed: "Não conseguimos carregar a conversa.",
+    withPerson: "Uma pessoa está vendo este caso.",
+    backHome: "Voltar ao início",
+    product: { credit_card: "um cartão de crédito", personal_loan: "um empréstimo pessoal" },
   },
   products: {
     types: {

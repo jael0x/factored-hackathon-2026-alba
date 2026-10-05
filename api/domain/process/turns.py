@@ -45,14 +45,25 @@ class TurnStamp:
     product: ProductKey | None
     product_asked_count: int
     income_requested: bool
+    open_case_product: ProductKey | None = None
 
 
-def stamp_turn(earlier: Sequence[StoredEvent], read_product: ProductKey | None, stored: ProductKey | None) -> TurnStamp:
-    product = stored if read_product is None else read_product
+# A turn that names the case's other product switches the case to it, unless that product has its own open case
+# (D24): then the case keeps its product and the turn names the open one.
+def stamp_turn(
+    earlier: Sequence[StoredEvent],
+    read_product: ProductKey | None,
+    stored: ProductKey | None,
+    open_products: frozenset[ProductKey] = frozenset(),
+) -> TurnStamp:
+    clash = read_product is not None and read_product != stored and read_product in open_products
+    open_case_product = read_product if clash else None
+    product = stored if clash or read_product is None else read_product
     return TurnStamp(
         product=product,
         product_asked_count=count_product_asks(earlier),
         income_requested=income_was_requested(earlier, product),
+        open_case_product=open_case_product,
     )
 
 

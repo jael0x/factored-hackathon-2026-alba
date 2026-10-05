@@ -95,3 +95,10 @@ Feature: Session login
     Given the demo login is off
     When a visitor searches customers for "Juliana Castro"
     Then the search is not available
+
+  Scenario: With the demo login on, the code step fills the code from the test mailbox
+    Given the demo login is on
+    And a visitor asked for a code with Juan's document number
+    When the code step opens
+    Then the code field holds the code emailed to Juan in the test mailbox
+    And no session opens until the visitor presses "Abrir sesión"

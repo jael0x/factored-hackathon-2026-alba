@@ -9,6 +9,15 @@ export function amountParts(value: number): { whole: string; cents: string } {
   return { whole, cents };
 }
 
+export function formatAmount(value: number): string {
+  return AMOUNT.format(value);
+}
+
+// A date-only value is read and written in UTC, so the day does not move with the browser's time zone.
+export function formatDate(isoDate: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${isoDate}T00:00:00Z`));
+}
+
 export function fullName(person: { first_name: string; last_name: string }): string {
   return `${person.first_name} ${person.last_name}`;
 }

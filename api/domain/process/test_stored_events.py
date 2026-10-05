@@ -11,6 +11,7 @@ from api.domain.process.stored_events import (
     NoRuleEvent,
     Payload,
     PrequalificationDecided,
+    ProcessStarted,
     ShownTurn,
     TemplateSent,
     WithheldTurn,
@@ -34,6 +35,7 @@ def turn_payload(**overrides: object) -> dict[str, object]:
         "reason_code": None,
         "product_asked_count": 0,
         "income_requested": False,
+        "open_case_product": None,
         **overrides,
     }
 
@@ -43,24 +45,29 @@ def parse_turn(payload: Payload) -> object:
 
 
 def parse_message(process_id: UUID | None, state: str, payload: Payload | None = None) -> object:
-    message_payload = {"text": "hola", "locale": "es"} if payload is None else payload
+    message_payload = {"text": "hola", "locale": "es", "product": None} if payload is None else payload
     return parse_stored_event(EVENT_ID, "conversation.message_received", process_id, state, message_payload)
 
 
 def test_a_first_message_has_no_process_and_the_birth_state() -> None:
-    assert parse_message(None, "ai_active") == MessageReceived(EVENT_ID, None, "ai_active", "es", "hola")
+    assert parse_message(None, "ai_active") == MessageReceived(EVENT_ID, None, "ai_active", "es", "hola", None)
 
 
 def test_a_message_carries_the_locale_the_customer_chose() -> None:
-    payload = {"text": "olá", "locale": "pt"}
-    assert parse_message(None, "ai_active", payload) == MessageReceived(EVENT_ID, None, "ai_active", "pt", "olá")
+    payload = {"text": "olá", "locale": "pt", "product": None}
+    assert parse_message(None, "ai_active", payload) == MessageReceived(EVENT_ID, None, "ai_active", "pt", "olá", None)
+
+
+def test_a_start_carries_the_product_confirmed_on_the_home() -> None:
+    message = parse_message(None, "ai_active", {"text": "hola", "locale": "es", "product": "personal_loan"})
+    assert message == MessageReceived(EVENT_ID, None, "ai_active", "es", "hola", "personal_loan")
 
 
 @pytest.mark.parametrize(
     ("payload", "error", "kind"),
     [
-        ({"locale": "es"}, "payload has no text", ValueError),
-        ({"locale": "es", "text": 5}, "text must be text", TypeError),
+        ({"locale": "es", "product": None}, "payload has no text", ValueError),
+        ({"locale": "es", "text": 5, "product": None}, "text must be text", TypeError),
     ],
     ids=["missing", "number"],
 )
@@ -81,7 +88,7 @@ def test_a_message_without_a_supported_locale_is_refused(payload: Payload, error
 
 @pytest.mark.parametrize("state", ["ai_active", "human_active"])
 def test_a_message_in_an_open_case_carries_its_state(state: ProcessState) -> None:
-    assert parse_message(PROCESS_ID, state) == MessageReceived(EVENT_ID, PROCESS_ID, state, "es", "hola")
+    assert parse_message(PROCESS_ID, state) == MessageReceived(EVENT_ID, PROCESS_ID, state, "es", "hola", None)
 
 
 @pytest.mark.parametrize(
@@ -117,6 +124,7 @@ def test_a_shown_turn_reads_every_field_the_rules_match_on() -> None:
         product_asked_count=1,
         income_requested=True,
         reply_text="¿Tarjeta o préstamo?",
+        open_case_product=None,
     )
 
 
@@ -246,7 +254,6 @@ def test_a_close_carries_its_outcome() -> None:
     "event_name",
     [
         "conversation.thread_taken",
-        "process.started",
         "process.state_changed",
         "process.ended",
     ],
@@ -254,6 +261,17 @@ def test_a_close_carries_its_outcome() -> None:
 def test_an_event_no_rule_reads_keeps_only_its_name(event_name: EventName) -> None:
     event = parse_stored_event(EVENT_ID, event_name, PROCESS_ID, "ai_active", {})
     assert event == NoRuleEvent(EVENT_ID, event_name)
+
+
+def test_a_started_case_carries_its_locale_and_product() -> None:
+    payload = {
+        "process_key": "credit_prequalification",
+        "customer_id": "CLI-9",
+        "locale": "pt",
+        "product": "credit_card",
+    }
+    event = parse_stored_event(EVENT_ID, "process.started", PROCESS_ID, "ai_active", payload)
+    assert event == ProcessStarted(EVENT_ID, "pt", "credit_card")
 
 
 @pytest.mark.parametrize("template_id", ["confirm_prequalify", "which_product", "needs_income", "refer_notice"])

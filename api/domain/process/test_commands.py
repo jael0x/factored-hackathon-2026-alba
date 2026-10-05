@@ -17,7 +17,7 @@ from api.domain.process.commands import (
 )
 
 EVERY_COMMAND: list[tuple[Command, dict[str, object]]] = [
-    (start_process("pt"), {"locale": "pt"}),
+    (start_process("pt", "personal_loan"), {"locale": "pt", "product": "personal_loan"}),
     (GENERATE_COMMAND, {}),
     (SHOW_REPLY_COMMAND, {}),
     (send_template("which_product"), {"template_id": "which_product"}),

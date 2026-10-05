@@ -4,7 +4,7 @@ Alba is a customer-service demo for the synthetic LATAM bank of the Factored AI 
 
 It is not a production bank and it moves no money. "Alba" is the name of this interface. Customers, products, scores, incomes, and consultants come from the organizer dataset, snapshot of June 17, 2026.
 
-**Status (Oct 5, 2026): customer and consultant logins, the customer home, the language switch, and the engine built.** `docker compose up` brings up Postgres, the one-shot `load` container (bronze, silver, gold), the API with both logins and the customer's products, Mailpit for the login codes, the two login pages, and the home with the customer's products. Every screen reads in Spanish or Portuguese, chosen in the app bar; a message in any other language goes to a person. The policy engine, the templates, the event store, and the process rules are in `api/domain/`, and the API runs a command worker over them, all with their tests. No route sends a message to it yet: chat, the model adapter, and the consultant queue and case are not built yet. `mocks/index.html` remains the screen walkthrough. Submission is due Mon Oct 5.
+**Status (Oct 5, 2026): logins, the customer home, the language switch, and the customer's pre-qualification built.** `docker compose up` brings up Postgres, the one-shot `load` container (bronze, silver, gold), the API with both logins, the customer's products and cases, and the worker, Mailpit for the login codes, the two login pages, the home, and the case screen. Every screen reads in Spanish or Portuguese, chosen in the app bar; a message in any other language goes to a person. A "Preguntar por" row on the home opens a consent dialog; "Empezar" runs the policy at once and shows the certificate, asks for the monthly income, or hands the case to a person. Each product has its own case, and its row continues it or shows its result (`PLAN.md` D24). A no from the policy can be sent once to a person for review (D25). Without an `OPENAI_API_KEY` the stack classifies typed messages with B0, the keyword baseline, named by `LLM_MODEL=b0-keywords` (`PLAN.md` D23). The consultant queue and case are not built yet. `mocks/index.html` remains the screen walkthrough. Submission is due Mon Oct 5.
 
 Stack: FastAPI and PostgreSQL 16 in one Docker Compose stack, with GPT-6 Luna (`gpt-6-luna`) on the OpenAI API for the conversation (when wired). Details in `ARCHITECTURE.md`.
 
@@ -18,7 +18,7 @@ docker compose up --build
 
 `.env` needs a `JWT_SECRET` of at least 32 characters (`openssl rand -hex 32`); the API refuses to start without it.
 
-Open http://localhost:5173/ (API health at http://localhost:8000/health). `load` downloads the four CSVs into `data/raw/` if missing, applies migrations, and builds gold. Login codes are emailed to Mailpit, a local mail catcher: read them at http://localhost:8025. Nothing is sent outside your machine. Default compose sets `DEMO_LOGIN=1`, which adds a "Demo" button to the login header; it opens a test-customer search right below it that fills the document field. Consultants log in at http://localhost:5173/consultant/login ("Acceso para asesores" under the customer form) with their email and employee code; there the Demo button searches active consultants and fills both fields. There is no cloud deploy for the submission; optional host steps will live in `docs/ops.md`.
+Open http://localhost:5173/ (API health at http://localhost:8000/health). `load` downloads the four CSVs into `data/raw/` if missing, applies migrations, and builds gold. Login codes are emailed to Mailpit, a local mail catcher: read them at http://localhost:8025. Nothing is sent outside your machine. Default compose sets `DEMO_LOGIN=1`, which adds a "Demo" button to the login header; it opens a test-customer search right below it that fills the document field. With the demo on, the code step also reads the code from Mailpit and fills it, so a tester only presses "Abrir sesión": a consultant's is the code sent to the email typed, a customer's the newest one sent (`PLAN.md` D25, D26). Consultants log in at http://localhost:5173/consultant/login ("Acceso para asesores" under the customer form) with their email and employee code; there the Demo button searches active consultants and fills both fields. There is no cloud deploy for the submission; optional host steps will live in `docs/ops.md`.
 
 If `load` stops on `events_locale_check`, the database holds an English case from before `PLAN.md` D22 (Oct 2 to 3). Reset it with `docker compose down -v`, then `docker compose up` again; the data reloads from `data/raw/`.
 
@@ -131,6 +131,8 @@ S3_BUCKET=
 OPENAI_API_KEY=
 JWT_SECRET=
 ```
+
+With no `OPENAI_API_KEY`, the compose stack classifies messages with the keyword baseline (`LLM_MODEL=b0-keywords`). Once a key exists, set `LLM_MODEL=gpt-6-luna` in `.env` too (the adapter is item M3 in `IMPLEMENTATION.md`).
 
 Layout under `data/` in the bucket:
 

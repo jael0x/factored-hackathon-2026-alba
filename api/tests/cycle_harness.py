@@ -10,7 +10,7 @@ from psycopg_pool import ConnectionPool
 
 from api.application.cycle.plan import PlanningEvents
 from api.application.cycle.ports import TurnRequest
-from api.application.processes import record_customer_message
+from api.application.processes import MessageTarget, record_customer_message
 from api.contract_models import Locale
 from api.domain.process.new_events import Appended, AppendResult, NewEvent
 from api.domain.process.turns import ModelReading, ShownReading
@@ -96,11 +96,16 @@ def planning(conn: psycopg.Connection) -> PlanningEvents:
 
 
 def send(
-    pool: ConnectionPool, customer_id: str, text: str, locale: Locale = "es", message_id: UUID | None = None
+    pool: ConnectionPool,
+    customer_id: str,
+    text: str,
+    target: MessageTarget,
+    locale: Locale = "es",
+    message_id: UUID | None = None,
 ) -> UUID:
     with pool.connection() as conn:
         result = record_customer_message(
-            planning(conn), PostgresProcesses(conn), customer_id, text, message_id or uuid4(), locale
+            planning(conn), PostgresProcesses(conn), customer_id, text, message_id or uuid4(), locale, target
         )
     assert isinstance(result, Appended)
     return result.event_id

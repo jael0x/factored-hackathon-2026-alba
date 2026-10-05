@@ -18,6 +18,7 @@ from api.domain.json_value import Payload
 from api.domain.policy.engine import Decision, PolicyFact, TraceStep
 from api.domain.process.events import (
     ANALYSIS_COMPLETED,
+    APPEAL_REQUESTED,
     CONSULTANT_CLOSED,
     EVENT_ACTOR,
     MESSAGE_RECEIVED,
@@ -29,6 +30,7 @@ from api.domain.process.events import (
     THREAD_TAKEN,
     TURN_CLASSIFIED,
     ActionKey,
+    appeal_key,
     consultant_close_key,
     decision_key,
     event_key,
@@ -91,7 +93,12 @@ class IdempotencyConflict(Exception):
 
 
 def message_received(
-    customer_id: str, text: str, client_message_id: UUID, locale: Locale, stamp: MessageStamp
+    customer_id: str,
+    text: str,
+    client_message_id: UUID,
+    locale: Locale,
+    product: ProductKey | None,
+    stamp: MessageStamp,
 ) -> NewEvent:
     return NewEvent(
         event_name=MESSAGE_RECEIVED,
@@ -101,13 +108,32 @@ def message_received(
         process_state=stamp.process_state,
         caused_by_event_id=None,
         caused_by_command_id=None,
-        payload={"text": text, "client_message_id": str(client_message_id), "locale": locale},
+        payload={"text": text, "client_message_id": str(client_message_id), "locale": locale, "product": product},
     )
 
 
-def process_started(process: ProcessRow, locale: Locale, cause: Cause) -> NewEvent:
+# The customer's request that a person review a no the policy decided (D25). It belongs to the ended case.
+def appeal_requested(process: ProcessRow, locale: Locale, product: ProductKey) -> NewEvent:
+    return NewEvent(
+        event_name=APPEAL_REQUESTED,
+        idempotency_key=appeal_key(process.process_id),
+        customer_id=process.customer_id,
+        process_id=process.process_id,
+        process_state=process.state,
+        caused_by_event_id=None,
+        caused_by_command_id=None,
+        payload={"locale": locale, "product": product},
+    )
+
+
+def process_started(process: ProcessRow, locale: Locale, product: ProductKey, cause: Cause) -> NewEvent:
     key = open_process_key(process.customer_id, CREDIT_PREQUALIFICATION, cause.event_id)
-    payload = {"process_key": CREDIT_PREQUALIFICATION, "customer_id": process.customer_id, "locale": locale}
+    payload = {
+        "process_key": CREDIT_PREQUALIFICATION,
+        "customer_id": process.customer_id,
+        "locale": locale,
+        "product": product,
+    }
     return _process_event(PROCESS_STARTED, key, process, AI_ACTIVE, cause, payload)
 
 
@@ -150,6 +176,7 @@ def turn_classified(
         "reason_code": reason_code,
         "product_asked_count": stamp.product_asked_count,
         "income_requested": stamp.income_requested,
+        "open_case_product": stamp.open_case_product,
     }
     return _process_event(TURN_CLASSIFIED, turn_key(cause.event_id), process, process.state, cause, payload)
 
@@ -180,7 +207,7 @@ def prequalification_decided(
     process: ProcessRow, locale: Locale, outcome: CloseOutcome, body: str, decided_by: DecidedBy, cause: Cause
 ) -> NewEvent:
     payload: Payload = {"locale": locale, "outcome": outcome, "body": body, "decided_by": decided_by}
-    key = decision_key(process.process_id)
+    key = decision_key(process.process_id, decided_by)
     return _process_event(PREQUALIFICATION_DECIDED, key, process, process.state, cause, payload)
 
 

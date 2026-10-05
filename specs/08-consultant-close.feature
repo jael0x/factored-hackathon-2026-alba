@@ -61,3 +61,10 @@ Feature: Consultant close
     When César tries to close Alicia's case as "REFER"
     Then the close is rejected
     And Alicia's case stays in the review queue
+
+  Scenario: The customer's certificate from a consultant shows no income figures
+    Given César closed Alicia's credit card case as pre-qualified
+    When Alicia opens her certificate
+    Then it says a person from the bank reviewed her request and she pre-qualifies for a credit card
+    And it shows no income and no USD equivalent
+    And it offers no option to ask a person to review it
