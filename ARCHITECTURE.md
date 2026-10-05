@@ -147,7 +147,6 @@ api/
       processes.py        # SQL for processes: the open case, the insert, the row lock, the state
       profile.py          # gold by customer_id, for the policy and the model's booleans
       products.py         # SQL for products, filtered on the session customer, ordered by product_id
-      catalog.py
     mail/smtp.py          # sends the login code by SMTP; the only module that opens SMTP
     llm/                  # the only module that imports the OpenAI SDK, when the model is built
       conversation.py     # one call, JSON schema
@@ -519,7 +518,7 @@ What goes into the prompt. This is everything that leaves the service for OpenAI
 - The message text, as the customer typed it. Whether ID-like numbers in it are masked first is open (`PLAN.md` D11).
 - The process state.
 - Booleans: `income_on_file`, `score_on_file`, `has_active_card`, `has_active_personal_loan`. Not the amounts, the score, the days past due, the full name, the document, the email, or the address.
-- The catalog: two products, names in Spanish and Portuguese, no rates.
+- The catalog: two products, names in Spanish and Portuguese, no rates. It is team-written, not a table: the `ProductKey` values with their `PRODUCT_NAMES` from `api/domain/policy/templates.py`, in the fixed order `credit_card`, `personal_loan`. The prompt does not iterate the `PRODUCT_KEYS` set, whose order changes between processes, so the same inputs give the same prompt text.
 - The `locale` to write `reply_text` in, from the message.
 - The instruction not to state eligibility or a limit. If `reply_text` contains those phrases, the turn is written with `reply_ok` false and `reason_code = reply_forbidden`. The text is not shown. `hand_off_reply` escalates.
 

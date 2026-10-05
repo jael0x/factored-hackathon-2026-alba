@@ -524,9 +524,9 @@ node('llm', {
 });
 node('tools', {
   parent: 'api', kind: 'component', name: 'Data tools', tech: 'api/infrastructure/db/',
-  summary: 'Reads the gold profile, the session customer products, and the two-product catalog.',
+  summary: 'Reads the gold profile and the session customer products.',
   desc: ['Thin readers over Postgres, always scoped to one `customer_id`. The model gets none of them as a tool.'],
-  files: ['api/infrastructure/db/profile.py', 'api/infrastructure/db/products.py', 'api/infrastructure/db/catalog.py'],
+  files: ['api/infrastructure/db/profile.py', 'api/infrastructure/db/products.py'],
   src: 'ARCHITECTURE.md, "File tree", "Database"',
 });
 node('config', {
@@ -1083,6 +1083,8 @@ spec('llm', 'l-prompt', {
   summary: 'The message, the state, four booleans, the catalog. Nothing else.',
   fixed: [
     'The message text as typed, the process state, `income_on_file`, `score_on_file`, `has_active_card`, `has_active_personal_loan`, and the two-product catalog without rates.',
+    'The catalog is team-written, not a table: `credit_card` and `personal_loan` in that fixed order, with their `PRODUCT_NAMES` in Spanish and Portuguese from `api/domain/policy/templates.py`. Not built by iterating the `PRODUCT_KEYS` set, whose order changes between processes.',
+    'Out of scope: a new mortgage, investments, a limit increase, a disputed transaction, a third party\'s balance.',
     'The instruction not to state eligibility or a limit.',
     'Not the amounts, score, days past due, full name, document, email, or address.',
   ],
@@ -1104,13 +1106,13 @@ spec('llm', 'l-turns', {
 });
 
 spec('tools', 'to-profile', {
-  name: 'profile.py', tech: 'reads gold', status: 'partial',
-  summary: 'One `customer_credit_profile` row for one `customer_id`.',
+  name: 'profile.py', tech: 'reads gold', status: 'defined',
+  summary: 'One `customer_credit_profile` row for one `customer_id`. Built Oct 5 with E4.',
   fixed: [
     'Reads one row of `customer_credit_profile`, the one for the event or session `customer_id`.',
     'Gold carries `has_active_card` and `has_active_personal_loan`, two of the four prompt booleans.',
+    '`turn_request` in `api/application/cycle/generate.py` builds the four booleans from the profile: `income_on_file` and `score_on_file` are the income and the score not being null.',
   ],
-  open: [['New', 'Which module builds the prompt input (the four booleans) from the profile.']],
   src: 'ARCHITECTURE.md, "File tree", "Gold"',
 });
 spec('tools', 'to-products', {
@@ -1124,16 +1126,6 @@ spec('tools', 'to-products', {
   ],
   tests: ['Juan asking for Alicia\'s id gets an empty list.', 'A loan at 0 is left out; a card at 0 is not.', 'A customer with no products gets an empty list.'],
   src: 'ARCHITECTURE.md, "Auth and screens", "HTTP contract", "Indexes"',
-});
-spec('tools', 'to-catalog', {
-  name: 'catalog.py', tech: 'two products', status: 'partial',
-  summary: 'Credit card and personal loan, names in Spanish and Portuguese, no rates.',
-  fixed: [
-    'Two products, `credit_card` and `personal_loan`, with names in Spanish and Portuguese and no rates.',
-    'Out of scope: a new mortgage, investments, a limit increase, a disputed transaction, a third party\'s balance.',
-  ],
-  open: [['New', 'The catalog text in the three languages.']],
-  src: 'ARCHITECTURE.md, "How the model is called"',
 });
 
 spec('config', 'c-settings', {
