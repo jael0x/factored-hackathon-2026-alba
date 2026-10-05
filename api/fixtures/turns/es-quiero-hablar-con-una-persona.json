@@ -1,0 +1,14 @@
+{
+  "text": "quiero hablar con una persona",
+  "locale": "es",
+  "turn": {
+    "intent": "human_request",
+    "product": null,
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "es",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Te comunico con una persona del equipo."
+  }
+}

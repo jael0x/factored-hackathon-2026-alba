@@ -1,0 +1,14 @@
+{
+  "text": "quiero una hipoteca nueva",
+  "locale": "es",
+  "turn": {
+    "intent": "out_of_scope",
+    "product": null,
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "es",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Una persona del equipo puede ayudarte con eso."
+  }
+}

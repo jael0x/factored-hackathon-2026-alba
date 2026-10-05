@@ -1,0 +1,14 @@
+{
+  "text": "sí, quiero precalificar",
+  "locale": "es",
+  "turn": {
+    "intent": "confirm_prequalify",
+    "product": null,
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "es",
+    "needs_clarification": true,
+    "clarification_question": "¿Te interesa una tarjeta de crédito o un préstamo personal?",
+    "reply_text": "Con gusto. ¿Te interesa una tarjeta de crédito o un préstamo personal?"
+  }
+}

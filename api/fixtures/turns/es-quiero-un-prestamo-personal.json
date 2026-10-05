@@ -1,0 +1,14 @@
+{
+  "text": "quiero un préstamo personal",
+  "locale": "es",
+  "turn": {
+    "intent": "prequalify_loan",
+    "product": "personal_loan",
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "es",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Con gusto te ayudo con el préstamo personal."
+  }
+}

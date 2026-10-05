@@ -1,0 +1,14 @@
+{
+  "text": "sí, gano 10,000 pesos al mes",
+  "locale": "es",
+  "turn": {
+    "intent": "confirm_prequalify",
+    "product": null,
+    "declared_income_amount": 10000,
+    "declared_income_currency": null,
+    "language": "es",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Gracias por confirmar y por el dato de tu ingreso."
+  }
+}

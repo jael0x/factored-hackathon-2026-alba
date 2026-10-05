@@ -1,0 +1,14 @@
+{
+  "text": "cartão de crédito",
+  "locale": "pt",
+  "turn": {
+    "intent": "prequalify_card",
+    "product": "credit_card",
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "pt",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Perfeito, vamos falar do cartão de crédito."
+  }
+}

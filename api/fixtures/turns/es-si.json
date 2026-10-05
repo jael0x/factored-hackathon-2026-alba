@@ -1,0 +1,14 @@
+{
+  "text": "sí",
+  "locale": "es",
+  "turn": {
+    "intent": "confirm_prequalify",
+    "product": null,
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "es",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Gracias por confirmar."
+  }
+}

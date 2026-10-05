@@ -1,0 +1,14 @@
+{
+  "text": "¿qué productos de crédito ofrecen?",
+  "locale": "es",
+  "turn": {
+    "intent": "product_info",
+    "product": null,
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "es",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Ofrecemos dos productos: tarjeta de crédito y préstamo personal. ¿Cuál te interesa?"
+  }
+}

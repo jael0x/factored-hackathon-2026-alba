@@ -1,0 +1,14 @@
+{
+  "text": "sim",
+  "locale": "pt",
+  "turn": {
+    "intent": "confirm_prequalify",
+    "product": null,
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "pt",
+    "needs_clarification": false,
+    "clarification_question": null,
+    "reply_text": "Obrigado por confirmar."
+  }
+}

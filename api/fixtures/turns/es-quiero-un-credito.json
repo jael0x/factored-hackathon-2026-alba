@@ -1,0 +1,14 @@
+{
+  "text": "quiero un crédito",
+  "locale": "es",
+  "turn": {
+    "intent": "clarify",
+    "product": null,
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "es",
+    "needs_clarification": true,
+    "clarification_question": "¿Te interesa una tarjeta de crédito o un préstamo personal?",
+    "reply_text": "¿Te interesa una tarjeta de crédito o un préstamo personal?"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "text": "el crédito",
+  "locale": "es",
+  "turn": {
+    "intent": "clarify",
+    "product": null,
+    "declared_income_amount": null,
+    "declared_income_currency": null,
+    "language": "es",
+    "needs_clarification": true,
+    "clarification_question": "¿Hablas de una tarjeta de crédito o de un préstamo personal?",
+    "reply_text": "¿Hablas de una tarjeta de crédito o de un préstamo personal?"
+  }
+}
