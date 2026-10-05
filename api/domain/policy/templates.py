@@ -10,6 +10,7 @@ from api.domain.process.commands import (
     DECIDED_BY_CONSULTANT,
     DECIDED_BY_POLICY,
     NEEDS_INCOME,
+    PRODUCT_CASE_OPEN,
     REFER_NOTICE,
     WHICH_PRODUCT,
 )
@@ -55,6 +56,13 @@ NOTICES_FOR_A_PRODUCT: Mapping[TemplateId, Texts] = MappingProxyType(
                 "cuando tenga una respuesta.",
                 PORTUGUESE_LOCALE: "Uma pessoa do banco vai analisar sua solicitação de {product}. Avisaremos por aqui "
                 "quando houver uma resposta.",
+            }
+        ),
+        PRODUCT_CASE_OPEN: MappingProxyType(
+            {
+                SPANISH_LOCALE: "Ya tienes una conversación abierta sobre {product}. Ábrela desde el inicio para seguir "
+                "con ella.",
+                PORTUGUESE_LOCALE: "Você já tem uma conversa aberta sobre {product}. Abra-a pelo início para continuar.",
             }
         ),
     }
