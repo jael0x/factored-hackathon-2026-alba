@@ -427,7 +427,8 @@ def test_two_starts_for_one_product_before_the_case_opens_join_one_case(url: str
     run_until_idle(pool, scripted())
     assert cases(url, JUAN) == [("ended", "prequalified", "credit_card", "es")]
     assert names(url, JUAN).count("process.started") == 1
-    assert names(url, JUAN).count("prequalification.decided") == 1
+    assert names(url, JUAN).count("analysis.completed") == 1
+    assert [row[1] for row in queue(url)].count("run_requested_policy") == 1
 
 
 def test_one_customers_commands_wait_for_each_other_while_another_customer_goes_ahead(
