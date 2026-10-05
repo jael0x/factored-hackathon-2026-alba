@@ -20,7 +20,7 @@ Evidence follows the `AGENTS.md` rule: a grade of A or above cites an artifact f
 3. **List every file created or modified** (`git status` and `git diff --stat`).
 4. **Run the checks** that exist and record the output:
    - `pytest` (or `docker compose --profile test run --rm test`). Name which tests cover the change and confirm their files sit under `testpaths` in `pytest.ini`.
-   - `npm run typecheck` in `web/` if anything under `web/` changed.
+   - `npm run check` in `web/` if anything under `web/` changed (the `test` service already runs it).
    - `python api-spec/generate.py` if `api-spec/openapi.yaml` changed, then confirm `git diff` on the generated files matches.
    - `ruff check .`, `ruff format --check .`, and `mypy` (all run by `scripts/check.sh`). Record their output in row P1.
 5. **Grade every row** with the table format below.

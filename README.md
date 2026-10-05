@@ -26,7 +26,7 @@ If `load` stops on `events_locale_check`, the database holds an English case fro
 
 ### Tests
 
-The Python gate, `scripts/check.sh`: ruff, mypy strict, and the full suite with branch coverage (unit and integration tests; the integration tests recreate and migrate throwaway databases, `alba_test` and `alba_api_test`, through one fixture in `conftest.py`). Preferred:
+One command runs both gates, on an image rebuilt from the current checkout: the web gate, `npm run check` in `web/` (`tsc`, Vitest, and the Vite build), then the Python gate, `scripts/check.sh`: ruff, mypy strict, and the full suite with branch coverage (unit and integration tests; the integration tests recreate and migrate throwaway databases, `alba_test` and `alba_api_test`, through one fixture in `conftest.py`). Preferred:
 
 ```bash
 docker compose --profile test run --rm test
@@ -40,7 +40,7 @@ python -m pip install -r requirements-dev.txt
 sh scripts/check.sh
 ```
 
-The web app: `npm run typecheck && npm test && npm run build` in `web/`.
+The web gate on the host: `npm ci && npm run check` in `web/`.
 
 CI runs the same checks on every pull request to `main` and every push to `main`. The jobs, coverage floors, and what fails them are in `ARCHITECTURE.md`, "Quality gate".
 
