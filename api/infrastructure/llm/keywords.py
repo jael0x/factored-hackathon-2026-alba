@@ -9,6 +9,7 @@ from api.application.cycle.ports import TurnRequest
 from api.contract_models import IncomeCurrency, Intent, Locale, ProductKey, TurnLanguage
 from api.domain.locale import PORTUGUESE_LOCALE, SPANISH_LOCALE
 from api.domain.policy.engine import CREDIT_CARD, PERSONAL_LOAN
+from api.domain.policy.templates import PRODUCT_NAMES
 from api.domain.process.stored_events import (
     CHIT_CHAT_INTENT,
     CLARIFY_INTENT,
@@ -197,27 +198,28 @@ DECIMAL = re.compile(r"\d+(?:[.,]\d{1,2})?")
 NUMBER = re.compile(r"\d[\d.,]*")
 WORD = re.compile(r"[a-z]+")
 
+SPANISH_PRODUCTS = f"{PRODUCT_NAMES[SPANISH_LOCALE][CREDIT_CARD]} o {PRODUCT_NAMES[SPANISH_LOCALE][PERSONAL_LOAN]}"
+PORTUGUESE_CARD = PRODUCT_NAMES[PORTUGUESE_LOCALE][CREDIT_CARD]
+PORTUGUESE_LOAN = PRODUCT_NAMES[PORTUGUESE_LOCALE][PERSONAL_LOAN]
+PORTUGUESE_PRODUCTS = f"{PORTUGUESE_CARD} ou {PORTUGUESE_LOAN}"
+
 # The reply text is a fixed sentence per intent, in the language chosen with the switch (D21). It is shown only
 # for clarify, product_info, chit_chat, and decline_prequalify; the rules send a template or a handoff otherwise.
 REPLIES: Mapping[Locale, Mapping[Intent, str]] = MappingProxyType(
     {
         SPANISH_LOCALE: MappingProxyType(
             {
-                CLARIFY_INTENT: "¿Te interesa una tarjeta de crédito o un préstamo personal?",
-                PRODUCT_INFO_INTENT: (
-                    "Te puedo ayudar con una tarjeta de crédito o un préstamo personal. ¿Cuál te interesa?"
-                ),
-                CHIT_CHAT_INTENT: "Hola, soy Alba. Te puedo ayudar con una tarjeta de crédito o un préstamo personal.",
+                CLARIFY_INTENT: f"¿Te interesa {SPANISH_PRODUCTS}?",
+                PRODUCT_INFO_INTENT: f"Te puedo ayudar con {SPANISH_PRODUCTS}. ¿Cuál te interesa?",
+                CHIT_CHAT_INTENT: f"Hola, soy Alba. Te puedo ayudar con {SPANISH_PRODUCTS}.",
                 DECLINE_PREQUALIFY_INTENT: "Entendido. Si cambias de opinión, aquí estoy.",
             }
         ),
         PORTUGUESE_LOCALE: MappingProxyType(
             {
-                CLARIFY_INTENT: "Você tem interesse em um cartão de crédito ou em um empréstimo pessoal?",
-                PRODUCT_INFO_INTENT: (
-                    "Posso ajudar com um cartão de crédito ou um empréstimo pessoal. Qual deles te interessa?"
-                ),
-                CHIT_CHAT_INTENT: "Olá, sou a Alba. Posso ajudar com um cartão de crédito ou um empréstimo pessoal.",
+                CLARIFY_INTENT: f"Você tem interesse em {PORTUGUESE_CARD} ou em {PORTUGUESE_LOAN}?",
+                PRODUCT_INFO_INTENT: f"Posso ajudar com {PORTUGUESE_PRODUCTS}. Qual deles te interessa?",
+                CHIT_CHAT_INTENT: f"Olá, sou a Alba. Posso ajudar com {PORTUGUESE_PRODUCTS}.",
                 DECLINE_PREQUALIFY_INTENT: "Entendido. Se mudar de ideia, é só me escrever.",
             }
         ),

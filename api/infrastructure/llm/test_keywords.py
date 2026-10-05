@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import get_args
 
 import pytest
@@ -53,17 +54,18 @@ def test_b0_replies_in_the_language_chosen_with_the_switch(text: str, locale: Lo
 
 
 @pytest.mark.parametrize(
-    ("text", "intent", "currency"),
+    ("text", "intent", "amount", "currency"),
     [
-        ("gano 12.500 pesos mexicanos al mes", "provide_income", "MXN"),
-        ("sí, gano 3,200,000 COP al mes", "confirm_prequalify", "COP"),
-        ("ganho 4500,50 por mês", "provide_income", None),
+        ("gano 12.500 pesos mexicanos al mes", "provide_income", Decimal(12500), "MXN"),
+        ("sí, gano 3,200,000 COP al mes", "confirm_prequalify", Decimal(3200000), "COP"),
+        ("ganho 4500,50 por mês", "provide_income", Decimal("4500.50"), None),
     ],
 )
-def test_b0_reads_an_income_and_a_currency_that_names_the_country(text: str, intent: str, currency: str | None) -> None:
+def test_b0_reads_an_income_and_a_currency_that_names_the_country(
+    text: str, intent: str, amount: Decimal, currency: str | None
+) -> None:
     turn = read(text, "es")
-    assert (turn.intent, turn.declared_income_currency) == (intent, currency)
-    assert turn.declared_income_amount is not None
+    assert (turn.intent, turn.declared_income_amount, turn.declared_income_currency) == (intent, amount, currency)
 
 
 @pytest.mark.parametrize("name", FIXTURES)
