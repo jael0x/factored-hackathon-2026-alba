@@ -745,6 +745,7 @@ Measured on Sep 27, 2026 over `data/raw/`:
 | `customers.csv` | 150,000 rows, 0 duplicate `customer_id`, 0 empty |
 | `products.csv` | 400,000 rows, 0 duplicate `product_id`, 0 orphan `customer_id` |
 | `service_agents.csv` | 1,200 rows, 0 duplicate `agent_id` |
+| `daily_exchange_rates.csv` (Oct 5) | 13,164 rows: 12 directed pairs over 1,097 days (2023-06-17 to 2026-06-17), 0 duplicate (`date`, `source_currency`, `target_currency`), 0 empty rate |
 | `customers.country` | only `México`, `Colombia`, `Argentina` |
 | Empty score | 22,492 (15.0%) |
 | Empty income | 30,033 (20.0%) |
@@ -754,7 +755,7 @@ There is no legacy database to migrate and no cutover. The CSV is the source. "M
 
 The score gap and the income gap are not cleaned. Those nulls are the R04 and R06 paths. Imputing a mean score or income erases Juliana's case and the 32% that cannot be decided.
 
-Measured on Oct 1 over `products.csv`: `product_type` takes eight values (`Cuenta Ahorro`, `Tarjeta Crédito`, `Cuenta Corriente`, `Tarjeta Débito`, `Préstamo Personal`, `Préstamo Hipotecario`, `Inversión`, `Seguro`), and `product_status` four (`Active`, `Closed`, `Blocked`, `Suspended`). Currencies are `USD`, `COP`, and `ARS`, and no balance is empty. 10,422 customers hold no product. 32,039 products are `Closed` and 700 loans have a balance of 0 (594 of them `Active`), so `GET /products` leaves out 32,686 products and 12,933 customers see none. The API returns type and status as stored; the home screen names them in the switch's language (`DESIGN.md`, "Home").
+Measured on Oct 1 over `products.csv`: `product_type` takes eight values (`Cuenta Ahorro`, `Tarjeta Crédito`, `Cuenta Corriente`, `Tarjeta Débito`, `Préstamo Personal`, `Préstamo Hipotecario`, `Inversión`, `Seguro`), and `product_status` four (`Active`, `Closed`, `Blocked`, `Suspended`). Currencies are `USD`, `COP`, and `ARS`, and no balance is empty. 10,422 customers hold no product. 32,039 products are `Closed` and 700 loans have a balance of 0 (594 of them `Active`), so `GET /products` leaves out 32,686 products and 12,933 customers see none. The API returns type and status as stored; the home screen names them in the switch's language (`DESIGN.md`, "Home"). Measured on Oct 5 over the same file: 339,965 products are `Active`, by type `Cuenta Ahorro` 102,148, `Tarjeta Crédito` 85,090, `Cuenta Corriente` 85,079, `Tarjeta Débito` 33,749, `Préstamo Personal` 16,977, `Préstamo Hipotecario` 10,157, `Inversión` 5,022, `Seguro` 1,743.
 
 Mexican balances are not reconciled to MXN. The `currency` column is copied as is. For products of customers in Mexico, the file says USD.
 
@@ -766,7 +767,7 @@ An empty `current_balance` loads as 0. It is the only imputed value: the column 
 
 `Inactive`, `Suspended`, and `Closed` customers are not dropped. R01 handles them. There are 14,914, 4,407, and 2,979 of them.
 
-The load report writes counts: rows read, null scores, null incomes, active products by type. Those nulls do not fail startup.
+The load report writes counts to the `load` log on every start: rows read, null scores, null incomes, active products by type (each `product_type` as stored, in name order). Those nulls do not fail startup. A report column missing from its file stops the load.
 
 ## Pipeline
 
@@ -774,7 +775,7 @@ The load report writes counts: rows read, null scores, null incomes, active prod
 2. Silver, inside Postgres: the four read tables, only the columns listed above. Types, empty `days_past_due` as null, empty `current_balance` as 0, currency copied, product names untranslated.
 3. Gold: `customer_credit_profile`, one row for each of the 150,000 customers, with the maximum days past due and `has_active_card`, `has_active_personal_loan`.
 
-Load quality checks (fail the `load` container if any fail): row counts for the four files match the expected snapshot sizes; null rates for `credit_score` and `estimated_monthly_income` are reported; every `products.customer_id` exists in `customers`. Lineage for this demo is `load_batches` (`path`, `bytes`, `sha256`, `batch_id` on gold). There is no freshness rule in the policy (data are a static snapshot). An update-correctness fixture changes one file on disk, observes a new `sha256`, and proves `load` reloads silver and gold; that fixture is labeled as such in `docs/data_quality.md` when written.
+Load quality checks (fail the `load` container if any fail): row counts for the four files match the expected snapshot sizes, and a file with no expected size stops the load; null rates for `credit_score` and `estimated_monthly_income` are reported; every `products.customer_id` exists in `customers`; `daily_exchange_rates` holds a positive rate to USD on the as-of date for every income currency, checked before gold is built, so `income_usd` is never empty for want of a rate. Lineage for this demo is `load_batches` (`path`, `bytes`, `sha256`, `batch_id` on gold). There is no freshness rule in the policy (data are a static snapshot). An update-correctness fixture changes one file on disk, observes a new `sha256`, and proves `load` reloads silver and gold; that fixture is labeled as such in `docs/data_quality.md` when written.
 
 No model is trained on the transcripts. They are templates. They do not feed the policy or the prompt. `load` does not download them.
 

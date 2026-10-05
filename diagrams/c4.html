@@ -1404,18 +1404,21 @@ spec('ld-entry', 'en-checks', {
   name: 'Quality checks', tech: 'fail the load', status: 'defined',
   summary: 'Counts, null rates, and product-to-customer links. Any failure stops `load`.',
   fixed: [
-    'Row counts of the four files match the expected snapshot sizes.',
+    'Row counts of the four files match the expected snapshot sizes. A file with no expected size stops the load.',
     'Null rates for `credit_score` and `estimated_monthly_income` are reported.',
     'Every `products.customer_id` exists in `customers`.',
+    'Before gold is built, `daily_exchange_rates` holds a positive rate to USD on the as-of date for every income currency.',
     'If any check fails, the `load` container fails (D5). No pandera or Great Expectations suite.',
   ],
   src: 'ARCHITECTURE.md, "Pipeline"',
 });
 spec('ld-entry', 'en-report', {
-  name: 'Load report', tech: 'counts', status: 'partial',
+  name: 'Load report', tech: 'counts', status: 'defined',
   summary: 'Rows read, null scores, null incomes, active products by type.',
-  fixed: ['The report writes counts: rows read, null scores, null incomes, active products by type.'],
-  open: [['New', 'Where the report is written: log or table.']],
+  fixed: [
+    'The report writes counts to the `load` log on every start: rows read, null scores, null incomes, active products by type.',
+    'Each `product_type` as stored, in name order. A report column missing from its file stops the load.',
+  ],
   src: 'ARCHITECTURE.md, "Data: what is touched and what is not"',
 });
 
