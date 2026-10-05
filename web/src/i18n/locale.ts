@@ -18,8 +18,8 @@ const listeners = new Set<() => void>();
 let locale: Locale = readStored() ?? fromBrowser(window.navigator.languages);
 document.documentElement.lang = locale;
 
-function isLocale(value: string | null): value is Locale {
-  return value !== null && Object.hasOwn(LOCALE_NAMES, value);
+export function isLocale(value: unknown): value is Locale {
+  return typeof value === "string" && Object.hasOwn(LOCALE_NAMES, value);
 }
 
 function readStored(): Locale | null {
