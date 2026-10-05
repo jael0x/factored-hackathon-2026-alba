@@ -319,7 +319,7 @@ The dark set is cool as well: page `#0F1218`, raised `#151922`, card `#1A1E28`, 
 
 - A 44px bar at the top: "Recorrido", previous and next, and the current screen with its number, which opens a menu of every screen grouped as Cliente and Asesor. Left and right arrow keys step through the screens.
 - "Nota" opens a drawer on the right with that screen's walkthrough note. Raw identifiers such as `ai_active` appear only in the notes and on consultant screens. Escape closes it.
-- Template sentences that are not written yet show as a dashed placeholder naming the `template_id`.
+- Template messages and certificates show the Spanish sentence from `api/domain/policy/templates.py`, as written there.
 
 Walkthrough tokens: background `rgba(22, 25, 34, 0.88)` with blur, text `#F2F4F8`, muted `#A3A9B8`, control edges `rgba(255, 255, 255, 0.4)`.
 
@@ -373,7 +373,7 @@ Contrast, WCAG 2.x formula, computed Sep 29, 2026 for the values in this file. G
 
 ## Interface copy
 
-Interface labels are written in Spanish and Portuguese, in `web/src/i18n/` (`es.ts`, `pt.ts`), and follow the language switch. The Spanish labels are the ones this file names; a screen not built yet takes its Spanish labels from `mocks/index.html`, and its Portuguese ones are written with it. Portuguese copy is team-written (`PLAN.md` D21, D22). The login labels in `web/src/i18n/` follow the Login and Consultant login sections above. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the consultant-close message) are not in this file: they live in `api/domain/policy/templates.py`, and `ARCHITECTURE.md` says they are not written yet.
+Interface labels are written in Spanish and Portuguese, in `web/src/i18n/` (`es.ts`, `pt.ts`), and follow the language switch. The Spanish labels are the ones this file names; a screen not built yet takes its Spanish labels from `mocks/index.html`, and its Portuguese ones are written with it. Portuguese copy is team-written (`PLAN.md` D21, D22). The login labels in `web/src/i18n/` follow the Login and Consultant login sections above. The typing indicator's "escribiendo…" comes from the contract. Template sentences (`confirm_prequalify`, `which_product`, `needs_income`, `refer_notice`, the certificate, the consultant-close message) are not in this file: they live in `api/domain/policy/templates.py` (`ARCHITECTURE.md`, "Policy `alba-credit-v1`").
 
 ## Open
 
@@ -382,6 +382,7 @@ Each item needs a contract change before it is built. None is worked around in t
 1. **Reply rows after `which_product` or `confirm_prequalify`.** The screen needs a typed field saying which template was sent last. A `messages` row has `author` and `body`, and no `template_id`.
 2. **City, segment, and document type on the demo search rows.** The mock shows them; `CustomerSearchHit` carries the name, country, and document number only.
 3. **How uncertainty shows on the certificate.** `PLAN.md` §2 marks it "Partial". This file gives the certificate no slot for it until that is decided.
+4. **USD for a self-declared income.** `income_usd` is null when the income was stated in the chat: the profile carries no exchange rate (decided Oct 4). The certificate shows no USD row for it. The mock's "Ingreso en USD" row was removed from Juliana's certificate; adding the rate to `customer_credit_profile` would be a pipeline change.
 
 ## Before a screen is called done
 
