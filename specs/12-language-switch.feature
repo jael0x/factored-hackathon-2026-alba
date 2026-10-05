@@ -71,22 +71,21 @@ Feature: Language switch
     Then the email to César's address has the subject "Seu código Alba"
 
   Scenario: The assistant answers in the chosen language, not the language typed
-    Given Juan Alberto Romero González chose Portuguese in the language switch
-    And Juan has no open case
-    When Juan writes "quiero una tarjeta de crédito"
-    Then the assistant asks him in Portuguese whether to start the pre-qualification for a credit card
+    Given Juliana Castro Gómez chose Portuguese in the language switch
+    And her credit card case is waiting for her monthly income
+    When Juliana writes "¿qué productos de crédito ofrecen?"
+    Then the assistant answers her in Portuguese
 
   Scenario: Changing the language during a case changes the next answer
-    Given Juan wrote "quiero un crédito" with Spanish chosen
-    And the assistant asked him in Spanish which product he means
-    When Juan chooses Portuguese in the switch and writes "cartão de crédito"
-    Then the assistant asks him in Portuguese whether to start the pre-qualification for a credit card
+    Given Juliana's credit card case is waiting for her monthly income in Spanish
+    When Juliana chooses Portuguese in the switch and writes "quais produtos vocês oferecem?"
+    Then the assistant answers her in Portuguese
 
   Scenario: A message in English goes to a person whatever the switch says
-    Given Juan Alberto Romero González chose Spanish in the language switch
-    And Juan has no open case
-    When Juan writes "I want a credit card"
-    Then his case enters the review queue with reason "language_unsupported"
+    Given Juliana Castro Gómez chose Spanish in the language switch
+    And her credit card case is waiting for her monthly income
+    When Juliana writes "I want a credit card"
+    Then her case enters the review queue with reason "language_unsupported"
 
   Scenario: A code request without a language sends no email
     When a visitor asks for a code with Juan's document number and no language

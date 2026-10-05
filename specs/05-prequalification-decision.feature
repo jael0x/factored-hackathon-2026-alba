@@ -7,8 +7,7 @@ Feature: Pre-qualification decision
     Given Juan Alberto Romero González has a credit score of 812 and income on file
     And he has no credit product past due
     And he holds no active credit card
-    And the assistant asked Juan whether to start the pre-qualification for a credit card
-    When Juan writes "sí"
+    When Juan starts a credit card request from his home
     Then Juan sees a certificate that says he pre-qualifies for a credit card
     And his case ends as pre-qualified
 
@@ -82,25 +81,24 @@ Feature: Pre-qualification decision
 
   Scenario Outline: The certificate is written in the language the customer chose
     Given Juan Alberto Romero González chose <language> in the language switch
-    And the assistant asked him in <language> whether to start the pre-qualification for a credit card
-    When Juan writes "<yes>"
+    When Juan starts a credit card request from his home
     Then Juan sees his certificate in <language>
 
     Examples:
-      | language   | yes |
-      | Spanish    | sí  |
-      | Portuguese | sim |
+      | language   |
+      | Spanish    |
+      | Portuguese |
 
-  Scenario: A message delivered twice does not produce a second decision
-    Given Juan's confirmation "sí" produced a certificate
-    When the app delivers the same message a second time
+  Scenario: A start delivered twice does not produce a second decision
+    Given Juan's credit card start produced a certificate
+    When the app delivers the same start a second time
     Then Juan still has one certificate
 
-  Scenario: A new message after an ended case opens a new case
+  Scenario: An ended case takes no new message
     Given Juan's credit card case ended as pre-qualified
-    When Juan writes "quiero un préstamo personal"
-    Then a new case opens for Juan
-    And the ended case stays closed
+    When Juan opens that case
+    Then he sees the certificate and "Volver al inicio" instead of a message box
+    And a message the app sends to that case is refused as ended
 
   Scenario: A message id sent again with another text is refused
     Given Juan sent "sí" with a message id
@@ -108,8 +106,25 @@ Feature: Pre-qualification decision
     Then the app is told that message id was already used
     And Juan's conversation still shows "sí" once and no "no"
 
-  Scenario: Two messages sent before the case opens join one case
-    Given Juan has no open case
-    When Juan writes "quiero una tarjeta de crédito" and then "y también un préstamo" before the first is answered
-    Then Juan has one open case
+  Scenario: Two starts for one product sent before the case opens join one case
+    Given Juan has no case for a credit card
+    When the app sends two credit card starts before the first is answered
+    Then Juan has one open credit card case
     And both messages are in that case's conversation
+
+  Scenario: A customer who does not pre-qualify can ask a person to review it
+    Given Mariana Mónica Acosta Rojas's credit card request ended as not pre-qualified by the policy
+    When Mariana chooses "Pedir que una persona lo revise" on her certificate
+    Then her case enters the review queue with reason "customer_requested_human"
+    And the assistant tells her a person from the bank will review her request
+    And her certificate stays in the conversation above that notice
+
+  Scenario: A result can be sent to a person only once
+    Given Mariana asked a person to review her credit card result
+    When the app asks for that review again
+    Then her case is unchanged and has one review request
+
+  Scenario: A pre-qualified result offers no review
+    Given Juan pre-qualified for a credit card
+    When Juan opens his certificate
+    Then it offers no option to ask a person to review it

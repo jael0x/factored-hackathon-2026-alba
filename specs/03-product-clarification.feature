@@ -3,6 +3,9 @@ Feature: Product clarification
   I want the assistant to ask which product I mean
   So that I get a decision for the credit I actually want
 
+  Since PLAN.md D24 every case starts from a product on the home, so the screen no longer reaches these
+  scenarios. They describe the engine and the evaluation, which keep the clarification path.
+
   Scenario: An ambiguous request gets asked which product
     Given Juan Alberto Romero González is signed in with no open case
     When Juan writes "quiero un crédito"
