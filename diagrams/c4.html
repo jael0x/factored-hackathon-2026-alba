@@ -873,12 +873,12 @@ spec('worker', 'w-guard', {
 
 spec('processes', 'p-catalog', {
   name: 'Process catalog', tech: 'credit_prequalification', status: 'defined',
-  summary: 'One process, born `ai_active`, at most one open per customer.',
+  summary: 'One process, born `ai_active`, at most one open per customer and product.',
   fixed: [
-    'One row: `process_key = credit_prequalification`, initial state `ai_active`, opened by `open_process` on the first message of a customer with no open process.',
+    'One row: `process_key = credit_prequalification`, initial state `ai_active`, opened by `open_process` on a start from the home, which names its product (D24).',
     '`started` is not persisted. The row is born `ai_active` and `process.started` records it.',
-    'A customer has at most one process with `state <> ended`, guaranteed by a partial unique index.',
-    'A replayed start returns its process; a start while another case is open writes nothing, and the message joins that case (D20).',
+    'A customer has at most one process with `state <> ended` per product, guaranteed by a partial unique index on `(customer_id, process_key, product)`.',
+    'A replayed start returns its process; a start while its product has an open case writes nothing, runs no policy, and is 409 `case_already_open` once settled (D26).',
   ],
   src: 'ARCHITECTURE.md, "Process"',
 });
@@ -892,7 +892,7 @@ spec('processes', 'p-states', {
     '`ai_active` to `human_active`: policy `REFER`, request for a human, tool failure, unsupported language.',
     '`human_active`: nobody talks in the thread. The customer may write; the message is stored. The consultant closes with `prequalified` or `not_prequalified`.',
     '`ended` reopens only by that appeal, and only while no other case of its product is open. A new start for the product opens a new process.',
-    'Staying in `ai_active` writes nothing. A move locks the row, checks its own key, then the table in `api/domain/process/lifecycle.py`; an illegal move writes nothing.',
+    'Staying in `ai_active` writes nothing. A move locks the row, checks its own key, then the table in `api/domain/process/lifecycle.py`; the reopen is outside the table and only an appeal makes it (`check_reopen`). An illegal move writes nothing.',
   ],
   open: [['New', 'The `ai_active` to `human_active` triggers omit `out_of_scope`, `reply_forbidden`, and `model_output_invalid`, which `hand_off_scope` and `hand_off_reply` also cause.']],
   src: 'ARCHITECTURE.md, "Process", "Process rules"',
@@ -1435,7 +1435,7 @@ spec('ld-migrations', 'mg-tables', {
   fixed: [
     'Read: `customers`, `products`, `daily_exchange_rates`, `service_agents`. Gold: `customer_credit_profile`. Cycle: `events`, `processes`, `commands`, `login_codes`, `llm_turns`, `messages`. Plus `load_batches`.',
     'Indexes: `customers` on `document_number` and `(last_name, first_name)`; `products (customer_id)`; pending `commands (status)`; `events (process_id, created_at)`.',
-    'A partial unique index on `processes (customer_id, process_key) where state <> ended`.',
+    'A partial unique index on `processes (customer_id, process_key, product) where state <> ended` (010), and `events (caused_by_event_id)` and `messages (process_id)` (011).',
   ],
   src: 'ARCHITECTURE.md, "Database"',
 });
