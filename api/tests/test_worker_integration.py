@@ -13,8 +13,9 @@ from api.application.cycle.ports import ReadTurn
 from api.application.processes import InCase, StartCase
 from api.contract_models import Locale, ProductKey
 from api.domain.policy.templates import certificate_for_close, certificate_for_policy, render_notice
-from api.domain.process.commands import GENERATE_COMMAND
-from api.domain.process.lifecycle import MessageStamp, ProcessRow, parse_state
+from api.domain.process.commands import GENERATE_COMMAND, hand_off
+from api.domain.process.events import ANALYSIS_COMPLETED
+from api.domain.process.lifecycle import CUSTOMER_REQUESTED_HUMAN, MessageStamp, ProcessRow, parse_state
 from api.domain.process.new_events import AlreadyAppended, appeal_requested, consultant_closed, message_received
 from api.domain.process.rules import PlannedCommand, command_key
 from api.domain.process.turns import ShownReading, TurnReading, WithheldReading
@@ -448,6 +449,20 @@ def test_one_customers_commands_wait_for_each_other_while_another_customer_goes_
     by_event = dict(owners)
     assert [by_event[juan_start.triggered_by_event_id], by_event[alicia_start.triggered_by_event_id]] == [JUAN, ALICIA]
     assert [juan_start.command.command_name, alicia_start.command.command_name] == ["process.start", "process.start"]
+
+
+def test_a_handoff_that_is_not_an_appeal_cannot_reopen_an_ended_case(url: str, pool: ConnectionPool) -> None:
+    started(pool, MARIANA)
+    sql = "SELECT id FROM events WHERE customer_id = %s AND event_name = %s"
+    [(analysis_id,)] = query(url, sql, (MARIANA, ANALYSIS_COMPLETED))
+    move = hand_off(CUSTOMER_REQUESTED_HUMAN)
+    with pool.connection() as conn:
+        key = command_key("hand_off_human", move.command_name, analysis_id)
+        PostgresCommands(conn).enqueue(PlannedCommand(move, "hand_off_human", analysis_id, key))
+    run_until_idle(pool, scripted())
+    assert queue(url)[-1][:4] == ("process.transition", "hand_off_human", "failed", 3)
+    assert str(queue(url)[-1][4]).startswith("IllegalTransition: process cannot move from ended to human_active")
+    assert cases(url, MARIANA) == [("ended", "not_prequalified", "credit_card", "es")]
 
 
 def test_a_command_with_no_case_to_hand_off_fails_without_a_handoff(url: str, pool: ConnectionPool) -> None:

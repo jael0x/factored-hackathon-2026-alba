@@ -23,6 +23,7 @@ from api.application.processes import (
     end_process,
     hand_off_process,
     record_customer_message,
+    reopen_process,
     start_process,
 )
 from api.contract_models import Locale
@@ -464,11 +465,18 @@ def test_an_ended_case_reopens_for_a_person_and_ends_again(url: str) -> None:
     message, process_id = open_case(url, JUAN)
     run(url, lambda e, p: end_process(e, p, process_id, "not_prequalified", "alba-credit-v1", Cause(message, None)))
     appeal = send(url, JUAN, "quiero un préstamo personal", target=StartCase("personal_loan"))
-    reopened = run(
-        url, lambda e, p: hand_off_process(e, p, process_id, "customer_requested_human", Cause(appeal, None))
-    )
+    with pytest.raises(IllegalTransition, match="from ended to human_active"):
+        run(url, lambda e, p: hand_off_process(e, p, process_id, "customer_requested_human", Cause(appeal, None)))
+    reopened = run(url, lambda e, p: reopen_process(e, p, process_id, "customer_requested_human", Cause(appeal, None)))
     assert reopened == Applied(process_id)
     assert [row[3] for row in processes(url) if row[0] == process_id] == ["human_active"]
     ended = run(url, lambda e, p: end_process(e, p, process_id, "prequalified", None, Cause(appeal, None)))
     assert ended == Applied(process_id)
     assert [(row[3], row[4]) for row in processes(url) if row[0] == process_id] == [("ended", "prequalified")]
+
+
+def test_a_case_that_has_not_ended_cannot_be_reopened(url: str) -> None:
+    message, process_id = open_case(url, JUAN)
+    with pytest.raises(IllegalTransition, match="from ai_active to human_active"):
+        run(url, lambda e, p: reopen_process(e, p, process_id, "customer_requested_human", Cause(message, None)))
+    assert [row[3] for row in processes(url) if row[0] == process_id] == ["ai_active"]

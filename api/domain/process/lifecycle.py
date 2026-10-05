@@ -32,10 +32,9 @@ MOVE_NEEDS_END_REASON: Mapping[tuple[ProcessState, ProcessState], bool] = Mappin
         (AI_ACTIVE, HUMAN_ACTIVE): False,
         (AI_ACTIVE, ENDED): True,
         (HUMAN_ACTIVE, ENDED): True,
-        # The one move out of ended: a customer's appeal of a policy's no reopens the case for a person (D25).
-        (ENDED, HUMAN_ACTIVE): False,
     }
 )
+REOPEN_MOVE: tuple[ProcessState, ProcessState] = (ENDED, HUMAN_ACTIVE)
 
 
 class IllegalTransition(Exception):
@@ -64,6 +63,12 @@ def check_move(from_state: ProcessState, to_state: ProcessState, end_reason: End
     needs_end_reason = MOVE_NEEDS_END_REASON.get((from_state, to_state))
     if needs_end_reason is None or needs_end_reason != (end_reason is not None):
         raise IllegalTransition(from_state, to_state, end_reason)
+
+
+# Reopening is not in the move table: only an appeal may make it (D25), so a handoff can never reopen a case.
+def check_reopen(from_state: ProcessState) -> None:
+    if (from_state, HUMAN_ACTIVE) != REOPEN_MOVE:
+        raise IllegalTransition(from_state, HUMAN_ACTIVE, None)
 
 
 def stamp_message(open_process: ProcessRow | None) -> MessageStamp:

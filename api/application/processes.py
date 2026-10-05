@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
@@ -18,6 +19,7 @@ from api.domain.process.lifecycle import (
     HUMAN_ACTIVE,
     ProcessRow,
     check_move,
+    check_reopen,
     stamp_message,
 )
 from api.domain.process.new_events import (
@@ -172,11 +174,32 @@ def start_process(
 def hand_off_process(
     events: Events, processes: Processes, process_id: UUID, reason_code: ReasonCode, cause: Cause
 ) -> MoveResult:
+    return move_to_person(events, processes, process_id, reason_code, cause, check_handoff)
+
+
+def reopen_process(
+    events: Events, processes: Processes, process_id: UUID, reason_code: ReasonCode, cause: Cause
+) -> MoveResult:
+    return move_to_person(events, processes, process_id, reason_code, cause, check_reopen)
+
+
+def check_handoff(from_state: ProcessState) -> None:
+    check_move(from_state, HUMAN_ACTIVE, None)
+
+
+def move_to_person(
+    events: Events,
+    processes: Processes,
+    process_id: UUID,
+    reason_code: ReasonCode,
+    cause: Cause,
+    check: Callable[[ProcessState], None],
+) -> MoveResult:
     process = lock(processes, process_id)
     action = transition_key(process_id, HUMAN_ACTIVE, cause.event_id)
     if events.has_key(event_key(action, PROCESS_STATE_CHANGED)):
         return AlreadyApplied(process_id)
-    check_move(process.state, HUMAN_ACTIVE, None)
+    check(process.state)
     processes.set_state(process_id, HUMAN_ACTIVE, None)
     events.append(state_changed(process, HUMAN_ACTIVE, None, action, cause))
     events.append(thread_taken(process, reason_code, action, cause))
