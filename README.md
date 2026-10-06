@@ -46,6 +46,13 @@ The host runs Python 3.12, as the images and CI do. The code uses 3.12 syntax, s
 
 The web gate on the host: `npm ci && npm run check` in `web/`.
 
+The oracle check reads the database `docker compose up` filled, not a throwaway one, so it needs the full dataset and the gate leaves it out. It compares the four oracle customers, César, the as-of rates, and the product types in `api/fixtures/oracle_customers.json` with the loaded tables, and runs the policy on the loaded profiles (`IMPLEMENTATION.md`, M1):
+
+```bash
+docker compose up -d
+docker compose --profile test run --rm test pytest -m dataset
+```
+
 CI runs the same checks on every pull request to `main` and every push to `main`. The jobs, coverage floors, and what fails them are in `ARCHITECTURE.md`, "Quality gate".
 
 ## Where things are
