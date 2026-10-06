@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
+from datetime import date
 from decimal import Decimal
 from types import MappingProxyType
 from typing import Any
@@ -17,6 +18,7 @@ from api.application.cycle.context import (
     read_process,
     stored,
 )
+from api.application.cycle.generate import turn_request
 from api.application.cycle.handlers import HANDLERS, require_handlers
 from api.application.cycle.moves import end_case, hand_off_case
 from api.application.cycle.notices import send_template
@@ -24,6 +26,7 @@ from api.application.cycle.policy_run import run_policy
 from api.application.cycle.ports import EventRow, TurnRequest
 from api.application.cycle.render import render_decision
 from api.contract_models import MessageAuthor, ProductKey, ReasonCode, RuleId
+from api.domain.policy.engine import CreditProfile
 from api.domain.policy.templates import handoff_notice
 from api.domain.process.commands import (
     CommandName,
@@ -35,6 +38,7 @@ from api.domain.process.commands import (
 )
 from api.domain.process.lifecycle import ProcessRow
 from api.domain.process.new_events import AlreadyAppended, AppendResult, Cause, NewEvent
+from api.domain.process.stored_events import MessageReceived
 from api.domain.process.turns import ModelReading
 
 EVENT_ID = UUID("88888888-8888-4888-8888-888888888888")
@@ -179,6 +183,13 @@ def test_a_policy_run_follows_only_a_consented_turn_or_a_started_case() -> None:
         run_policy(
             cycle(Recorder()), trigger("analysis.completed", ANALYSIS), PolicyRunPayload("credit_card", None, None)
         )
+
+
+def test_a_message_outside_a_command_never_reaches_the_model() -> None:
+    message = MessageReceived(EVENT_ID, PROCESS_ID, "ai_active", "es", "hola", None)
+    profile = CreditProfile("Active", 750, None, None, None, 0, False, False, date(2026, 6, 17))
+    with pytest.raises(ValueError, match=f"message {EVENT_ID} reached the model outside a command"):
+        turn_request(message, OPEN_CASE, profile, None)
 
 
 def test_a_process_that_does_not_exist_is_named() -> None:
