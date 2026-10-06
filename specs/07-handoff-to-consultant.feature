@@ -10,12 +10,29 @@ Feature: Handoff to a consultant
     When Alicia writes "sí"
     Then her case enters the review queue with reason "policy_refer"
 
-  Scenario: The referral notice tells the customer a person will review
-    Given Alicia's credit card request was referred
+  Scenario: The referral notice tells the customer why a person will review
+    Given Alicia's credit card request was referred by rule "R05"
     When Alicia reads her thread
-    Then she sees a notice that a person will review her case
+    Then she reads "Tu historial crediticio necesita una revisión adicional." before the notice that a person will review her case
     And the notice does not mention her credit score
     And the notice does not say whether she pre-qualifies
+
+  Scenario: A customer who already holds the product is told so
+    Given Rodrigo Pérez Luna holds an active credit card
+    When Rodrigo starts a credit card request from his home
+    Then his case enters the review queue with reason "policy_refer"
+    And he reads "Ya tienes una tarjeta de crédito con nosotros." before the notice that a person will review his case
+
+  Scenario Outline: Every other handoff tells the customer why
+    Given Juliana Castro Gómez was asked for her monthly income in her credit card case
+    When Juliana writes "<message>" in that case
+    Then she reads "<reason>" before the notice that a person will review her case
+
+    Examples:
+      | message                       | reason                                                     |
+      | quiero hablar con una persona | Pediste que una persona atienda tu caso.                   |
+      | quiero una hipoteca nueva     | Tu mensaje pide algo que no puedo resolver en este chat.   |
+      | I want a credit card          | Por ahora solo puedo leer mensajes en español o portugués. |
 
   Scenario: The assistant stops replying once a person has the case
     Given Alicia's case is in the review queue
@@ -59,3 +76,8 @@ Feature: Handoff to a consultant
     Given the language model is unavailable
     When Juan writes "quiero una tarjeta de crédito"
     Then after three failed attempts his case enters the review queue with reason "tool_failed"
+
+  Scenario: A technical failure tells the customer what happened
+    Given Juan's message failed three times because the language model is unavailable
+    When Juan reads his thread
+    Then he reads "Tuvimos un problema técnico al procesar tu solicitud." before the notice that a person will review his case

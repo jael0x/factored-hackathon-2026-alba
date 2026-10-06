@@ -17,7 +17,6 @@ CHAT_TEST_DB = "alba_chat_test"
 AS_OF = "2026-06-17"
 CARD_ES = "Quiero una tarjeta de crédito"
 NEEDS_INCOME_ES = render_notice("needs_income", "es", "credit_card")
-REFER_NOTICE_ES = render_notice("refer_notice", "es", "credit_card")
 CESAR = "AGT-OJ9N4FGYV9"
 
 

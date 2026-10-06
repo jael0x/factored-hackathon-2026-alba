@@ -14,6 +14,7 @@ from api.domain.process.stored_events import (
     ProcessStarted,
     ShownTurn,
     TemplateSent,
+    ThreadTaken,
     WithheldTurn,
     parse_stored_event,
 )
@@ -210,9 +211,15 @@ def test_a_missing_field_is_named() -> None:
 
 @pytest.mark.parametrize("outcome", ["PREQUALIFIED", "NOT_PREQUALIFIED", "REFER", "NEEDS_INFO"])
 def test_an_analysis_carries_its_outcome(outcome: Outcome) -> None:
-    payload = {"outcome": outcome, "product": "personal_loan", "locale": "pt", "policy_version": "alba-credit-v1"}
+    payload = {
+        "outcome": outcome,
+        "product": "personal_loan",
+        "locale": "pt",
+        "policy_version": "alba-credit-v1",
+        "deciding_rule": "R05",
+    }
     event = parse_stored_event(EVENT_ID, "analysis.completed", PROCESS_ID, "ai_active", payload)
-    assert event == AnalysisCompleted(EVENT_ID, outcome, "personal_loan", "pt", "alba-credit-v1")
+    assert event == AnalysisCompleted(EVENT_ID, outcome, "personal_loan", "pt", "alba-credit-v1", "R05")
 
 
 @pytest.mark.parametrize(
@@ -220,15 +227,21 @@ def test_an_analysis_carries_its_outcome(outcome: Outcome) -> None:
     [("product", "mortgage"), ("locale", "en"), ("policy_version", "alba-credit-v2")],
 )
 def test_an_analysis_outside_the_contract_is_refused(field: str, value: str) -> None:
-    payload = {"outcome": "REFER", "product": "credit_card", "locale": "es", "policy_version": "alba-credit-v1"}
+    payload = {
+        "outcome": "REFER",
+        "product": "credit_card",
+        "locale": "es",
+        "policy_version": "alba-credit-v1",
+        "deciding_rule": "R05",
+    }
     with pytest.raises(ValueError, match=f"{field} '{value}' is not one of"):
         parse_stored_event(EVENT_ID, "analysis.completed", PROCESS_ID, "ai_active", {**payload, field: value})
 
 
 def test_a_decision_carries_its_outcome_and_who_decided() -> None:
-    payload = {"outcome": "NOT_PREQUALIFIED", "decided_by": "consultant"}
+    payload = {"outcome": "NOT_PREQUALIFIED", "decided_by": "consultant", "locale": "pt"}
     event = parse_stored_event(EVENT_ID, "prequalification.decided", PROCESS_ID, "human_active", payload)
-    assert event == PrequalificationDecided(EVENT_ID, "NOT_PREQUALIFIED", "consultant")
+    assert event == PrequalificationDecided(EVENT_ID, "NOT_PREQUALIFIED", "consultant", "pt")
 
 
 @pytest.mark.parametrize("event_name", ["prequalification.decided", "conversation.consultant_closed"])
@@ -253,7 +266,6 @@ def test_a_close_carries_its_outcome() -> None:
 @pytest.mark.parametrize(
     "event_name",
     [
-        "conversation.thread_taken",
         "process.state_changed",
         "process.ended",
     ],
@@ -261,6 +273,17 @@ def test_a_close_carries_its_outcome() -> None:
 def test_an_event_no_rule_reads_keeps_only_its_name(event_name: EventName) -> None:
     event = parse_stored_event(EVENT_ID, event_name, PROCESS_ID, "ai_active", {})
     assert event == NoRuleEvent(EVENT_ID, event_name)
+
+
+def test_a_handoff_carries_its_reason() -> None:
+    payload = {"reason_code": "policy_refer", "from_state": "ai_active", "to_state": "human_active"}
+    event = parse_stored_event(EVENT_ID, "conversation.thread_taken", PROCESS_ID, "human_active", payload)
+    assert event == ThreadTaken(EVENT_ID, "policy_refer")
+
+
+def test_a_handoff_outside_the_reason_codes_is_refused() -> None:
+    with pytest.raises(ValueError, match="reason_code 'tired' is not one of"):
+        parse_stored_event(EVENT_ID, "conversation.thread_taken", PROCESS_ID, "human_active", {"reason_code": "tired"})
 
 
 def test_a_started_case_carries_its_locale_and_product() -> None:

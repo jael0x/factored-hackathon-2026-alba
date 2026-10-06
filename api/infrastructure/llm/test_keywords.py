@@ -1,21 +1,22 @@
 from decimal import Decimal
 from typing import get_args
+from uuid import UUID
 
 import pytest
 
 from api.application.cycle.ports import TurnRequest
 from api.contract_models import Locale
-from api.domain.process.turns import ShownReading, TurnReading
+from api.domain.process.turns import ShownReading, TurnReading, withheld_reason
 from api.infrastructure.llm.keywords import read_keyword_turn
 from api.tests.turn_harness import TurnFixtureName, load_turn_fixture
 
 FIXTURES: tuple[TurnFixtureName, ...] = get_args(TurnFixtureName)
-# The outcome phrases only a template writes (ARCHITECTURE.md, "Policy alba-credit-v1").
-OUTCOME_PHRASES = ("precalifica", "no precalifica", "pré-qualificado", "não pré-qualifica")
+PROCESS_ID = UUID("11111111-1111-4111-8111-111111111111")
+COMMAND_ID = UUID("33333333-3333-4333-8333-333333333333")
 
 
 def read(text: str, locale: Locale) -> TurnReading:
-    request = TurnRequest(text, locale, "ai_active", True, True, False, False)
+    request = TurnRequest(PROCESS_ID, COMMAND_ID, text, locale, "ai_active", True, True, False, False)
     reading = read_keyword_turn(request)
     assert isinstance(reading, ShownReading)
     return reading.reading
@@ -73,8 +74,7 @@ def test_b0_never_writes_an_outcome_phrase(name: TurnFixtureName) -> None:
     fixture = load_turn_fixture(name)
     locales: tuple[Locale, ...] = ("es", "pt")
     for locale in locales:
-        reply = read(fixture.text, locale).reply_text.lower()
-        assert not any(phrase in reply for phrase in OUTCOME_PHRASES)
+        assert withheld_reason(read(fixture.text, locale).reply_text) is None
 
 
 @pytest.mark.parametrize(

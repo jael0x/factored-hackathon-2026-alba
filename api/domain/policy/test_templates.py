@@ -5,21 +5,26 @@ from types import MappingProxyType
 
 import pytest
 
-from api.contract_models import CloseOutcome, DecidedBy, Locale, Outcome, ProductKey, TemplateId
+from api.contract_models import CloseOutcome, DecidedBy, Locale, Outcome, ProductKey, ReasonCode, RuleId, TemplateId
 from api.domain.policy.engine import CreditProfile, Decision, decide
 from api.domain.policy.templates import (
     CERTIFICATES,
+    HANDOFF_REASONS,
     NOTICES_FOR_A_PRODUCT,
     NOTICES_FOR_ANY_PRODUCT,
     PRODUCT_NAMES,
+    REFER_REASONS,
     MissingProduct,
     Texts,
+    UnknownReason,
     certificate_for_close,
     certificate_for_policy,
+    handoff_notice,
     render_notice,
     require_certificates,
     require_notices,
     require_product_names,
+    require_reasons,
 )
 
 AS_OF = date(2026, 6, 17)
@@ -115,6 +120,62 @@ def test_the_referral_notice_states_no_outcome_and_no_score(locale: Locale) -> N
     assert [word for word in ("precalific", "pré-qualific", "score", "puntaje", "pontuação") if word in notice] == []
 
 
+REFER_NOTICE_ES = render_notice("refer_notice", "es", "credit_card")
+
+
+def test_a_policy_handoff_names_the_rule_that_referred_before_the_notice() -> None:
+    rendered = {rule: handoff_notice("es", "credit_card", "policy_refer", rule) for rule in REFER_REASONS}
+    assert rendered == {
+        "R01": f"El estado de tu cuenta como cliente necesita que una persona revise tu solicitud. {REFER_NOTICE_ES}",
+        "R03": f"Uno de tus productos tiene un pago con algunos días de atraso. {REFER_NOTICE_ES}",
+        "R04": "Tu expediente no tiene la información de crédito que este chat necesita para responderte. "
+        f"{REFER_NOTICE_ES}",
+        "R05": f"Tu historial crediticio necesita una revisión adicional. {REFER_NOTICE_ES}",
+        "R09": f"Ya tienes una tarjeta de crédito con nosotros. {REFER_NOTICE_ES}",
+    }
+
+
+def test_every_other_handoff_names_its_reason_before_the_notice() -> None:
+    rendered = {reason: handoff_notice("es", "credit_card", reason, None) for reason in HANDOFF_REASONS}
+    assert rendered == {
+        "customer_requested_human": f"Pediste que una persona atienda tu caso. {REFER_NOTICE_ES}",
+        "out_of_scope": f"Tu mensaje pide algo que no puedo resolver en este chat. {REFER_NOTICE_ES}",
+        "language_unsupported": f"Por ahora solo puedo leer mensajes en español o portugués. {REFER_NOTICE_ES}",
+        "reply_forbidden": f"Esta respuesta debe dártela una persona. {REFER_NOTICE_ES}",
+        "model_output_invalid": f"No pude procesar tu mensaje. {REFER_NOTICE_ES}",
+        "tool_failed": f"Tuvimos un problema técnico al procesar tu solicitud. {REFER_NOTICE_ES}",
+    }
+
+
+def test_a_portuguese_handoff_reads_in_portuguese_and_names_the_loan() -> None:
+    assert handoff_notice("pt", "personal_loan", "policy_refer", "R09") == (
+        "Você já tem um empréstimo pessoal conosco. Uma pessoa do banco vai analisar sua solicitação de um "
+        "empréstimo pessoal. Avisaremos por aqui quando houver uma resposta."
+    )
+
+
+@pytest.mark.parametrize("locale", ["es", "pt"])
+@pytest.mark.parametrize(
+    "reason", [*(("policy_refer", rule) for rule in REFER_REASONS), *((code, None) for code in HANDOFF_REASONS)]
+)
+def test_no_handoff_reason_states_an_outcome_or_a_score(
+    locale: Locale, reason: tuple[ReasonCode, RuleId | None]
+) -> None:
+    notice = handoff_notice(locale, "credit_card", *reason).lower()
+    assert [word for word in ("precalific", "pré-qualific", "score", "puntaje", "pontuação") if word in notice] == []
+
+
+@pytest.mark.parametrize("rule", ["R02", "R06", None])
+def test_a_policy_handoff_from_a_rule_that_does_not_refer_is_refused(rule: RuleId | None) -> None:
+    with pytest.raises(UnknownReason, match=f"no handoff reason is written for policy_refer {rule}"):
+        handoff_notice("es", "credit_card", "policy_refer", rule)
+
+
+def test_a_handoff_without_a_product_is_refused() -> None:
+    with pytest.raises(MissingProduct, match="the handoff notice names the product"):
+        handoff_notice("es", None, "out_of_scope", None)
+
+
 def test_the_policy_certificate_reads_as_written_for_each_close_outcome() -> None:
     rendered = {
         (decision.outcome, locale): certificate_for_policy(decision.outcome, locale, "credit_card")
@@ -166,6 +227,42 @@ def test_the_tables_the_module_loads_pass_their_own_checks() -> None:
     require_product_names(PRODUCT_NAMES)
     require_notices(NOTICES_FOR_A_PRODUCT, NOTICES_FOR_ANY_PRODUCT)
     require_certificates(CERTIFICATES)
+    require_reasons(REFER_REASONS, HANDOFF_REASONS)
+
+
+def test_a_rule_that_refers_without_a_reason_is_refused() -> None:
+    without_r05: dict[RuleId, Texts] = {rule: texts for rule, texts in REFER_REASONS.items() if rule != "R05"}
+    with pytest.raises(ValueError, match="every rule that refers and every other handoff reason needs exactly one"):
+        require_reasons(without_r05, HANDOFF_REASONS)
+
+
+def test_a_reason_written_for_a_policy_referral_twice_is_refused() -> None:
+    with_policy: dict[ReasonCode, Texts] = {**HANDOFF_REASONS, "policy_refer": HANDOFF_REASONS["out_of_scope"]}
+    with pytest.raises(ValueError, match="every rule that refers and every other handoff reason needs exactly one"):
+        require_reasons(REFER_REASONS, with_policy)
+
+
+def test_a_reason_missing_a_locale_is_refused() -> None:
+    spanish: Texts = MappingProxyType({"es": "Pediste una persona."})
+    spanish_only: dict[ReasonCode, Texts] = {**HANDOFF_REASONS, "customer_requested_human": spanish}
+    with pytest.raises(
+        ValueError, match=r"a handoff reason must have a text for every locale: \['customer_requested_human'\]"
+    ):
+        require_reasons(REFER_REASONS, spanish_only)
+
+
+def test_the_held_product_reason_must_name_the_product() -> None:
+    plain: Texts = MappingProxyType({"es": "Ya lo tienes.", "pt": "Você já tem."})
+    unnamed: dict[RuleId, Texts] = {**REFER_REASONS, "R09": plain}
+    with pytest.raises(ValueError, match=r"the reason for a product already held must name the product 1 time"):
+        require_reasons(unnamed, HANDOFF_REASONS)
+
+
+def test_any_other_reason_that_names_a_product_is_refused() -> None:
+    slotted: Texts = MappingProxyType({"es": "Sobre {product}.", "pt": "Sobre {product}."})
+    named: dict[RuleId, Texts] = {**REFER_REASONS, "R05": slotted}
+    with pytest.raises(ValueError, match=r"a policy reason must name the product 0 time\(s\): \['R05 es', 'R05 pt'\]"):
+        require_reasons(named, HANDOFF_REASONS)
 
 
 def test_a_notice_missing_a_locale_is_refused() -> None:
