@@ -20,7 +20,7 @@ def shown(intent: Intent, product: ProductKey | None = None, language: TurnLangu
 
 
 def analysis(outcome: Outcome, product: ProductKey = "credit_card") -> StoredEvent:
-    return AnalysisCompleted(uuid4(), outcome, product, "es", "alba-credit-v1")
+    return AnalysisCompleted(uuid4(), outcome, product, "es", "alba-credit-v1", "R05")
 
 
 def test_a_first_turn_has_no_asks_and_no_income_request() -> None:

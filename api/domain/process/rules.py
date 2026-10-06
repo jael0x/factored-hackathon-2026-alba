@@ -32,6 +32,7 @@ from api.domain.process.events import (
     MESSAGE_RECEIVED,
     PREQUALIFICATION_DECIDED,
     PROCESS_STARTED,
+    THREAD_TAKEN,
     TURN_CLASSIFIED,
 )
 from api.domain.process.lifecycle import (
@@ -68,6 +69,7 @@ from api.domain.process.stored_events import (
     ShownTurn,
     StoredEvent,
     TemplateSent,
+    ThreadTaken,
     TurnClassified,
     WithheldTurn,
 )
@@ -91,13 +93,12 @@ ProcessRuleId = Literal[
     "hand_off_reply",
     "show_reply",
     "render_needs_info",
-    "render_refer_notice",
     "take_thread",
     "render_decision",
     "end_after_decision",
     "close_on_consultant_decision",
     "reopen_on_appeal",
-    "notify_appeal",
+    "notify_handoff",
 ]
 
 OPEN_PROCESS: ProcessRuleId = "open_process"
@@ -118,13 +119,12 @@ HAND_OFF_LANGUAGE: ProcessRuleId = "hand_off_language"
 HAND_OFF_REPLY: ProcessRuleId = "hand_off_reply"
 SHOW_REPLY: ProcessRuleId = "show_reply"
 RENDER_NEEDS_INFO: ProcessRuleId = "render_needs_info"
-RENDER_REFER_NOTICE: ProcessRuleId = "render_refer_notice"
 TAKE_THREAD: ProcessRuleId = "take_thread"
 RENDER_DECISION: ProcessRuleId = "render_decision"
 END_AFTER_DECISION: ProcessRuleId = "end_after_decision"
 CLOSE_ON_CONSULTANT_DECISION: ProcessRuleId = "close_on_consultant_decision"
 REOPEN_ON_APPEAL: ProcessRuleId = "reopen_on_appeal"
-NOTIFY_APPEAL: ProcessRuleId = "notify_appeal"
+NOTIFY_HANDOFF: ProcessRuleId = "notify_handoff"
 PROCESS_RULE_IDS: frozenset[ProcessRuleId] = frozenset(get_args(ProcessRuleId))
 
 PRODUCT_ASKS_BEFORE_HANDOFF = 2
@@ -337,7 +337,6 @@ TURN_RULES: tuple[Rule[TurnClassified], ...] = (
 
 ANALYSIS_RULES: tuple[Rule[AnalysisCompleted], ...] = (
     Rule(RENDER_NEEDS_INFO, ANALYSIS_COMPLETED, outcome_is(NEEDS_INFO), emits(send_template(NEEDS_INCOME))),
-    Rule(RENDER_REFER_NOTICE, ANALYSIS_COMPLETED, outcome_is(REFER), emits(send_template(REFER_NOTICE))),
     Rule(TAKE_THREAD, ANALYSIS_COMPLETED, outcome_is(REFER), emits(hand_off(POLICY_REFER))),
     Rule(
         RENDER_DECISION,
@@ -366,10 +365,14 @@ STARTED_RULES: tuple[Rule[ProcessStarted], ...] = (
 )
 
 
-# An appeal reopens the case for a person, then tells the customer a person will review it (D25).
+# An appeal reopens the case for a person (D25); the handoff's own notice tells the customer.
 APPEAL_RULES: tuple[Rule[AppealRequested], ...] = (
     Rule(REOPEN_ON_APPEAL, APPEAL_REQUESTED, lambda _appeal: True, emits(hand_off(CUSTOMER_REQUESTED_HUMAN))),
-    Rule(NOTIFY_APPEAL, APPEAL_REQUESTED, lambda _appeal: True, emits(send_template(REFER_NOTICE))),
+)
+
+# Every move to a person tells the customer why, whatever caused it: the policy, a turn, a failure, or an appeal (D28).
+HANDOFF_RULES: tuple[Rule[ThreadTaken], ...] = (
+    Rule(NOTIFY_HANDOFF, THREAD_TAKEN, lambda _taken: True, emits(send_template(REFER_NOTICE))),
 )
 
 
@@ -381,6 +384,7 @@ RuleTable = (
     | tuple[Rule[ConsultantClosed], ...]
     | tuple[Rule[AppealRequested], ...]
     | tuple[Rule[ProcessStarted], ...]
+    | tuple[Rule[ThreadTaken], ...]
 )
 
 
@@ -415,6 +419,8 @@ def fired_rules(event: StoredEvent) -> tuple[Firing, ...]:
             return fire(APPEAL_RULES, event)
         case ProcessStarted():
             return fire(STARTED_RULES, event)
+        case ThreadTaken():
+            return fire(HANDOFF_RULES, event)
         case TemplateSent() | NoRuleEvent():
             return ()
         case _:
@@ -463,6 +469,7 @@ RULE_TABLES: Mapping[EventName, RuleTable] = MappingProxyType(
         CONSULTANT_CLOSED: CLOSE_RULES,
         APPEAL_REQUESTED: APPEAL_RULES,
         PROCESS_STARTED: STARTED_RULES,
+        THREAD_TAKEN: HANDOFF_RULES,
     }
 )
 

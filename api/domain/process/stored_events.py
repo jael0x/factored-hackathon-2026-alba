@@ -16,12 +16,13 @@ from api.contract_models import (
     ProcessState,
     ProductKey,
     ReasonCode,
+    RuleId,
     TemplateId,
     TurnLanguage,
 )
 from api.domain.closed_sets import parse_member
 from api.domain.locale import LOCALES
-from api.domain.policy.engine import POLICY_VERSIONS
+from api.domain.policy.engine import POLICY_VERSIONS, RULE_IDS
 from api.domain.process.events import (
     ANALYSIS_COMPLETED,
     APPEAL_REQUESTED,
@@ -30,6 +31,7 @@ from api.domain.process.events import (
     PREQUALIFICATION_DECIDED,
     PROCESS_STARTED,
     TEMPLATE_SENT,
+    THREAD_TAKEN,
     TURN_CLASSIFIED,
 )
 from api.domain.process.lifecycle import (
@@ -117,6 +119,7 @@ class AnalysisCompleted:
     product: ProductKey
     locale: Locale
     policy_version: PolicyVersion
+    deciding_rule: RuleId
 
 
 @dataclass(frozen=True)
@@ -124,6 +127,7 @@ class PrequalificationDecided:
     event_id: UUID
     outcome: CloseOutcome
     decided_by: DecidedBy
+    locale: Locale
 
 
 @dataclass(frozen=True)
@@ -139,6 +143,12 @@ class AppealRequested:
     process_id: UUID
     locale: Locale
     product: ProductKey
+
+
+@dataclass(frozen=True)
+class ThreadTaken:
+    event_id: UUID
+    reason_code: ReasonCode
 
 
 @dataclass(frozen=True)
@@ -164,6 +174,7 @@ StoredEvent = (
     | ConsultantClosed
     | AppealRequested
     | ProcessStarted
+    | ThreadTaken
     | NoRuleEvent
 )
 
@@ -189,11 +200,14 @@ def parse_stored_event(
             event_id,
             outcome=parse_close_outcome(payload),
             decided_by=parse_member(field(payload, "decided_by"), DECIDED_BY, "decided_by"),
+            locale=parse_locale(payload),
         )
     if name == CONSULTANT_CLOSED:
         return ConsultantClosed(event_id, outcome=parse_close_outcome(payload), locale=parse_locale(payload))
     if name == APPEAL_REQUESTED:
         return parse_appeal(event_id, process_id, payload)
+    if name == THREAD_TAKEN:
+        return ThreadTaken(event_id, parse_member(field(payload, "reason_code"), REASON_CODES, "reason_code"))
     if name == PROCESS_STARTED:
         return ProcessStarted(
             event_id, parse_locale(payload), parse_member(field(payload, "product"), PRODUCT_KEYS, "product")
@@ -246,6 +260,7 @@ def parse_analysis(event_id: UUID, payload: Payload) -> AnalysisCompleted:
         product=parse_member(field(payload, "product"), PRODUCT_KEYS, "product"),
         locale=parse_locale(payload),
         policy_version=parse_member(field(payload, "policy_version"), POLICY_VERSIONS, "policy_version"),
+        deciding_rule=parse_member(field(payload, "deciding_rule"), RULE_IDS, "deciding_rule"),
     )
 
 
