@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from api.contract_models import (
+    AlreadyClosedError,
     CaseConflictError,
     CyclePendingError,
     ForbiddenError,
@@ -47,6 +48,14 @@ def case_ended() -> ApiError:
 
 def case_not_appealable() -> ApiError:
     return ApiError(status.HTTP_409_CONFLICT, CaseConflictError(error="case_not_appealable"))
+
+
+def case_not_closable() -> ApiError:
+    return ApiError(status.HTTP_409_CONFLICT, CaseConflictError(error="case_not_closable"))
+
+
+def already_closed() -> ApiError:
+    return ApiError(status.HTTP_409_CONFLICT, AlreadyClosedError(error="already_closed"))
 
 
 def cycle_pending() -> ApiError:
