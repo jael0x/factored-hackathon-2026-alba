@@ -786,11 +786,10 @@ spec('rules', 'ru-turn', {
   src: 'ARCHITECTURE.md, "Process rules"; AGENTS.md, "Tests"',
 });
 spec('rules', 'ru-analysis', {
-  name: 'On a policy result', tech: '4 rules', status: 'defined',
-  summary: 'Ask for income, notify and hand off, or render the certificate.',
+  name: 'On a policy result', tech: '3 rules', status: 'defined',
+  summary: 'Ask for income, hand off, or render the certificate.',
   fixed: [
     '`render_needs_info`: `NEEDS_INFO`, then `template.send` for `needs_income`. Stays `ai_active`.',
-    '`render_refer_notice`: `REFER`, then `template.send` for `refer_notice`.',
     '`take_thread`: `REFER`, then `process.transition` to `human_active` with `policy_refer`.',
     '`render_decision`: `PREQUALIFIED` or `NOT_PREQUALIFIED`, then `decision.render` with `decided_by = policy`.',
   ],
@@ -804,6 +803,15 @@ spec('rules', 'ru-end', {
     '`close_on_consultant_decision`: `conversation.consultant_closed`, then `decision.render` with `decided_by = consultant`, then `process.end`. The policy is not run again.',
   ],
   src: 'ARCHITECTURE.md, "Process rules", "Consultant close"',
+});
+spec('rules', 'ru-handoff', {
+  name: 'On a handoff', tech: '1 rule', status: 'defined',
+  summary: 'Every move to `human_active` tells the customer why (D28).',
+  fixed: [
+    '`notify_handoff`: `conversation.thread_taken`, then `template.send` for `refer_notice`, led by the reason.',
+    'One notice per handoff: a policy `REFER`, each handoff turn rule, an appeal, and the third failed attempt.',
+  ],
+  src: 'ARCHITECTURE.md, "Process rules"; PLAN.md D28',
 });
 spec('rules', 'ru-purity', {
   name: 'Pure match', tech: 'no customer reads', status: 'defined',
@@ -1047,18 +1055,21 @@ spec('templates', 't-notices', {
     '`confirm_prequalify` once the product is known: asks whether to start the pre-qualification. The policy waits for the answer.',
     '`needs_income` on `NEEDS_INFO`: asks for monthly income. The case stays `ai_active`.',
     '`which_product` when a stated income or a confirmation names no product. The policy waits.',
-    '`refer_notice` on `REFER`: a person will review. No score, and no word on whether the customer pre-qualifies.',
+    '`refer_notice` on every move to `human_active`, led by the reason (D28): a person will review. No score, and no word on whether the customer pre-qualifies.',
     'The sentences, in `es` and `pt`, are in `api/domain/policy/templates.py`. The three that follow a known product name it and refuse to render without one.',
     '`product_case_open` when a message names the other product and that product has its own open case (D24).',
   ],
   src: 'ARCHITECTURE.md, "Process rules", "Commands", "The other three flows"',
 });
 spec('templates', 't-handoff', {
-  name: 'Other handoff notices', tech: 'no template named', status: 'open',
-  summary: 'What the customer reads when a case leaves the assistant for another reason.',
-  fixed: ['Only a policy `REFER` sends a notice (`refer_notice`).'],
-  open: [['New', 'Nothing tells the customer about a handoff for `customer_requested_human`, `out_of_scope`, `language_unsupported`, `tool_failed`, `model_output_invalid`, or `reply_forbidden`.']],
-  src: 'ARCHITECTURE.md, "Process rules"',
+  name: 'Handoff reasons', tech: 'handoff_notice', status: 'defined',
+  summary: 'The sentence that tells the customer why a person has the case, before `refer_notice` (D28, closes D15 (1)).',
+  fixed: [
+    '`policy_refer`: the sentence of the rule that referred (R01, R03, R04, R05, R09), read from the `analysis.completed` the handoff names. R09\'s names the product already held.',
+    'Every other reason code has its own sentence: `customer_requested_human`, `out_of_scope`, `language_unsupported`, `reply_forbidden`, `model_output_invalid`, `tool_failed`.',
+    'Template text in ES and PT, never model text. No score, no threshold, no outcome. The locale comes from the event the handoff names in `caused_by_event_id`; the product from the case.',
+  ],
+  src: 'ARCHITECTURE.md, "Process rules", "Commands", "Templates"; PLAN.md D28',
 });
 
 spec('llm', 'l-schema', {
