@@ -12,7 +12,7 @@ from api.application.cycle.attempt import Done, Failed, Retried
 from api.application.cycle.ports import ReadTurn
 from api.application.processes import InCase, StartCase
 from api.contract_models import Locale, ProductKey
-from api.domain.policy.templates import certificate_for_close, certificate_for_policy, render_notice
+from api.domain.policy.templates import certificate_for_close, certificate_for_policy, handoff_notice, render_notice
 from api.domain.process.commands import GENERATE_COMMAND, hand_off
 from api.domain.process.events import ANALYSIS_COMPLETED
 from api.domain.process.lifecycle import CUSTOMER_REQUESTED_HUMAN, MessageStamp, ProcessRow, parse_state
@@ -71,7 +71,7 @@ START = ["conversation.message_received", "process.started", "analysis.completed
 NOTICE = [*START, "conversation.template_sent"]
 ANSWER = ["conversation.message_received", "conversation.turn_classified"]
 POLICY_END = ["prequalification.decided", "process.state_changed", "process.ended"]
-HANDOFF = ["process.state_changed", "conversation.thread_taken"]
+HANDOFF = ["process.state_changed", "conversation.thread_taken", "conversation.template_sent"]
 
 
 @pytest.fixture(scope="module")
@@ -268,7 +268,7 @@ def test_an_income_in_another_countrys_currency_is_asked_for_again(url: str, poo
 def test_alicia_is_referred_waits_for_a_person_and_is_closed_by_one(url: str, pool: ConnectionPool) -> None:
     model = scripted()
     started(pool, ALICIA)
-    assert names(url, ALICIA) == [*NOTICE, *HANDOFF]
+    assert names(url, ALICIA) == [*START, *HANDOFF]
     assert cases(url, ALICIA) == [("human_active", None, "credit_card", "es")]
     assert payloads(url, ALICIA, "conversation.thread_taken") == [
         {"reason_code": "policy_refer", "from_state": "ai_active", "to_state": "human_active"}
@@ -283,7 +283,7 @@ def test_alicia_is_referred_waits_for_a_person_and_is_closed_by_one(url: str, po
     assert names(url, ALICIA)[-5:] == ["conversation.message_received", "conversation.consultant_closed", *POLICY_END]
     assert cases(url, ALICIA) == [("ended", "prequalified", "credit_card", "es")]
     assert thread(url, ALICIA) == [
-        ("template", render_notice("refer_notice", "es", "credit_card")),
+        ("template", handoff_notice("es", "credit_card", "policy_refer", "R05")),
         ("template", certificate_for_close("PREQUALIFIED", "es", "credit_card")),
     ]
     assert payloads(url, ALICIA, "prequalification.decided")[0]["decided_by"] == "consultant"
@@ -316,10 +316,21 @@ def test_mariana_asks_a_person_to_review_her_no_and_a_consultant_decides_it_agai
     assert [p["decided_by"] for p in payloads(url, MARIANA, "prequalification.decided")] == ["policy", "consultant"]
     assert thread(url, MARIANA) == [
         ("template", certificate_for_policy("NOT_PREQUALIFIED", "es", "credit_card")),
-        ("template", render_notice("refer_notice", "es", "credit_card")),
+        ("template", handoff_notice("es", "credit_card", "customer_requested_human", None)),
         ("template", certificate_for_close("PREQUALIFIED", "es", "credit_card")),
     ]
     assert [p["end_reason"] for p in payloads(url, MARIANA, "process.ended")] == ["not_prequalified", "prequalified"]
+
+
+def test_an_appeal_in_another_language_tells_the_customer_why_in_that_language(url: str, pool: ConnectionPool) -> None:
+    started(pool, MARIANA)
+    [(process_id,)] = query(url, "SELECT id FROM processes WHERE customer_id = %s", (MARIANA,))
+    append(pool, appeal_requested(ProcessRow(process_id, MARIANA, "ended"), "pt", "credit_card"))
+    run_until_idle(pool, scripted())
+    assert thread(url, MARIANA) == [
+        ("template", certificate_for_policy("NOT_PREQUALIFIED", "es", "credit_card")),
+        ("template", handoff_notice("pt", "credit_card", "customer_requested_human", None)),
+    ]
 
 
 def test_a_question_about_the_products_is_answered_with_the_shown_reply(url: str, pool: ConnectionPool) -> None:
@@ -354,20 +365,39 @@ def test_a_reply_that_states_an_outcome_is_withheld_and_sent_to_a_person(url: st
     converse(url, pool, JULIANA, ScriptedModel({"sí": states_outcome}), "sí")
     assert names(url, JULIANA) == [*NOTICE, *ANSWER, *HANDOFF]
     assert payloads(url, JULIANA, "conversation.thread_taken")[0]["reason_code"] == "reply_forbidden"
-    assert [author for author, _ in thread(url, JULIANA)] == ["template"]
+    assert thread(url, JULIANA) == [
+        ("template", render_notice("needs_income", "es", "credit_card")),
+        ("template", handoff_notice("es", "credit_card", "reply_forbidden", None)),
+    ]
 
 
 def test_three_model_failures_send_the_case_to_a_person(url: str, pool: ConnectionPool) -> None:
     started(pool, JULIANA)
     say(url, pool, JULIANA, INCOME)
     results = run_until_idle(pool, scripted("es-gano-45000-pesos", failures=3))
-    assert results == [Retried(1, MODEL_DOWN), Retried(2, MODEL_DOWN), Failed(3, MODEL_DOWN)]
-    assert queue(url)[-1] == ("conversation.generate", "generate_while_ai", "failed", 3, MODEL_DOWN)
+    assert results == [Retried(1, MODEL_DOWN), Retried(2, MODEL_DOWN), Failed(3, MODEL_DOWN), Done(1)]
+    assert queue(url)[-2:] == [
+        ("conversation.generate", "generate_while_ai", "failed", 3, MODEL_DOWN),
+        done("template.send", "notify_handoff"),
+    ]
     assert names(url, JULIANA) == [*NOTICE, "conversation.message_received", *HANDOFF]
     assert payloads(url, JULIANA, "conversation.thread_taken") == [
         {"reason_code": "tool_failed", "from_state": "ai_active", "to_state": "human_active"}
     ]
+    assert thread(url, JULIANA)[-1] == ("template", handoff_notice("es", "credit_card", "tool_failed", None))
     assert cases(url, JULIANA) == [("human_active", None, "credit_card", "es")]
+
+
+def test_a_message_that_fails_after_a_language_switch_is_answered_in_the_new_language(
+    url: str, pool: ConnectionPool
+) -> None:
+    started(pool, JULIANA)
+    send(pool, JULIANA, INCOME, InCase(open_case_of(url, JULIANA).process_id), "pt")
+    run_until_idle(pool, scripted("es-gano-45000-pesos", failures=3))
+    assert thread(url, JULIANA) == [
+        ("template", render_notice("needs_income", "es", "credit_card")),
+        ("template", handoff_notice("pt", "credit_card", "tool_failed", None)),
+    ]
 
 
 def test_a_failed_attempt_that_succeeds_next_writes_one_turn(url: str, pool: ConnectionPool) -> None:
@@ -381,7 +411,7 @@ def test_without_an_api_key_the_command_fails_and_names_what_is_missing(url: str
     started(pool, JULIANA)
     say(url, pool, JULIANA, INCOME)
     run_until_idle(pool, read_turn_for(CLAUDE_SONNET_5_5, NO_KEY, no_record))
-    name, _rule, status, attempts, error = queue(url)[-1]
+    name, _rule, status, attempts, error = queue(url)[-2]
     assert (name, status, attempts) == ("conversation.generate", "failed", 3)
     assert error == (
         "MissingApiKey: ANTHROPIC_API_KEY is not set in .env: conversation.generate cannot call Claude. "
@@ -417,7 +447,7 @@ def test_the_rows_of_calls_that_failed_survive_the_rolled_back_attempts(url: str
     started(pool, JULIANA)
     claude = ScriptedClaude([message("not json") for _ in range(6)])
     converse(url, pool, JULIANA, ClaudeTurnReader(claude, CLAUDE_SONNET_5_5, PostgresLlmTurns(pool).record), INCOME)
-    assert queue(url)[-1][:4] == ("conversation.generate", "generate_while_ai", "failed", 3)
+    assert queue(url)[-2][:4] == ("conversation.generate", "generate_while_ai", "failed", 3)
     assert query(url, "SELECT parse_ok, raw_response FROM llm_turns") == [(False, "not json")] * 6
     assert cases(url, JULIANA) == [("human_active", None, "credit_card", "es")]
 
@@ -457,9 +487,10 @@ def test_a_message_that_reaches_a_case_handed_off_before_its_turn_does_not_call_
     run_until_idle(pool, model)
     assert [request.text for request in model.calls] == [HUMAN]
     assert names(url, JULIANA) == [*NOTICE, *ANSWER, "conversation.message_received", *HANDOFF]
-    assert queue(url)[-2:] == [
+    assert queue(url)[-3:] == [
         done("process.transition", "hand_off_human"),
         done("conversation.generate", "generate_while_ai"),
+        done("template.send", "notify_handoff"),
     ]
 
 

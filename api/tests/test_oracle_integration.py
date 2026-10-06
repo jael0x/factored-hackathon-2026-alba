@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from api.application.cycle.ports import TurnRequest
 from api.contract_models import CloseOutcome, EndReason
-from api.domain.policy.templates import certificate_for_close, certificate_for_policy, render_notice
+from api.domain.policy.templates import certificate_for_close, certificate_for_policy, handoff_notice, render_notice
 from api.domain.process.events import ANALYSIS_COMPLETED
 from api.infrastructure.config.settings import settings
 from api.infrastructure.mail.smtp import get_mailer
@@ -37,7 +37,7 @@ CESAR_EMAIL = "cesar.gonzalez@example.com"
 JULIANA_INCOME = load_turn_fixture("es-gano-45000-pesos").text
 STILL_WAITING = "¿ya revisaron mi caso?"
 NEEDS_INCOME = render_notice("needs_income", "es", "credit_card")
-ALICIA_OPENING = [("customer", CARD_ES), ("template", render_notice("refer_notice", "es", "credit_card"))]
+ALICIA_OPENING = [("customer", CARD_ES), ("template", handoff_notice("es", "credit_card", "policy_refer", "R05"))]
 
 # ARCHITECTURE.md, "What gets built": the four outcomes. Written here, not read from the fixture, so a fixture edit
 # that moves an outcome turns this file red instead of moving the expectation with it.
