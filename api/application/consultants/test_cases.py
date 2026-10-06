@@ -9,13 +9,14 @@ from api.application.consultants.cases import (
     CaseAlreadyClosed,
     CaseNotClosable,
     ConsultantCaseNotFound,
+    Handoff,
     TraceRecord,
     close_consultant_case,
-    read_handoff_packet,
+    read_handoff,
 )
 from api.contract_models import ProcessState
 from api.domain.policy.engine import CreditProfile, decide
-from api.domain.process.case import CaseRow
+from api.domain.process.case import CaseRow, CertificateView, ThreadLine
 from api.domain.process.events import transition_key
 from api.domain.process.lifecycle import ProcessRow
 from api.domain.process.new_events import (
@@ -29,7 +30,7 @@ from api.domain.process.new_events import (
     consultant_closed,
     thread_taken,
 )
-from api.domain.process.packet import HandoffSource, QueueItem, StoredEvent
+from api.domain.process.packet import HandoffSource, QueueItem, StoredEvent, packet_of
 
 PROCESS_ID = UUID("11111111-1111-4111-8111-111111111111")
 CLOSE_ID = UUID("55555555-5555-4555-8555-555555555555")
@@ -77,6 +78,23 @@ class FakeCases:
 
     def case(self, process_id: UUID) -> CaseRow | None:
         raise AssertionError("the close does not read the case row")
+
+
+THREAD = [
+    ThreadLine(UUID("66666666-6666-4666-8666-666666666666"), "customer", "Quero um cartão de crédito", CAUSE.event_id),
+]
+
+
+@dataclass
+class FakeThreads:
+    read_for: list[tuple[str, UUID]] = field(default_factory=list)
+
+    def thread(self, customer_id: str, process_id: UUID) -> list[ThreadLine]:
+        self.read_for.append((customer_id, process_id))
+        return THREAD
+
+    def certificate(self, customer_id: str, process_id: UUID) -> CertificateView | None:
+        raise AssertionError("the packet reads no certificate")
 
 
 @dataclass
@@ -129,16 +147,15 @@ def test_a_second_close_of_the_case_is_already_closed(answer: AppendResult | Ide
         close_consultant_case(FakeEvents(answer), FakeCases(source("human_active")), CESAR, PROCESS_ID, "PREQUALIFIED")
 
 
-@pytest.mark.parametrize("state", ["ai_active", "ended"])
-def test_only_a_case_with_a_person_has_a_packet(state: ProcessState) -> None:
-    assert read_handoff_packet(FakeCases(source(state)), PROCESS_ID) is None
+@pytest.mark.parametrize("found", [source("ai_active"), source("ended"), None])
+def test_only_a_case_with_a_person_has_a_packet_and_its_thread_is_not_read(found: HandoffSource | None) -> None:
+    threads = FakeThreads()
+    assert read_handoff(FakeCases(found), threads, PROCESS_ID) is None
+    assert threads.read_for == []
 
 
-def test_an_unknown_case_has_no_packet() -> None:
-    assert read_handoff_packet(FakeCases(None), PROCESS_ID) is None
-
-
-def test_a_case_with_a_person_has_its_packet() -> None:
-    packet = read_handoff_packet(FakeCases(source("human_active")), PROCESS_ID)
-    assert packet is not None
-    assert (packet.process_id, packet.reason_code, packet.closable) == (PROCESS_ID, "policy_refer", True)
+def test_a_case_with_a_person_has_its_packet_and_the_thread_of_the_customer_it_belongs_to() -> None:
+    threads = FakeThreads()
+    found = source("human_active")
+    assert read_handoff(FakeCases(found), threads, PROCESS_ID) == Handoff(packet_of(found), THREAD)
+    assert threads.read_for == [(ALICIA, PROCESS_ID)]

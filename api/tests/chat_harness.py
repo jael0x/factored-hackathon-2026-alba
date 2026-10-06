@@ -133,4 +133,5 @@ def alicia_packet(case: dict[str, Any], locale: Locale = "es") -> dict[str, Any]
         "policy_version": "alba-credit-v1",
         "outcome": "REFER",
         "closable": True,
+        "messages": case["messages"],
     }

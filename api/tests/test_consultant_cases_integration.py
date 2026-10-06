@@ -10,7 +10,8 @@ from fastapi.testclient import TestClient
 from api.application.consultants.cases import CaseAlreadyClosed, close_consultant_case
 from api.contract_models import CloseOutcome, EndReason, Locale
 from api.domain.policy.engine import CreditProfile, decide
-from api.domain.policy.templates import certificate_for_close
+from api.domain.policy.templates import certificate_for_close, render_notice
+from api.domain.process.commands import REFER_NOTICE
 from api.domain.process.events import transition_key
 from api.domain.process.lifecycle import ProcessRow
 from api.domain.process.new_events import Cause, analysis_completed, thread_taken
@@ -118,6 +119,26 @@ def test_the_case_shows_the_handoff_packet(http: TestClient) -> None:
     assert answer(packet(http, case)) == (200, alicia_packet(case))
 
 
+def test_the_case_shows_the_customers_thread_as_she_reads_it(http: TestClient) -> None:
+    case = say(http, referred(http, locale="pt"), "já revisaram meu caso?", ALICIA.customer_id, locale="pt")
+    status, body = answer(packet(http, case))
+    assert (status, body["messages"]) == (200, case["messages"])
+    assert [(line["author"], line["body"]) for line in body["messages"]] == [
+        ("customer", CARD_ES),
+        ("template", render_notice(REFER_NOTICE, "pt", "credit_card")),
+        ("customer", "já revisaram meu caso?"),
+    ]
+
+
+def test_the_thread_in_the_packet_is_only_that_case_s(http: TestClient) -> None:
+    alicia = referred(http)
+    juliana = say(http, start(http, sub=JULIANA.customer_id), "quiero hablar con una persona", JULIANA.customer_id)
+    assert [answer(packet(http, case))[1]["messages"] for case in (alicia, juliana)] == [
+        alicia["messages"],
+        juliana["messages"],
+    ]
+
+
 def test_a_case_the_policy_left_without_a_result_cannot_be_closed(http: TestClient, chat_database: str) -> None:
     asked = start(http, sub=JULIANA.customer_id)
     case = say(http, asked, "quiero hablar con una persona", JULIANA.customer_id)
@@ -140,6 +161,7 @@ def test_a_case_the_policy_left_without_a_result_cannot_be_closed(http: TestClie
             "reason_code": "customer_requested_human",
             "locale": "es",
             "closable": False,
+            "messages": case["messages"],
         },
     )
     written = event_count(chat_database)
