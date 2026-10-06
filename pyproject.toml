@@ -11,7 +11,7 @@ ignore = ["E501"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["api", "pipeline", "conftest.py"]
+files = ["api", "pipeline", "eval", "conftest.py"]
 exclude = ['^api/contract_models\.py$']
 plugins = ["pydantic.mypy"]
 
