@@ -6,6 +6,7 @@ type ProcessState = components["schemas"]["ProcessState"];
 type ProductKey = components["schemas"]["ProductKey"];
 type CaseSummary = components["schemas"]["CaseSummary"];
 type CloseOutcome = components["schemas"]["CloseOutcome"];
+type DecidedBy = components["schemas"]["DecidedBy"];
 
 // One send: the same id and locale go out again on a retry, so the API answers it as the same message.
 // A start from the home names its product (the consent given in the dialog); every other send goes to its case.
@@ -28,6 +29,7 @@ export const HUMAN_ACTIVE: ProcessState = "human_active";
 export const ENDED: ProcessState = "ended";
 export const PREQUALIFIED: CloseOutcome = "PREQUALIFIED";
 export const NOT_PREQUALIFIED: CloseOutcome = "NOT_PREQUALIFIED";
+export const DECIDED_BY_CONSULTANT: DecidedBy = "consultant";
 
 export function newSend(text: string, locale: Locale, product?: ProductKey): PendingSend {
   return { text, clientMessageId: crypto.randomUUID(), locale, product };

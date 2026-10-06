@@ -125,6 +125,7 @@ export const es = {
     rateOn: (date: string) => `al tipo de cambio del ${date}`,
     appeal: "Pedir que una persona lo revise",
     appealFailed: "No pudimos pedir la revisión. Inténtalo de nuevo.",
+    reviewed: "Revisado por una persona.",
   },
   consultant: {
     nav: "Asesor",

@@ -101,6 +101,7 @@ export const pt: Messages = {
     rateOn: (date: string) => `pelo câmbio de ${date}`,
     appeal: "Pedir que uma pessoa revise",
     appealFailed: "Não conseguimos pedir a revisão. Tente novamente.",
+    reviewed: "Revisado por uma pessoa.",
   },
   consultant: {
     nav: "Consultor",
