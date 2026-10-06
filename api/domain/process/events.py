@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import NewType
+from typing import NewType, get_args
 from uuid import UUID
 
 from api.contract_models import (
@@ -29,6 +29,7 @@ APPEAL_REQUESTED: EventName = "conversation.appeal_requested"
 CUSTOMER_ACTOR: Actor = "customer"
 CONSULTANT_ACTOR: Actor = "consultant"
 SYSTEM_ACTOR: Actor = "system"
+ACTORS: frozenset[Actor] = frozenset(get_args(Actor))
 
 ActionKey = NewType("ActionKey", str)
 
