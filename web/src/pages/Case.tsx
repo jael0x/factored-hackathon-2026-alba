@@ -6,7 +6,8 @@ import { useLoad } from "../api/useLoad";
 import { AppBar } from "../components/AppBar";
 import { Certificate } from "../components/Certificate";
 import { ErrorCard } from "../components/ErrorCard";
-import { ENDED, HUMAN_ACTIVE, bubbleOf, newSend, showsTyping, type PendingSend } from "../chat";
+import { Author, MessageLine } from "../components/MessageLine";
+import { ENDED, HUMAN_ACTIVE, newSend, showsTyping, type PendingSend } from "../chat";
 import { useLocale } from "../i18n/locale";
 import { useMessages } from "../i18n/messages";
 import { HOME_PATH, LOGIN_PATH } from "../routes";
@@ -165,22 +166,14 @@ function Thread({ caseData, pending, typing, firstName, certificate }: ThreadPro
               </li>
             );
           }
-          const bubble = bubbleOf(line.author);
-          return (
-            <li key={line.id} className={`msg ${bubble.side} enter`}>
-              <Author side={bubble.side} firstName={firstName} />
-              <div className={`bubble ${bubble.surface === "solid" ? "solid" : "glass"} ${bubble.surface}`}>
-                {line.body}
-              </div>
-            </li>
-          );
+          return <MessageLine key={line.id} line={line} customerName={firstName} />;
         })}
         {certificate && !lines.some((line) => line.event_id === caseData?.certificate?.event_id) && (
           <li className="msg-certificate">{certificate}</li>
         )}
         {pending && (
           <li className="msg me enter">
-            <Author side="me" firstName={firstName} />
+            <Author side="me" customerName={firstName} />
             <div className="bubble glass tinted">{pending.text}</div>
           </li>
         )}
@@ -195,19 +188,6 @@ function Thread({ caseData, pending, typing, firstName, certificate }: ThreadPro
       </ol>
       <div ref={end} className="thread-end" />
     </>
-  );
-}
-
-function Author({ side, firstName }: { side: "me" | "alba"; firstName: string | undefined }) {
-  const t = useMessages();
-  if (side === "me") {
-    return <span className="who caption muted">{firstName}</span>;
-  }
-  return (
-    <span className="who caption muted">
-      <span className="orb small" aria-hidden="true" />
-      {t.chat.assistant}
-    </span>
   );
 }
 
