@@ -1,4 +1,3 @@
-from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
@@ -49,6 +48,7 @@ from api.presentation.http.errors import (
     message_id_reused,
     not_found,
 )
+from api.presentation.http.wire_numbers import wire_optional_number
 from api.presentation.worker.loop import Worker, cycle_settled
 
 router = APIRouter()
@@ -212,12 +212,8 @@ def wire_certificate(certificate: CertificateView) -> Certificate:
         outcome=certificate.outcome,
         body=certificate.body,
         product=certificate.product,
-        income_local=wire_amount(income.income_local),
+        income_local=wire_optional_number(income.income_local),
         income_currency=income.income_currency,
-        income_usd=wire_amount(income.income_usd),
+        income_usd=wire_optional_number(income.income_usd),
         as_of=income.as_of,
     )
-
-
-def wire_amount(amount: Decimal | None) -> float | None:
-    return None if amount is None else float(amount)
