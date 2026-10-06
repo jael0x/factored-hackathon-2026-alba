@@ -1,4 +1,5 @@
 import logging
+from uuid import UUID
 
 from api.application.cycle.context import Cycle, Trigger, expect, process_of, require_profile, stored
 from api.application.cycle.ports import TurnRequest
@@ -21,15 +22,21 @@ def classify_message(cycle: Cycle, trigger: Trigger, payload: CommandPayload) ->
         return
     profile = require_profile(cycle, trigger.row.customer_id)
     earlier = [stored(row) for row in cycle.log.earlier(process.process_id, trigger.row.seq)]
-    model = cycle.read_turn(turn_request(message, process, profile))
+    model = cycle.read_turn(turn_request(message, process, profile, trigger.cause.command_id))
     open_products = cycle.case.open_products(process.customer_id, process.process_id)
     stamp = stamp_turn(earlier, model.reading.product, cycle.case.product_of(process.process_id), open_products)
     cycle.case.store_turn_facts(process.process_id, message.locale, stamp.product)
     cycle.events.append(turn_classified(process, message.locale, model, stamp, trigger.cause))
 
 
-def turn_request(message: MessageReceived, process: ProcessRow, profile: CreditProfile) -> TurnRequest:
+def turn_request(
+    message: MessageReceived, process: ProcessRow, profile: CreditProfile, command_id: UUID | None
+) -> TurnRequest:
+    if command_id is None:
+        raise ValueError(f"message {message.event_id} reached the model outside a command")
     return TurnRequest(
+        process_id=process.process_id,
+        command_id=command_id,
         text=message.text,
         locale=message.locale,
         process_state=process.state,
