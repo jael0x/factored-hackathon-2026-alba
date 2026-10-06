@@ -3,7 +3,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from api.infrastructure.config.settings import require_jwt_secret, settings
+from api.infrastructure.config.settings import claude_access, require_jwt_secret, settings
+from api.infrastructure.db.llm_turns import PostgresLlmTurns
 from api.infrastructure.db.pool import open_pool
 from api.presentation.http.errors import install_error_handlers
 from api.presentation.http.routes import (
@@ -24,7 +25,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     require_jwt_secret(settings.jwt_secret)
     pool = open_pool(settings.database_url, settings.db_pool_min, settings.db_pool_max)
     app.state.pool = pool
-    read_turn = read_turn_for(settings.llm_model)
+    read_turn = read_turn_for(settings.llm_model, claude_access(), PostgresLlmTurns(pool).record)
     worker = Worker(pool, read_turn) if settings.run_worker else None
     app.state.worker = worker
     if worker is not None:

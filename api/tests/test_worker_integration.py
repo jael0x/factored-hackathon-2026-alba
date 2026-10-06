@@ -23,13 +23,16 @@ from api.infrastructure.config.settings import settings
 from api.infrastructure.db.commands import PostgresCommands
 from api.infrastructure.db.events import PostgresEventLog, PostgresEvents
 from api.infrastructure.db.json_codec import configure_json
+from api.infrastructure.db.llm_turns import PostgresLlmTurns
 from api.infrastructure.db.processes import PostgresProcesses
 from api.infrastructure.db.profile import PostgresProfiles
+from api.infrastructure.llm.conversation import CLAUDE_SONNET_5_5, ClaudeAccess, ClaudeTurnReader, LlmCall, missing_key
 from api.infrastructure.llm.keywords import B0_MODEL, read_keyword_turn
 from api.infrastructure.llm.schema import reading_of
 from api.main import app
 from api.presentation.worker import loop
-from api.presentation.worker.loop import Worker, model_not_built, read_turn_for, run_next, run_until_idle
+from api.presentation.worker.loop import Worker, read_turn_for, run_next, run_until_idle
+from api.tests.claude_harness import ScriptedClaude, fixture_json, message
 from api.tests.cycle_harness import (
     ALICIA,
     JUAN,
@@ -80,7 +83,7 @@ def worker_database(migrated_database: Callable[[str], str]) -> str:
 @pytest.fixture
 def url(worker_database: str) -> str:
     with psycopg.connect(worker_database) as conn:
-        conn.execute("TRUNCATE events, messages, processes, commands")
+        conn.execute("TRUNCATE events, messages, processes, commands, llm_turns")
     return worker_database
 
 
@@ -146,6 +149,13 @@ def facts(score: int, income: Decimal | None, currency: str, usd: Decimal | None
         },
         {"name": "income_usd", "value": usd, "source": "customer_credit_profile.income_usd", "as_of": AS_OF},
     ]
+
+
+NO_KEY = ClaudeAccess("", None)
+
+
+def no_record(_call: LlmCall) -> None:
+    pass
 
 
 def start(
@@ -354,31 +364,49 @@ def test_a_failed_attempt_that_succeeds_next_writes_one_turn(url: str, pool: Con
     assert queue(url)[3] == ("conversation.generate", "generate_while_ai", "done", 2, MODEL_DOWN)
 
 
-def test_without_a_model_adapter_the_command_fails_and_names_what_is_missing(url: str, pool: ConnectionPool) -> None:
+def test_without_an_api_key_the_command_fails_and_names_what_is_missing(url: str, pool: ConnectionPool) -> None:
     started(pool, JULIANA)
     say(url, pool, JULIANA, INCOME)
-    run_until_idle(pool, model_not_built)
+    run_until_idle(pool, read_turn_for(CLAUDE_SONNET_5_5, NO_KEY, no_record))
     name, _rule, status, attempts, error = queue(url)[-1]
     assert (name, status, attempts) == ("conversation.generate", "failed", 3)
     assert error == (
-        "ModelNotBuilt: conversation.generate has no model adapter yet: M3 builds "
-        "api/infrastructure/llm/conversation.py. Set LLM_MODEL=b0-keywords to read turns with the keyword baseline "
-        "(PLAN.md D23)."
+        "MissingApiKey: ANTHROPIC_API_KEY is not set in .env: conversation.generate cannot call Claude. "
+        "Set it, or set LLM_MODEL=b0-keywords to read turns with the keyword baseline (PLAN.md D23)."
     )
     assert cases(url, JULIANA) == [("human_active", None, "credit_card", "es")]
 
 
 def test_b0_reads_a_typed_message_when_llm_model_names_it(url: str, pool: ConnectionPool) -> None:
     started(pool, JULIANA)
-    converse(url, pool, JULIANA, read_turn_for(B0_MODEL), INCOME)
+    converse(url, pool, JULIANA, read_turn_for(B0_MODEL, NO_KEY, no_record), INCOME)
     assert cases(url, JULIANA) == [("ended", "prequalified", "credit_card", "es")]
 
 
 def test_llm_model_picks_what_reads_a_turn() -> None:
-    assert read_turn_for(B0_MODEL) is read_keyword_turn
-    assert read_turn_for("gpt-6-luna") is model_not_built
-    with pytest.raises(ValueError, match="LLM_MODEL=gpt-4 names nothing that reads a turn"):
-        read_turn_for("gpt-4")
+    assert read_turn_for(B0_MODEL, NO_KEY, no_record) is read_keyword_turn
+    assert read_turn_for(CLAUDE_SONNET_5_5, NO_KEY, no_record) is missing_key
+    assert isinstance(read_turn_for(CLAUDE_SONNET_5_5, ClaudeAccess("sk-ant-test", None), no_record), ClaudeTurnReader)
+    with pytest.raises(ValueError, match="LLM_MODEL=gpt-6-luna names nothing that reads a turn"):
+        read_turn_for("gpt-6-luna", NO_KEY, no_record)
+
+
+def test_claude_reads_a_typed_message_and_each_call_is_kept_in_llm_turns(url: str, pool: ConnectionPool) -> None:
+    started(pool, JULIANA)
+    claude = ScriptedClaude([message(fixture_json("es-gano-45000-pesos"))])
+    converse(url, pool, JULIANA, ClaudeTurnReader(claude, CLAUDE_SONNET_5_5, PostgresLlmTurns(pool).record), INCOME)
+    assert cases(url, JULIANA) == [("ended", "prequalified", "credit_card", "es")]
+    rows = query(url, "SELECT model, parse_ok, input_tokens, output_tokens, request->>'prompt_version' FROM llm_turns")
+    assert rows == [(CLAUDE_SONNET_5_5, True, 1200, 90, "alba-turn-v1")]
+
+
+def test_the_rows_of_calls_that_failed_survive_the_rolled_back_attempts(url: str, pool: ConnectionPool) -> None:
+    started(pool, JULIANA)
+    claude = ScriptedClaude([message("not json") for _ in range(6)])
+    converse(url, pool, JULIANA, ClaudeTurnReader(claude, CLAUDE_SONNET_5_5, PostgresLlmTurns(pool).record), INCOME)
+    assert queue(url)[-1][:4] == ("conversation.generate", "generate_while_ai", "failed", 3)
+    assert query(url, "SELECT parse_ok, raw_response FROM llm_turns") == [(False, "not json")] * 6
+    assert cases(url, JULIANA) == [("human_active", None, "credit_card", "es")]
 
 
 def test_a_customer_with_no_credit_profile_fails_the_run_and_goes_to_a_person(url: str, pool: ConnectionPool) -> None:

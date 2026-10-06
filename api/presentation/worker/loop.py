@@ -9,39 +9,27 @@ from psycopg_pool import ConnectionPool
 from api.application.cycle.attempt import AttemptResult, run_claimed
 from api.application.cycle.context import Cycle
 from api.application.cycle.plan import PlanningEvents
-from api.application.cycle.ports import ReadTurn, TurnRequest
-from api.domain.process.turns import ModelReading
+from api.application.cycle.ports import ReadTurn
 from api.infrastructure.db.commands import PostgresCommands
 from api.infrastructure.db.events import PostgresEventLog, PostgresEvents
 from api.infrastructure.db.messages import PostgresThread
 from api.infrastructure.db.processes import PostgresProcesses
 from api.infrastructure.db.profile import PostgresProfiles
+from api.infrastructure.llm.conversation import CLAUDE_SONNET_5_5, ClaudeAccess, RecordCall, claude_turn_reader
 from api.infrastructure.llm.keywords import B0_MODEL, read_keyword_turn
 
 POLL_SECONDS = 1.0
-GPT_6_LUNA = "gpt-6-luna"
 
 logger = logging.getLogger(__name__)
 
 
-class ModelNotBuilt(Exception):
-    pass
-
-
-def model_not_built(_request: TurnRequest) -> ModelReading:
-    raise ModelNotBuilt(
-        "conversation.generate has no model adapter yet: M3 builds api/infrastructure/llm/conversation.py. "
-        f"Set LLM_MODEL={B0_MODEL} to read turns with the keyword baseline (PLAN.md D23)."
-    )
-
-
-# LLM_MODEL names what reads a turn: B0, the keyword baseline, or the model, which fails until M3 builds it.
-def read_turn_for(model: str) -> ReadTurn:
+# LLM_MODEL names what reads a turn: B0, the keyword baseline, or Claude Sonnet 5.5 (PLAN.md D23, D27).
+def read_turn_for(model: str, access: ClaudeAccess, record: RecordCall) -> ReadTurn:
     if model == B0_MODEL:
         return read_keyword_turn
-    if model == GPT_6_LUNA:
-        return model_not_built
-    raise ValueError(f"LLM_MODEL={model} names nothing that reads a turn: use {GPT_6_LUNA} or {B0_MODEL}")
+    if model == CLAUDE_SONNET_5_5:
+        return claude_turn_reader(access, model, record)
+    raise ValueError(f"LLM_MODEL={model} names nothing that reads a turn: use {CLAUDE_SONNET_5_5} or {B0_MODEL}")
 
 
 def postgres_cycle(conn: psycopg.Connection, read_turn: ReadTurn) -> Cycle:
