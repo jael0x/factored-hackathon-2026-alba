@@ -562,7 +562,7 @@
     </div>
     <div class="composer"><div class="composer-in glass"><input aria-label="Mensaje" placeholder="Escribe tu mensaje" /><button class="send" aria-label="Enviar"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button></div></div>
     <div class="note-src" hidden>
-      <p>Alicia, Cali: score 615, en la banda 580 a 619. Tras el "sí", R05 devuelve <code>REFER</code>, se envía <code>refer_notice</code> y el proceso pasa a <code>human_active</code> con <code>policy_refer</code>.</p>
+      <p>Alicia, Cali: score 615, en la banda 580 a 619. Tras el "sí", R05 devuelve <code>REFER</code>, el proceso pasa a <code>human_active</code> con <code>policy_refer</code> y se envía <code>refer_notice</code>, encabezado por el motivo de R05 (D28).</p>
       <p>Puede seguir escribiendo y el mensaje se guarda. El modelo no se llama, nadie responde y no aparece "escribiendo…".</p>
       <p>También pasan a una persona: <code>customer_requested_human</code>, <code>out_of_scope</code>, <code>language_unsupported</code>, <code>reply_forbidden</code> y <code>tool_failed</code> (tras tres intentos fallidos).</p>
     </div>
@@ -747,9 +747,9 @@
               </table>
             </div>
           </li>
-          <li class="ev solid"><span class="n">4</span><div><div class="name">conversation.template_sent</div><div class="detail"><span class="mono">refer_notice</span></div><div class="caption">Causado por el evento 3</div></div></li>
-          <li class="ev solid"><span class="n">5</span><div><div class="name">process.state_changed</div><div class="detail"><span class="tag t-slate">ai_active</span> a <span class="tag t-clay">human_active</span></div><div class="caption">Causado por el evento 3</div></div></li>
-          <li class="ev solid"><span class="n">6</span><div><div class="name">conversation.thread_taken</div><div class="detail"><span class="mono">policy_refer</span></div><div class="caption">Causado por el evento 3</div></div></li>
+          <li class="ev solid"><span class="n">4</span><div><div class="name">process.state_changed</div><div class="detail"><span class="tag t-slate">ai_active</span> a <span class="tag t-clay">human_active</span></div><div class="caption">Causado por el evento 3</div></div></li>
+          <li class="ev solid"><span class="n">5</span><div><div class="name">conversation.thread_taken</div><div class="detail"><span class="mono">policy_refer</span></div><div class="caption">Causado por el evento 3</div></div></li>
+          <li class="ev solid"><span class="n">6</span><div><div class="name">conversation.template_sent</div><div class="detail"><span class="mono">refer_notice</span></div><div class="caption">Causado por el evento 5</div></div></li>
         </ol>
       </div>
     </div>
