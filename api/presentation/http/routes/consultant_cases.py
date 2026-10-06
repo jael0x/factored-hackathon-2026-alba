@@ -9,11 +9,12 @@ from api.application.consultants.cases import (
     CaseAlreadyClosed,
     CaseNotClosable,
     ConsultantCaseNotFound,
+    Handoff,
     close_consultant_case,
     list_consultant_queue,
     read_case_trace,
     read_consultant_case,
-    read_handoff_packet,
+    read_handoff,
 )
 from api.contract_models import (
     CaseTrace,
@@ -26,13 +27,15 @@ from api.contract_models import (
 )
 from api.domain.process.case import NO_INCOME_FACTS
 from api.domain.process.lifecycle import ENDED, HUMAN_ACTIVE
-from api.domain.process.packet import HandoffPacket, QueueItem
+from api.domain.process.packet import QueueItem
 from api.domain.process.rules import END_REASON_BY_OUTCOME
 from api.domain.session.tokens import SessionClaims
+from api.infrastructure.db.cases import PostgresThreads
 from api.infrastructure.db.consultant_cases import PostgresConsultantCases
 from api.presentation.http.cycle import planning, require_settled
 from api.presentation.http.dependencies import get_connection, require_consultant
 from api.presentation.http.errors import already_closed, case_not_closable, not_found
+from api.presentation.http.thread import wire_thread
 from api.presentation.http.trace import wire_trace
 from api.presentation.http.wire_numbers import wire_optional_number
 
@@ -57,10 +60,10 @@ def read_packet(
     _: Annotated[SessionClaims, Depends(require_consultant)],
     conn: Annotated[psycopg.Connection, Depends(get_connection)],
 ) -> ConsultantCase:
-    packet = read_handoff_packet(PostgresConsultantCases(conn), process_id)
-    if packet is None:
+    handoff = read_handoff(PostgresConsultantCases(conn), PostgresThreads(conn), process_id)
+    if handoff is None:
         raise not_found()
-    return wire_packet(packet)
+    return wire_packet(handoff)
 
 
 @router.get("/case/{process_id}/trace", response_model=CaseTrace)
@@ -129,7 +132,8 @@ def wire_queue_item(item: QueueItem) -> ConsultantQueueItem:
 
 
 # state is a one-value enum on the wire; model_validate checks it against the generated model.
-def wire_packet(packet: HandoffPacket) -> ConsultantCase:
+def wire_packet(handoff: Handoff) -> ConsultantCase:
+    packet = handoff.packet
     result = packet.result
     income = NO_INCOME_FACTS if result is None else result.income
     return ConsultantCase.model_validate(
@@ -150,5 +154,6 @@ def wire_packet(packet: HandoffPacket) -> ConsultantCase:
             "reason_code": packet.reason_code,
             "locale": packet.locale,
             "closable": packet.closable,
+            "messages": wire_thread(handoff.thread),
         }
     )

@@ -28,7 +28,6 @@ from api.contract_models import (
     CaseSummary,
     Certificate,
     SendMessageRequest,
-    ThreadMessage,
 )
 from api.domain.process.case import CaseRow, CertificateView
 from api.domain.process.new_events import IdempotencyConflict
@@ -47,6 +46,7 @@ from api.presentation.http.errors import (
     message_id_reused,
     not_found,
 )
+from api.presentation.http.thread import wire_thread
 from api.presentation.http.wire_numbers import wire_optional_number
 
 router = APIRouter()
@@ -175,10 +175,7 @@ def wire_case(view: CaseView) -> Case:
         end_reason=case.end_reason,
         product=case.product,
         locale=case.locale,
-        messages=[
-            ThreadMessage(id=line.line_id, author=line.author, body=line.body, event_id=line.event_id)
-            for line in view.thread
-        ],
+        messages=wire_thread(view.thread),
         certificate=None if view.certificate is None else wire_certificate(view.certificate),
         appealable=view.appealable,
     )

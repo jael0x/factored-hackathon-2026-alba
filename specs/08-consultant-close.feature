@@ -25,6 +25,11 @@ Feature: Consultant close
       | rule    | R05              |
       | policy  | alba-credit-v1   |
 
+  Scenario: The case shows the customer's conversation, read only
+    Given Alicia wrote "já revisaram meu caso?" while her case waited for a person
+    When César opens Alicia's case
+    Then he sees her conversation as she sees it, ending with "já revisaram meu caso?"
+
   Scenario: The consultant has no way to write in the thread
     When César opens Alicia's case
     Then the only actions are to close as pre-qualified or as not pre-qualified

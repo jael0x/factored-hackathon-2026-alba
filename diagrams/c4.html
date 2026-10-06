@@ -1195,7 +1195,7 @@ node('pg-queue', {
 });
 node('pg-consultantcase', {
   parent: 'web', kind: 'component', name: 'Consultant case', tech: 'ConsultantCase.tsx',
-  summary: '`/consultant/case/:id`. The handoff packet and two close actions. No reply box.',
+  summary: '`/consultant/case/:id`. The customer\'s thread, read only, the handoff packet, and two close actions. No reply box.',
   src: 'ARCHITECTURE.md, "Auth and screens", "Consultant close"',
 });
 node('pg-trace', {
@@ -1218,7 +1218,7 @@ view('web', {
     ['pg-case', 'api', 'messages, certificate'],
     ['pg-login', 'api', 'search, code, JWT'],
     ['pg-queue', 'api', 'queue'],
-    ['pg-consultantcase', 'api', 'packet, close'],
+    ['pg-consultantcase', 'api', 'packet and thread, close'],
     ['pg-trace', 'api', 'events'],
   ],
 });
@@ -1302,6 +1302,7 @@ spec('pg-queue', 'aq-list', {
     'Processes in `human_active`. `ended` processes are not shown.',
     'Alicia appears. Juan, Juliana, and Mariana do not.',
     'Ordered by `processes.created_at`, then process id. Each card carries the customer name, `product`, the latest `reason_code`, and the case\'s `locale`.',
+    'Built Oct 5 (W5): `ConsultantQueue.tsx` and the sidebar count read one `GET /consultant/queue`, loaded once by `ConsultantLayout.tsx`.',
   ],
   src: 'ARCHITECTURE.md, "Auth and screens"; AGENTS.md, "Database"',
 });
@@ -1313,6 +1314,7 @@ spec('pg-consultantcase', 'ac-packet', {
     'Read from the case\'s latest `analysis.completed`: request, score, income, deciding rule, `policy_version`, outcome. They are null when the policy never ran.',
     'The packet may show the rule id and the facts. An internal reason code is not customer copy.',
     '`closable` is false when there is no analysis or it is `NEEDS_INFO` (D15 (3)): the screen then offers no close.',
+    'Built Oct 5 (W5): the packet also carries the customer\'s thread (`messages`), read for the case\'s own `customer_id`; the screen shows it read only, beside the rows.',
   ],
   src: 'ARCHITECTURE.md, "Auth and screens", "The other three flows"',
 });
@@ -1324,6 +1326,7 @@ spec('pg-consultantcase', 'ac-close', {
     'The close writes `conversation.consultant_closed`; a template tells the customer and the process ends.',
     'Which outcome César picks for Alicia is not fixed by the contract.',
     'The two actions show only when the packet says `closable`.',
+    'Built Oct 5 (W5): a confirm dialog before the close; a 503 is never sent again, a 409 or a 404 reads the case again.',
   ],
   src: 'ARCHITECTURE.md, "Consultant close", "The other three flows"',
 });

@@ -15,3 +15,11 @@ export const CASE_PATH = "/case";
 export function casePath(processId: string): string {
   return `${CASE_PATH}/${processId}`;
 }
+
+const CONSULTANT_CASE_SEGMENT = "case";
+
+export const CONSULTANT_CASE_ROUTE = `${CONSULTANT_CASE_SEGMENT}/:processId`;
+
+export function consultantCasePath(processId: string): string {
+  return `${HOME_PATH.consultant}/${CONSULTANT_CASE_SEGMENT}/${processId}`;
+}
