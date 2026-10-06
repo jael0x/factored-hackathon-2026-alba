@@ -5,6 +5,7 @@ from decimal import Decimal
 from api.contract_models import IncomeCurrency, Intent, ProductKey, ReasonCode, TurnLanguage
 from api.domain.policy.engine import NEEDS_INFO
 from api.domain.process.commands import CONFIRM_PREQUALIFY_TEMPLATE, WHICH_PRODUCT
+from api.domain.process.lifecycle import REPLY_FORBIDDEN
 from api.domain.process.stored_events import (
     CLARIFY_INTENT,
     DECLINE_PREQUALIFY_INTENT,
@@ -38,6 +39,17 @@ class WithheldReading:
 
 
 ModelReading = ShownReading | WithheldReading
+
+
+# Only a template may write an outcome (ARCHITECTURE.md, "Policy alba-credit-v1"). The stems cover every form the
+# contract names ("no precalifica", "pré-qualificado", "não pré-qualifica") and the plain Portuguese "pré-qualifica";
+# letter case is ignored and a stem matches inside a word, so "precalificación" is withheld too.
+OUTCOME_PHRASES: tuple[str, ...] = ("precalifica", "pré-qualifica", "pre-qualifica")
+
+
+def withheld_reason(reply_text: str) -> ReasonCode | None:
+    text = reply_text.lower()
+    return REPLY_FORBIDDEN if any(phrase in text for phrase in OUTCOME_PHRASES) else None
 
 
 @dataclass(frozen=True)

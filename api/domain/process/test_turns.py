@@ -1,10 +1,12 @@
+from typing import get_args
 from uuid import UUID, uuid4
 
 import pytest
 
 from api.contract_models import Intent, Outcome, ProductKey, TemplateId, TurnLanguage
 from api.domain.process.stored_events import AnalysisCompleted, ShownTurn, StoredEvent, TemplateSent, WithheldTurn
-from api.domain.process.turns import TurnStamp, stamp_turn
+from api.domain.process.turns import TurnStamp, stamp_turn, withheld_reason
+from api.tests.turn_harness import TurnFixtureName, load_turn_fixture
 
 EVENT_ID = UUID("77777777-7777-4777-8777-777777777777")
 
@@ -98,3 +100,18 @@ def test_only_the_latest_analysis_decides_the_income_request() -> None:
 def test_a_decline_before_the_analysis_does_not_withdraw_its_request() -> None:
     earlier = [shown("decline_prequalify"), analysis("NEEDS_INFO")]
     assert stamp_turn(earlier, None, "credit_card").income_requested is True
+
+
+@pytest.mark.parametrize("name", get_args(TurnFixtureName))
+def test_only_the_reply_that_states_an_outcome_is_withheld(name: TurnFixtureName) -> None:
+    expected = "reply_forbidden" if name == "es-si-reply-states-outcome" else None
+    assert withheld_reason(load_turn_fixture(name).turn.reply_text) == expected
+
+
+@pytest.mark.parametrize(
+    "reply",
+    ["NO PRECALIFICAS por ahora.", "Você pré-qualifica!", "Voce pre-qualifica", "Tu precalificación está lista."],
+    ids=["upper case", "plain portuguese", "no accent", "inside a word"],
+)
+def test_every_form_of_an_outcome_is_withheld(reply: str) -> None:
+    assert withheld_reason(reply) == "reply_forbidden"
