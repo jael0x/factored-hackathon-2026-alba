@@ -830,7 +830,7 @@ spec('worker', 'w-loop', {
   fixed: [
     'Takes the lowest-`seq` `pending` row whose customer has no earlier pending command, with `FOR UPDATE SKIP LOCKED`. One attempt is one transaction; a failure rolls back to a savepoint and records `attempt_count` and `last_error`.',
     'At most 3 attempts, the next one at once. On the third failure the command and its event\'s later commands fail, and an `ai_active` case moves to `human_active` with `reason_code = tool_failed`. It does not retry in a loop.',
-    '`LLM_MODEL` picks the turn reader: B0 (`b0-keywords`, D23) on the compose stack, or the model, which fails until M3.',
+    '`LLM_MODEL` picks the turn reader: Claude Sonnet 5.5 (`claude-sonnet-5-5`, D27), the compose default, or B0 (`b0-keywords`, D23) on a stack with no `ANTHROPIC_API_KEY`. With Claude named and no key, the reader fails and names the key.',
     'One thread in the API process when `RUN_WORKER` is set: it wakes when work is enqueued and polls every second. `POST /messages` waits on `wait_for_cycle` and runs no command itself.',
   ],
   tests: ['Two workers never run one customer\'s commands side by side.', 'Three model failures send the case to a person with `tool_failed`.'],
@@ -1085,19 +1085,16 @@ spec('llm', 'l-schema', {
   src: 'ARCHITECTURE.md, "How the model is called"',
 });
 spec('llm', 'l-call', {
-  name: 'The call', tech: 'api/infrastructure/llm/conversation.py', status: 'partial',
-  summary: 'One call, no streaming, structured output, then Pydantic validation.',
+  name: 'The call', tech: 'api/infrastructure/llm/conversation.py', status: 'defined',
+  summary: 'One call, no streaming, structured output, then Pydantic validation. Built Oct 5 (M3).',
   fixed: [
-    'One call, no streaming, structured output with the `ConversationTurn` JSON schema. It must also validate in Pydantic; one retry, then `model_output_invalid`.',
+    'One Messages API call with `output_config.format` set to the `ConversationTurn` JSON schema, effort `low`, the system prompt cached. It must also validate in Pydantic; one retry, then the attempt fails, and the third failed attempt ends in `tool_failed` (D27 (3)).',
     'Only this module imports the Anthropic SDK. `LLM_MODEL` defaults to `claude-sonnet-5-5` (D27); `b0-keywords` runs B0 for a stack with no key (D23). The worker is given the reader `LLM_MODEL` names; a B0 turn writes no `llm_turns` row, which the adapter writes (M3).',
     'Missing key: `conversation.generate` fails saying so. Timeout, rate limit, or server error: a failed attempt under the limit of 3.',
-    '`temperature` 0 if the model accepts it.',
+    'No `temperature`: Claude Sonnet 5.5 rejects non-default sampling. A refusal is a failed attempt; the model is never swapped for another (D27 (5)).',
+    'R11, measured on the held-out run: median 2.1 s, 95th percentile 3.0 s per turn, 60 of 60 answers parsed, about USD 0.0018 per turn (`docs/model_card_conversation_turn.md`).',
   ],
-  open: [
-    ['R11', 'Whether `temperature` 0 is accepted; latency, tokens, and structured output validity per turn; ES and PT intent quality.'],
-    ['New', 'The Messages API with `output_config.format` (D27).'],
-  ],
-  src: 'ARCHITECTURE.md, "How the model is called"',
+  src: 'ARCHITECTURE.md, "How the model is called"; PLAN.md D27, R11',
 });
 spec('llm', 'l-prompt', {
   name: 'Prompt', tech: 'what leaves the service', status: 'partial',
@@ -1108,10 +1105,10 @@ spec('llm', 'l-prompt', {
     'Out of scope: a new mortgage, investments, a limit increase, a disputed transaction, a third party\'s balance.',
     'The instruction not to state eligibility or a limit.',
     'Not the amounts, score, days past due, full name, document, email, or address.',
+    'The text is `SYSTEM_PROMPT` in `api/infrastructure/llm/prompt.py`, versioned as `PROMPT_VERSION` (`alba-turn-v1`), which every `llm_turns` row and eval report cites.',
   ],
   open: [
     ['D11', 'Whether ID-like numbers typed by the customer are masked before the call.'],
-    ['New', 'The prompt text itself, and where it is versioned so eval runs can cite it.'],
   ],
   src: 'ARCHITECTURE.md, "How the model is called"',
 });
@@ -1122,7 +1119,7 @@ spec('llm', 'l-turns', {
     'Columns: `id`, `process_id`, `command_id`, `request jsonb`, `raw_response text`, `parsed jsonb`, `parse_ok bool`, `model text`, `input_tokens`, `output_tokens`, `latency_ms`, `created_at`.',
     'Stored either way, including when parsing fails.',
   ],
-  open: [['D1', 'Cost per case from stored usage times the list price, and whether a second model is compared.']],
+  open: [['D1', 'Whether a second model is compared on the eval subset. Cost is measured: about USD 0.0018 per turn (R11).']],
   src: 'ARCHITECTURE.md, "How the model is called", "Cycle"',
 });
 
@@ -1646,24 +1643,23 @@ node('f-agents', {
 });
 
 node('ev-suite', {
-  parent: 'eval', kind: 'component', name: 'Scenario suite', tech: '~300 held-out cases', status: 'open',
-  summary: 'Stratified by outcome, country, segment, and language.',
+  parent: 'eval', kind: 'component', name: 'Scenario suite', tech: 'eval/heldout/v1.jsonl, 60 items', status: 'defined',
+  summary: 'Frozen by sha256 before any prompt tuning. Built Oct 5 (M4, D27 (6)).',
   fixed: [
-    'Sep 27 design: normal ~45%, ambiguous or unsupported ~20%, human-required ~15% (review-band score, DPD 1-29, missing score, asks for a human), adversarial or failure ~20%.',
-    'Each case has an `expected_route` and an `expected_decision`. Test customers are disjoint from prompt tuning.',
-    'Portuguese utterances are team-written or machine-translated, and disclosed as a limitation (D6). Injection and cross-customer attempts are in the suite (D9).',
+    'ES-MX 12, ES-CO 10, ES-AR 10, PT 14, mixed Spanish and Portuguese 5, English and French 3, injection and cross-customer attempts 6 (D9).',
+    'Each item carries the case it arrives in and its gold labels; the route is scored through the engine\'s own rules (`eval/routes.py`).',
+    'Portuguese utterances are team-written and disclosed as a limitation (D6). The labels were drafted with a Claude model and not reviewed by a second person (`docs/model_card_conversation_turn.md`).',
   ],
-  open: [['D7', 'How many cases and repeated runs fit the API budget and rate limits, and the spend cap.']],
-  src: 'PLAN.md §7.1',
+  src: 'PLAN.md §7.1, D27 (6); docs/model_card_conversation_turn.md',
 });
 node('ev-systems', {
-  parent: 'eval', kind: 'component', name: 'Systems compared', tech: 'B0, B1, P', status: 'open',
-  summary: 'Rules bot, naive LLM agent, and the proposed system on the same suite.',
-  fixed: ['B0: keyword menu plus the policy. B1: the policy described in the prompt, no enforcement. P: the proposed system.'],
-  open: [
-    ['D7', 'Whether B0, B1, and P stay as designed. Decided with D27: 60 held-out items, B0 against Claude Sonnet 5.5; B1, the judge, and repeated runs cut.'],
-    ['D1', 'Whether a second model is compared on the eval subset.'],
+  parent: 'eval', kind: 'component', name: 'Systems compared', tech: 'B0, Claude Sonnet 5.5', status: 'partial',
+  summary: 'The keyword baseline and the proposed classifier on the same frozen set.',
+  fixed: [
+    'B0: the keyword rules (`api/infrastructure/llm/keywords.py`). P: Claude Sonnet 5.5 with `alba-turn-v1`. Both run through the same engine rules.',
+    'B1 (the policy described in the prompt), the LLM judge, and repeated runs are cut for time (D27 (6)).',
   ],
+  open: [['D1', 'Whether a second model is compared on the eval subset.']],
   src: 'PLAN.md §7.2',
 });
 node('ev-learned', {
@@ -1677,15 +1673,14 @@ node('ev-learned', {
   src: 'ARCHITECTURE.md, "Learned component (evaluation)"; PLAN.md §5, D3',
 });
 node('ev-metrics', {
-  parent: 'eval', kind: 'component', name: 'Metrics', tech: 'the brief\'s names', status: 'open',
-  summary: 'Safe resolution, escalation quality, unsafe outcomes, latency, cost.',
+  parent: 'eval', kind: 'component', name: 'Metrics', tech: 'eval/metrics.py, eval/reports/', status: 'defined',
+  summary: 'Intent, product, language, and amount accuracy; the route; unsafe outcomes; latency and cost. Built Oct 5 (M6).',
   fixed: [
-    'Safe automated resolution; containment reported apart, never as success; escalation quality; unsafe outcomes with Wilson 95% intervals.',
-    'p50 and p95 latency; cost per attempted case and per safe resolution, from token usage times the list price.',
-    'Breakdowns by language and segment. An LLM judge only for tone, clarity, and language, with a validated rubric.',
+    'Accuracy per field and the route the engine takes, with Wilson 95% intervals; missed and unneeded handoffs; a policy run without consent or on the wrong product.',
+    'Median and 95th percentile latency; tokens and cost per turn from usage times the list price; slices by language and variant.',
+    'Each run writes Markdown and JSON to `eval/reports/`, named after the systems that ran. The LLM judge is cut (D27 (6)).',
   ],
-  open: [['D7', 'Confirm the metric set once the harness scope is fixed.']],
-  src: 'PLAN.md §7.3',
+  src: 'PLAN.md §7.3, D27 (6); docs/model_card_conversation_turn.md',
 });
 /*DATA-END*/
 </script>
