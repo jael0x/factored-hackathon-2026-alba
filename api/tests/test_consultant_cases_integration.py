@@ -17,7 +17,17 @@ from api.domain.process.new_events import Cause, analysis_completed, thread_take
 from api.infrastructure.db.consultant_cases import PostgresConsultantCases
 from api.infrastructure.db.events import PostgresEvents
 from api.infrastructure.db.json_codec import configure_json
-from api.tests.chat_harness import CARD_ES, CESAR, appeal, bearer, close, say, start
+from api.tests.chat_harness import (
+    CARD_ES,
+    CESAR,
+    alicia_packet,
+    alicia_queue_item,
+    appeal,
+    bearer,
+    close,
+    say,
+    start,
+)
 from api.tests.cycle_harness import MARIANA, planning, wait_until_blocked
 from api.tests.login_harness import ALICIA, JUAN, JULIANA, NO_EMAIL
 
@@ -79,42 +89,11 @@ def set_opened_at(url: str, case: dict[str, Any], opened_at: str) -> None:
         conn.execute("UPDATE processes SET created_at = %s WHERE id = %s", (opened_at, case["process_id"]))
 
 
-def alicia_packet(case: dict[str, Any], locale: Locale = "es") -> dict[str, Any]:
-    return {
-        "process_id": case["process_id"],
-        "state": "human_active",
-        "customer_id": ALICIA.customer_id,
-        "first_name": "Alicia Mariana",
-        "last_name": "Parra Álvarez",
-        "product": "credit_card",
-        "credit_score": 615,
-        "income_local": 4707334.28,
-        "income_currency": "COP",
-        "income_usd": 1167.41890144,
-        "deciding_rule": "R05",
-        "policy_version": "alba-credit-v1",
-        "outcome": "REFER",
-        "reason_code": "policy_refer",
-        "locale": locale,
-        "closable": True,
-    }
-
-
 def test_the_review_queue_lists_only_the_cases_waiting_for_a_person(http: TestClient) -> None:
     start(http, sub=JUAN.customer_id)
     start(http, sub=MARIANA)
     alicia = referred(http)
-    assert queue(http) == [
-        {
-            "process_id": alicia["process_id"],
-            "customer_id": ALICIA.customer_id,
-            "first_name": "Alicia Mariana",
-            "last_name": "Parra Álvarez",
-            "product": "credit_card",
-            "reason_code": "policy_refer",
-            "locale": "es",
-        }
-    ]
+    assert queue(http) == [alicia_queue_item(alicia)]
 
 
 def test_the_queue_follows_when_each_case_was_opened_before_its_id(http: TestClient, chat_database: str) -> None:
