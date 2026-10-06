@@ -23,7 +23,7 @@ export function Case() {
   const t = useMessages();
   const locale = useLocale();
   const me = useLoad(loadMe);
-  const { caseData, setCaseData, loading, loadFailed, reload } = useCase(processId, arrival.case);
+  const { caseData, setCaseData, loading, loadFailed, reload } = useCase(processId);
   const { pending, failed: sendFailed, send } = useSend(processId, setCaseData, reload);
   const appeal = useAppeal(caseData?.process_id, setCaseData);
   useOpening(processId, arrival.opening, send);

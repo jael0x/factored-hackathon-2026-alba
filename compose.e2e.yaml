@@ -1,0 +1,40 @@
+# The browser flows (IMPLEMENTATION.md W7). Run only through scripts/e2e.sh, which starts this as its own project
+# with its own volume, so the demo's data and ports are never touched.
+services:
+  postgres:
+    ports: !reset []
+
+  api:
+    ports: !reset []
+    environment:
+      LLM_MODEL: b0-keywords
+
+  mailpit:
+    ports: !reset []
+
+  web:
+    ports: !reset []
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5173/api/ready"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
+  # The browser shares the web container's network, so it opens http://localhost:5173 as a reviewer does: a secure
+  # context, which crypto.randomUUID (each message's id) requires, and a host Vite accepts.
+  e2e:
+    build:
+      context: .
+      dockerfile: docker/e2e.Dockerfile
+    pull_policy: build
+    network_mode: service:web
+    environment:
+      ALBA_WEB_URL: http://localhost:5173
+    volumes:
+      - ./web/e2e-results:/app/web/e2e-results
+      - ./web/e2e-report:/app/web/e2e-report
+    depends_on:
+      web:
+        condition: service_healthy
+    profiles:
+      - e2e

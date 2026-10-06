@@ -337,7 +337,7 @@ node('web', {
   ],
   files: ['web/src/pages/', 'docker/web.Dockerfile'],
   fixed: [
-    'Business logic does not live in the client. Vitest with jsdom covers the logic the client owns: browser storage, the session, the language choice.',
+    'Business logic does not live in the client. Vitest with jsdom covers the logic the client owns: browser storage, the session, the language choice. Playwright runs the four oracle flows in Chromium against the local stack (`scripts/e2e.sh`, W7).',
     'Every fetch handles loading, error, and success.',
     'An expired JWT returns 401 and the customer sees that the session ended. It is not silently renewed.',
   ],
@@ -1021,6 +1021,7 @@ spec('policy', 'po-oracle', {
   fixed: [
     'Juan `PREQUALIFIED` R05; Juliana `NEEDS_INFO` R06, then `PREQUALIFIED` once she states an amount; Alicia `REFER` R05; Mariana `NOT_PREQUALIFIED` R02.',
     'If an outcome changes, the integration test fails: `api/tests/test_oracle_integration.py` runs the four flows over HTTP and the worker, signed in with emailed codes, with scripted turns (E9).',
+    'The same four flows run in a browser (W7): `web/e2e/oracle.e2e.ts`, through `scripts/e2e.sh` on an empty copy of the stack, signed in through the demo login, with Alicia in Portuguese and César closing her case.',
     'Confirmed Oct 5 against a fresh load (R8): `pytest -m dataset` compares the fixture with the loaded tables. No document, email, or product number in it.',
   ],
   src: 'ARCHITECTURE.md, "Oracle fixtures", "The other three flows"',

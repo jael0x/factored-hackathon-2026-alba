@@ -53,6 +53,14 @@ docker compose up -d
 docker compose --profile test run --rm test pytest -m dataset
 ```
 
+The four oracle flows in a browser (`IMPLEMENTATION.md`, W7) run on their own copy of the stack, project `alba-e2e`: it starts with an empty volume, loads `data/raw/`, and is removed afterwards, so the demo's data and ports are not touched. It needs the dataset, so CI leaves it out. Two to three minutes, the load included:
+
+```bash
+sh scripts/e2e.sh
+```
+
+On a failure, `web/e2e-results/` holds the screenshot and the trace of each failed flow (open a trace with `npx playwright show-trace <path>` in `web/`), and `web/e2e-report/` the HTML report.
+
 CI runs the same checks on every pull request to `main` and every push to `main`. The jobs, coverage floors, and what fails them are in `ARCHITECTURE.md`, "Quality gate".
 
 ## Where things are

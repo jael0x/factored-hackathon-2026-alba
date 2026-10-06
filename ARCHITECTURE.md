@@ -205,6 +205,10 @@ web/
   src/pages/Trace.tsx           # the process's events, numbered in the API's order, with the analysis and the connectors
   src/trace.ts                  # each event's detail (specs/09), the rule and fact rows, and the links by caused_by_event_id
   src/tones.ts                  # the one map from an outcome or a state to its tone (DESIGN.md "Tones")
+  playwright.config.ts          # the browser flows: one worker, no retry, Chrome at 1280 px in Spanish
+  e2e/oracle.e2e.ts             # the four oracle flows in a browser, one of them in Portuguese (W7)
+  e2e/oracle.ts                 # the contract's outcomes as the screens show them, and the people read from api/fixtures/
+  e2e/screens/                  # one module per screen, its controls found by role and by the labels of src/i18n/
 pipeline/
   bronze.py
   silver.py
@@ -223,12 +227,15 @@ db/migrations/011_case_read_indexes.sql
 db/migrations/012_consultant_queue_index.sql
 eval/                       # the frozen held-out set, B0 against Claude, and the reports (M4, M6; run by hand)
 compose.yaml
+compose.e2e.yaml            # the browser flows' copy of the stack: no published ports, B0, and the e2e service
 docker/api.Dockerfile
 docker/web.Dockerfile
 docker/load.Dockerfile
 docker/test.Dockerfile
+docker/e2e.Dockerfile       # Playwright's image, pinned by digest, with the web packages and the oracle fixtures
 pyproject.toml              # ruff, mypy, and coverage settings
 scripts/check.sh            # the Python gate; the test service and CI run it
+scripts/e2e.sh              # the browser flows on an empty copy of the stack, project alba-e2e, removed afterwards
 .github/workflows/quality.yml
 .env.example                # no secrets; the real .env is not committed
 mocks/index.html            # static walkthrough, not the frontend
@@ -744,8 +751,9 @@ Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` exclude
 | `web` | the frontend, Vite, proxies `/api` to the API. Mounts `web/` and reloads on save | yes |
 | `mailpit` | local mail catcher. The API's only SMTP target; its inbox is at http://localhost:8025 | yes |
 | `test` | profile `test`, not started by `up`, rebuilt on every run. Waits for Postgres, runs `npm run check` in `web/`, then `scripts/check.sh` with `ALBA_REQUIRE_POSTGRES=1` | no |
+| `e2e` | profile `e2e` in `compose.e2e.yaml`, run only by `scripts/e2e.sh` in its own project, `alba-e2e`, with its own volume and no published port. Rebuilt on every run. Waits until `web` answers `/api/ready`, then Playwright drives the four oracle flows in Chromium from inside the `web` container's network, at http://localhost:5173 | no |
 
-Who runs it: anyone with the repo, a `.env`, and Docker. The default local demo sets `DEMO_LOGIN=1` and sends every login code to Mailpit. There is no SMS and no real email. Reviewers run `docker compose up` and open the web URL from the compose file. Secrets stay in `.env`; they are not committed.
+Who runs it: anyone with the repo, a `.env`, and Docker. The default local demo sets `DEMO_LOGIN=1` and sends every login code to Mailpit. There is no SMS and no real email. Reviewers run `docker compose up` and open the web URL from the compose file. The page needs a secure context, since `crypto.randomUUID` names each message: http://localhost:5173 is one, and the same port reached by another host name over plain HTTP is not. Secrets stay in `.env`; they are not committed.
 
 With a `.env` holding `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION=us-east-2`, `S3_BUCKET`, `ANTHROPIC_API_KEY`, and `JWT_SECRET`, `docker compose up` needs no other command. `JWT_SECRET` must be at least 32 characters; the API refuses to start without it and names the variable. `.env.example` lists the same names with empty values. `load` uses the AWS CLI and runs `aws s3 cp` for these four keys, prefix `data/`:
 
@@ -781,6 +789,8 @@ The Postgres volume keeps gold. A second `up` does not reload if `load_batches` 
 - **Integration tests cannot pass by skipping.** Without Postgres, `migrated_database` skips. With `ALBA_REQUIRE_POSTGRES=1` (the `test` service and the `python` job) it fails.
 - **mypy is strict** and `pyproject.toml` holds its settings. `api/contract_models.py` is generated and excluded from ruff and mypy. Ruff targets Python 3.12, the version of the images, CI, and a host run, and asks for the PEP 695 syntax (generics and `type` aliases).
 - **Third-party actions are pinned** to a commit SHA, the gitleaks binary to a SHA-256, and every tool to an exact version in `requirements-dev.txt`. Node is 22.23.3 in the `test` image and in both CI jobs that use it, and the `test` image pins its two base images by digest. The workflow has `contents: read` only.
+- **The browser flows run locally.** `scripts/e2e.sh` (W7) loads `data/raw/`, which CI does not have, like `pytest -m dataset`; it is run before a change to a screen, a route, or the worker is merged. CI still type-checks `web/e2e/` (`npm run typecheck` in the `web` job). The flows run on B0 whatever `.env` names, so a classifier change cannot move them, and on a stack that starts empty, so no earlier case changes what a flow sees. One worker, no retry: a flow that passes only the second time fails.
+- **The Playwright image is pinned** by digest, and its build fails when `@playwright/test` in the lockfile is another version than the image's browsers. The image carries its own Node (24) for the runner; the web app is built and checked on 22.23.3.
 - **Not in the gate yet:** mutation testing for `api/domain/`, and running `specs/*.feature`.
 
 ## Data: what is touched and what is not

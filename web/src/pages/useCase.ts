@@ -10,16 +10,15 @@ import { HOME_PATH, casePath } from "../routes";
 
 export type CaseData = components["schemas"]["Case"];
 
-// What the home hands over when a product row opens the chat, or what a send hands to the case's own URL.
-export type Arrival = { opening?: PendingSend; case?: CaseData };
+// What the home hands over when a product row opens the chat. The case itself is never handed over: a history entry
+// outlives a reload, and a case read from it would show a state the API has already moved past.
+export type Arrival = { opening?: PendingSend };
 
 export function arrivalOf(state: unknown): Arrival {
   if (typeof state !== "object" || state === null) {
     return {};
   }
-  const opening = "opening" in state && isPendingSend(state.opening) ? state.opening : undefined;
-  const arrived = "case" in state && isCase(state.case) ? state.case : undefined;
-  return { opening, case: arrived };
+  return { opening: "opening" in state && isPendingSend(state.opening) ? state.opening : undefined };
 }
 
 function isPendingSend(value: unknown): value is PendingSend {
@@ -35,19 +34,8 @@ function isPendingSend(value: unknown): value is PendingSend {
   );
 }
 
-function isCase(value: unknown): value is CaseData {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "process_id" in value &&
-    typeof value.process_id === "string" &&
-    "messages" in value &&
-    Array.isArray(value.messages)
-  );
-}
-
-export function useCase(processId: string | undefined, arrived: CaseData | undefined) {
-  const [caseData, setCaseData] = useState<CaseData | null>(arrived ?? null);
+export function useCase(processId: string | undefined) {
+  const [caseData, setCaseData] = useState<CaseData | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
@@ -126,10 +114,7 @@ export function useSend(processId: string | undefined, onCase: (answer: CaseData
       setPending(null);
       onCase(answer.case);
       if (answer.case.process_id !== processId) {
-        navigate(casePath(answer.case.process_id), {
-          replace: true,
-          state: { case: answer.case },
-        });
+        navigate(casePath(answer.case.process_id), { replace: true });
       }
       return true;
     },
