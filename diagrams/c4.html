@@ -228,13 +228,13 @@ const view = (id, o) => { V[id] = o; };
 const REF_TITLES = {
   D1: 'Model choice evidence and cost',
   D7: 'Evaluation harness and baselines',
-  D11: 'Customer text sent to OpenAI',
+  D11: 'Customer text sent to the model API',
   D17: 'No route lists a customer\'s cases',
   R2: 'data_backup_20260831/ vs data/',
   R7: 'FX sanity check',
   R8: 'Oracle rows',
   R9: 'product_type values',
-  R11: 'gpt-6-luna on the API',
+  R11: 'claude-sonnet-5-5 on the API',
   Copy: 'Template sentences not written yet',
   New: 'Raised while drawing this view',
 };
@@ -301,15 +301,15 @@ node('alba', {
 });
 
 node('openai', {
-  parent: 'context', kind: 'external', name: 'OpenAI API', tech: 'GPT-6 Luna, gpt-6-luna',
+  parent: 'context', kind: 'external', name: 'Anthropic API', tech: 'Claude Sonnet 5.5, claude-sonnet-5-5',
   summary: 'Classifies the message and drafts a clarification. Sees the text and four booleans, no profile values.',
   desc: [
-    'A reasoning model on the OpenAI API, called once per `conversation.generate` with Structured Outputs returning `ConversationTurn`. It does not decide eligibility, compute a limit, write the certificate, or choose the next step.',
+    'Claude Sonnet 5.5 on the Anthropic API (D27), called once per `conversation.generate` with structured output returning `ConversationTurn`. It does not decide eligibility, compute a limit, write the certificate, or choose the next step.',
     'List price on Sep 28, 2026: $0.10 input, $0.01 cached input, $0.50 output per 1M tokens (`PLAN.md` D1).',
   ],
   fixed: [
     'What leaves the service: the message text, the process state, four booleans (`income_on_file`, `score_on_file`, `has_active_card`, `has_active_personal_loan`), and the two-product catalog.',
-    '`OPENAI_API_KEY` lives in `.env`. Never in git, the image, a log, or a prompt.',
+    '`ANTHROPIC_API_KEY` lives in `.env`. Never in git, the image, a log, or a prompt.',
     'A failed call is a failed command attempt. After 3, `human_active` with `tool_failed`. No silent fallback model.',
   ],
   src: 'ARCHITECTURE.md, "How the model is called"',
@@ -355,7 +355,7 @@ node('api', {
   fixed: [
     'No Kafka, Redis, or Inngest. The worker is a loop inside the API process.',
     'The `customer_id` of every query comes from the session JWT.',
-    'If `OPENAI_API_KEY` is missing, Postgres, login, and the policy still start. `conversation.generate` fails saying the key is missing.',
+    'If `ANTHROPIC_API_KEY` is missing, Postgres, login, and the policy still start. `conversation.generate` fails saying the key is missing.',
   ],
   src: 'ARCHITECTURE.md, "Closed stack", "Process-native loop", "Database", "Docker"',
 });
@@ -433,7 +433,7 @@ view('context', {
   rels: [
     ['customer', 'alba', 'Logs in with a document number and an emailed code, asks about a card or a loan, reads the certificate', 'HTTPS'],
     ['consultant', 'alba', 'Reads the packet, closes as pre-qualified or not', 'HTTPS'],
-    ['alba', 'openai', 'Classifies the message, drafts a clarification', 'HTTPS, Structured Outputs'],
+    ['alba', 'openai', 'Classifies the message, drafts a clarification', 'HTTPS, structured output'],
     ['alba', 's3', 'Copies four CSVs when missing', 'aws s3 cp, read-only'],
   ],
 });
@@ -517,7 +517,7 @@ node('templates', {
 });
 node('llm', {
   parent: 'api', kind: 'component', name: 'LLM adapter', tech: 'api/infrastructure/llm/',
-  summary: 'The only module that imports the OpenAI SDK. One call, Structured Outputs, returns `ConversationTurn`.',
+  summary: 'The only module that imports the Anthropic SDK. One call, structured output, returns `ConversationTurn`.',
   desc: ['Classifies the sentence and drafts the clarification. It gets no tool that accepts a `customer_id` and no path into the policy. Swapping the model changes only this module.'],
   files: ['api/infrastructure/llm/conversation.py', 'api/infrastructure/llm/schema.py'],
   src: 'ARCHITECTURE.md, "How the model is called"',
@@ -558,7 +558,7 @@ view('api', {
     ['worker', 'policy', 'policy.run'],
     ['worker', 'tools', 'Reads the profile'],
     ['worker', 'templates', 'template.send, decision.render'],
-    ['llm', 'openai', 'One call', 'Structured Outputs'],
+    ['llm', 'openai', 'One call', 'structured output'],
     ['config', 'postgres', 'Connection', 'SQL'],
   ],
 });
@@ -847,7 +847,7 @@ spec('worker', 'w-generate', {
     'Stores the message\'s `locale` on the process, and `product` when set. If the model sends no product and the process has one, the turn uses the stored one.',
     'The model sets `language` on every turn (`es`, `pt`, or `other`). It only decides whether Alba can read the message; `reply_text` is written in the message\'s `locale` (D21).',
   ],
-  tests: ['Unit tests inject `ConversationTurn` JSON. They do not call OpenAI.'],
+  tests: ['Unit tests inject `ConversationTurn` JSON. They do not call the model API.'],
   src: 'ARCHITECTURE.md, "Events", "Commands"',
 });
 spec('worker', 'w-handlers', {
@@ -1074,16 +1074,16 @@ spec('llm', 'l-schema', {
 });
 spec('llm', 'l-call', {
   name: 'The call', tech: 'api/infrastructure/llm/conversation.py', status: 'partial',
-  summary: 'One call, no streaming, Structured Outputs, then Pydantic validation.',
+  summary: 'One call, no streaming, structured output, then Pydantic validation.',
   fixed: [
-    'One call, no streaming, Structured Outputs with the `ConversationTurn` JSON schema. It must also validate in Pydantic; one retry, then `model_output_invalid`.',
-    'Only this module imports the OpenAI SDK. `LLM_MODEL` defaults to `gpt-6-luna`; `b0-keywords` runs B0 as a named classifier, which the compose stack sets until a key exists (D23). The worker is given the reader `LLM_MODEL` names; a B0 turn writes no `llm_turns` row, which the adapter writes (M3).',
+    'One call, no streaming, structured output with the `ConversationTurn` JSON schema. It must also validate in Pydantic; one retry, then `model_output_invalid`.',
+    'Only this module imports the Anthropic SDK. `LLM_MODEL` defaults to `claude-sonnet-5-5` (D27); `b0-keywords` runs B0 for a stack with no key (D23). The worker is given the reader `LLM_MODEL` names; a B0 turn writes no `llm_turns` row, which the adapter writes (M3).',
     'Missing key: `conversation.generate` fails saying so. Timeout, rate limit, or server error: a failed attempt under the limit of 3.',
     '`temperature` 0 if the model accepts it.',
   ],
   open: [
-    ['R11', 'Whether `temperature` 0 is accepted; latency, tokens, and Structured Outputs validity per turn; ES and PT intent quality.'],
-    ['New', 'Chat Completions or Responses. Both support Structured Outputs; the contract leaves it to the adapter.'],
+    ['R11', 'Whether `temperature` 0 is accepted; latency, tokens, and structured output validity per turn; ES and PT intent quality.'],
+    ['New', 'The Messages API with `output_config.format` (D27).'],
   ],
   src: 'ARCHITECTURE.md, "How the model is called"',
 });
@@ -1141,7 +1141,7 @@ spec('config', 'c-settings', {
   name: 'settings.py', tech: 'environment', status: 'defined',
   summary: 'Eight settings. Secrets come from `.env` or the host.',
   fixed: [
-    '`DATABASE_URL`, `JWT_SECRET`, `OPENAI_API_KEY`, `LLM_MODEL` (default `gpt-6-luna`), `DEMO_LOGIN`, `SMTP_HOST`, `SMTP_PORT`, `MAIL_FROM`.',
+    '`DATABASE_URL`, `JWT_SECRET`, `ANTHROPIC_API_KEY`, `LLM_MODEL` (default `claude-sonnet-5-5`), `DEMO_LOGIN`, `SMTP_HOST`, `SMTP_PORT`, `MAIL_FROM`.',
     'Secrets live in `.env`. Never in git, the image, a log, or a prompt.',
     '`.env.example` lists the names with empty values.',
   ],
@@ -1638,7 +1638,7 @@ node('ev-systems', {
   summary: 'Rules bot, naive LLM agent, and the proposed system on the same suite.',
   fixed: ['B0: keyword menu plus the policy. B1: the policy described in the prompt, no enforcement. P: the proposed system.'],
   open: [
-    ['D7', 'Whether B0, B1, and P stay as designed. B1 would also run on `gpt-6-luna`.'],
+    ['D7', 'Whether B0, B1, and P stay as designed. Decided with D27: 60 held-out items, B0 against Claude Sonnet 5.5; B1, the judge, and repeated runs cut.'],
     ['D1', 'Whether a second model is compared on the eval subset.'],
   ],
   src: 'PLAN.md §7.2',
@@ -1647,7 +1647,7 @@ node('ev-learned', {
   parent: 'eval', kind: 'component', name: 'Learned component', tech: 'ConversationTurn vs B0', status: 'defined',
   summary: 'The `ConversationTurn` classifier against a keyword-rules baseline.',
   fixed: [
-    'The evaluated learned component is the `ConversationTurn` classifier (`gpt-6-luna`, Structured Outputs): product, consent, clarify, and out-of-scope intents (D3).',
+    'The evaluated learned component is the `ConversationTurn` classifier (`claude-sonnet-5-5`, structured output): product, consent, clarify, and out-of-scope intents (D3).',
     'The baseline is B0, a keyword-rules bot, on the same team-labeled held-out set. There is no separate intent router in the runtime.',
     'Customers used while tuning prompts are disjoint from the held-out set.',
   ],
