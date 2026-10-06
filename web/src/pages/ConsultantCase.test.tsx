@@ -48,6 +48,11 @@ describe("the consultant's case", () => {
     expect(page.querySelector(".packet-note")?.textContent).toBe(es.consultant.notClosable);
   });
 
+  it("leads to the case's trace", () => {
+    const link = [...render(ALICIA).querySelectorAll(".main-head a")].map((a) => [a.textContent, a.getAttribute("href")]);
+    expect(link).toEqual([[es.trace.title, `/consultant/case/${ALICIA.process_id}/trace`]]);
+  });
+
   it("offers no close while one is settling, and a way to read the case again", () => {
     const page = render(ALICIA, { kind: "pending" });
     expect(closeButtons(page)).toEqual([]);
