@@ -312,9 +312,9 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 
 - Left: the thread, read-only, in a glass panel with the heading "Conversación". There is no composer, no reply box, and no text field (`ARCHITECTURE.md`, "Consultant close").
 - Right: the packet as the hero, sticky, section label "Paquete". Key-value rows from `analysis.completed` (`specs/08-consultant-close.feature`): Pedido, Score, Ingreso mensual, Regla, Política.
-- Under the rows, two hero secondary buttons of the same size: "Precalificar", then "No precalificar". Neither takes focus on load and neither is tinted by outcome, so the layout does not lean toward an answer.
+- Under the rows, when the packet says `closable` (`PLAN.md` D15 (3)), two hero secondary buttons of the same size: "Precalificar", then "No precalificar". Neither takes focus on load and neither is tinted by outcome, so the layout does not lean toward an answer. When it does not, there are no buttons: the screen does not work out whether a case can be closed.
 - Choosing one opens a confirm dialog, the review step Wirely shows before a payment. It names the outcome, says the customer gets a message and the case closes, and offers "Volver" (secondary, focused first) and "Confirmar" (decisive).
-- On success the case leaves the queue. A second close is rejected by the API (`consultant_close:{process_id}`) and the screen shows that as an error.
+- On success the case leaves the queue. A second close is rejected by the API (409 `already_closed`, the event key `consultant_close:{process_id}`) and the screen shows that as an error.
 - This confirm step is the consultant's. The customer's consent (`PLAN.md` D8) is the `confirm_prequalify` template, answered in the thread.
 
 ### Trace (`/consultant/case/:id/trace`)
