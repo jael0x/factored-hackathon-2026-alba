@@ -475,8 +475,9 @@ paths:
       summary: Handoff packet for a process in human_active.
       description: >
         Requires role consultant. A process that is not human_active is not found.
-        Packet fields that come from analysis.completed are null when that event does not exist
-        (a handoff before the policy ran). There is no text field and no reply body.
+        Packet fields that come from the case's latest analysis.completed are null when that event does not exist
+        (a handoff before the policy ran). closable says whether the case may be closed. There is no text field
+        and no reply body.
       parameters:
         - $ref: "#/components/parameters/ProcessId"
       responses:
@@ -532,6 +533,8 @@ paths:
         The handler appends conversation.consultant_closed. It does not run the policy.
         A second close of the same process is already_closed and does not append another event.
         A process that is not human_active is not found, except a process already ended, which is already_closed.
+        A case whose latest analysis.completed is missing or NEEDS_INFO is case_not_closable (PLAN.md D15 (3)).
+        The response is sent after the worker finishes the close's commands, or cycle_pending after 30 seconds.
       parameters:
         - $ref: "#/components/parameters/ProcessId"
       requestBody:
@@ -554,9 +557,11 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/AlreadyClosed"
+          $ref: "#/components/responses/CloseConflict"
         "422":
           $ref: "#/components/responses/InvalidRequest"
+        "503":
+          $ref: "#/components/responses/CyclePending"
 
 components:
   securitySchemes:
@@ -631,12 +636,16 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/CyclePendingError"
-    AlreadyClosed:
-      description: This process was already ended. The outcome does not change.
+    CloseConflict:
+      description: >
+        Nothing is appended. already_closed: the process was already ended or closed, and the outcome does not
+        change. case_not_closable: the policy reached no result on this case (PLAN.md D15 (3)).
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/AlreadyClosedError"
+            oneOf:
+              - $ref: "#/components/schemas/AlreadyClosedError"
+              - $ref: "#/components/schemas/CaseConflictError"
     InvalidRequest:
       description: The body or query does not match the schema.
       content:
@@ -719,7 +728,7 @@ components:
       properties:
         error:
           type: string
-          enum: [case_already_open, case_ended, case_not_appealable]
+          enum: [case_already_open, case_ended, case_not_appealable, case_not_closable]
 
     CyclePendingError:
       type: object
@@ -1259,8 +1268,9 @@ components:
       additionalProperties: false
       description: >
         The handoff packet. product, credit_score, the income fields, deciding_rule,
-        policy_version, and outcome are copied from analysis.completed. They are null
-        when that event does not exist. reason_code is copied from conversation.thread_taken.
+        policy_version, and outcome are copied from the case's latest analysis.completed. They are null
+        when that event does not exist. reason_code is copied from the latest conversation.thread_taken.
+        closable is true only when that analysis exists and its outcome is not NEEDS_INFO (PLAN.md D15 (3)).
       required:
         - process_id
         - state
@@ -1277,6 +1287,7 @@ components:
         - outcome
         - reason_code
         - locale
+        - closable
       properties:
         process_id:
           type: string
@@ -1323,6 +1334,8 @@ components:
           $ref: "#/components/schemas/ReasonCode"
         locale:
           $ref: "#/components/schemas/Locale"
+        closable:
+          type: boolean
 
     CloseCaseRequest:
       type: object
