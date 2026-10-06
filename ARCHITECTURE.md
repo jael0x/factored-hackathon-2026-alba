@@ -76,7 +76,7 @@ A consultant is a bank employee who reviews the cases the assistant hands off. T
 | Auth | Customers: document number plus a one-time code emailed to the address on file. Consultants: email and employee code plus the same kind of code. Mailpit receives every code in the compose stack. Then an own JWT, HS256, 15 minutes, issued by this API |
 | Pipeline | Python, in the `load` container. Reads local CSVs. DuckDB only if the aggregate needs it; the result lands in Postgres |
 | LLM | OpenAI API, model `gpt-6-luna` (GPT-6 Luna). The adapter `api/infrastructure/llm/conversation.py` makes one call with Structured Outputs (the `ConversationTurn` JSON schema) and returns `ConversationTurn`. The policy does not use this adapter |
-| Tests | pytest in the API. Vitest with jsdom for the client's own logic (browser storage, the session, the language choice, the demo code fill, and the chat's sends, bubbles, typing indicator, and home row actions); business logic does not live in the client |
+| Tests | pytest in the API. Vitest with jsdom for the client's own logic (browser storage, the session, the language choice, the demo code fill, the chat's sends, bubbles, typing indicator, and home row actions, and the consultant's packet rows, close actions, and close answers, plus rendered screens in jsdom); business logic does not live in the client |
 | Quality gate | ruff (lint and format), mypy strict, pytest with branch coverage, `tsc`, Vitest, and the Vite build. GitHub Actions runs it on every pull request to `main` and every push to `main`. See **Quality gate** |
 | Running processes | A loop inside the API process that takes `commands` rows with `status = pending`. No Kafka, no Redis, no Inngest |
 
@@ -188,15 +188,18 @@ web/
   src/i18n/                     # es.ts sets the interface labels; pt.ts must match it; locale.ts keeps the switch's choice
   src/components/LanguageSwitch.tsx # ES, PT in the app bar of every screen
   src/pages/Home.tsx            # greeting, product cards, and the Preguntar por rows
-  src/pages/ConsultantHome.tsx  # greeting from GET /consultant/me until the queue is built
   src/pages/Case.tsx            # customer: /case opens a case from the start dialog, /case/:id is the thread, the composer, and the certificate
   src/pages/useCase.ts          # the case read, the send (same id and locale on a retry), the opening start, and the appeal
   src/components/StartDialog.tsx # the consent before a case starts (D24)
   src/components/Certificate.tsx # the hero: outcome tag, product, sentence, the income the run read, and the review a policy's no offers once
   src/format.ts                 # amounts, dates, and full names, one formula each
   src/chat.ts                   # one send (text, id, locale), the bubble of each author, when the typing indicator shows
-  src/pages/ConsultantQueue.tsx
-  src/pages/ConsultantCase.tsx  # handoff packet and the two close actions
+  src/components/MessageLine.tsx # one thread line, the same on the customer's case and the consultant's
+  src/pages/ConsultantLayout.tsx # the sidebar; loads the consultant and the queue once for its pages
+  src/pages/ConsultantQueue.tsx # the cases in human_active, each row a link to its case
+  src/pages/ConsultantCase.tsx  # the read-only thread, the handoff packet, and the two close actions when closable
+  src/pages/useClose.ts         # the packet read (404 is gone) and the close
+  src/consultant.ts             # the packet rows, the close actions, and what each close answer means
   src/pages/Trace.tsx           # the process's events table
 pipeline/
   bronze.py
@@ -617,7 +620,7 @@ Expired JWT: 401. The customer or the consultant sees that the session ended, wi
 | `/` | customer | their products, in the row's currency, and one row per product: start (the consent dialog), continue the open case, or see the ended case's result |
 | `/case/:id` | customer | the thread, with the certificate in its place once `prequalification.decided` exists and the review a policy's no offers when `appealable` (`PLAN.md` D25). The composer in `ai_active` and `human_active` (with a banner that a person has the case); none in `ended`. `/case` with no id only carries a start from the home's dialog until its case exists, and otherwise returns to `/` |
 | `/consultant` | consultant | processes in `human_active` |
-| `/consultant/case/:id` | consultant | the handoff packet read from `analysis.completed`, and two actions, prequalify or do not, only when the packet says `closable` (`PLAN.md` D15 (3)). No reply box |
+| `/consultant/case/:id` | consultant | the customer's thread, read only, the handoff packet read from `analysis.completed`, and two actions, prequalify or do not, only when the packet says `closable` (`PLAN.md` D15 (3)). No reply box |
 | `/consultant/case/:id/trace` | consultant | the process's `events`, in order |
 
 A customer whose process is `ended` with `prequalified` or `not_prequalified` sees the certificate. They do not see the queue. The consultant does not see `ended` processes in the queue. Juan does not appear in César's queue. Neither does Mariana. Alicia does.
@@ -649,7 +652,7 @@ Regenerate after every edit to `openapi.yaml`. `api/tests/test_contract.py` fail
 | `GET /case/{process_id}` | customer | | `Case` for the token's customer. Another customer's id is 404 |
 | `POST /case/{process_id}/appeal` | customer | `{locale}` | the `Case` after that cycle, back with a person. 409 `case_not_appealable` unless the case ended as `not_prequalified` by the policy, and 409 `case_already_open` while another case of its product is open; sent again, the same case with nothing appended; 503 `cycle_pending` as for `POST /messages` (`PLAN.md` D25) |
 | `GET /consultant/queue` | consultant | | processes in `human_active` |
-| `GET /consultant/case/{process_id}` | consultant | | handoff packet. 404 unless the process is `human_active` |
+| `GET /consultant/case/{process_id}` | consultant | | handoff packet and the customer's thread, read only. 404 unless the process is `human_active` |
 | `GET /consultant/case/{process_id}/trace` | consultant | | events, discriminated on `event_name` |
 | `POST /consultant/case/{process_id}/close` | consultant | `{outcome}` | the ended process after the worker finishes the close's commands, or 503 `cycle_pending` as for `POST /messages`. 409 `already_closed` if it was already ended or closed, 409 `case_not_closable` on a case the policy reached no result for (`PLAN.md` D15 (3)) |
 
@@ -667,7 +670,7 @@ Amounts and scores are JSON numbers. The API holds them as exact decimals (`json
 
 The consultant queue is ordered by `processes.created_at`, then process id. Each item carries the customer name, `product`, `reason_code` from the case's latest `conversation.thread_taken` (by `seq`), and the case's `locale`.
 
-The packet copies `product`, `credit_score`, the income fields, `deciding_rule`, `policy_version`, and `outcome` from the case's latest `analysis.completed` (by `seq`): `credit_score` and the income fields are the facts every decision cites. Those fields are null when that event does not exist. `reason_code` comes from the latest `conversation.thread_taken`; a case in `human_active` without one fails loud. `closable` is `is_closable` ("Consultant close").
+The packet copies `product`, `credit_score`, the income fields, `deciding_rule`, `policy_version`, and `outcome` from the case's latest `analysis.completed` (by `seq`): `credit_score` and the income fields are the facts every decision cites. Those fields are null when that event does not exist. `reason_code` comes from the latest `conversation.thread_taken`; a case in `human_active` without one fails loud. `closable` is `is_closable` ("Consultant close"). `messages` is the customer's thread, the same list as `Case.messages`, read for the `customer_id` of the case and never one the request names.
 
 The trace includes events with this `process_id`, plus each message with a null `process_id` that one of them names in `caused_by_event_id`, as for `Case.messages`. Order is `seq`. `rule_trace.input` is an open object (`dict[str, Any]` in the generated model): the engine records the condition snapshot, and no matcher branches on it.
 
