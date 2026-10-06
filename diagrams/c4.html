@@ -613,25 +613,29 @@ spec('routers', 'r-customer-msg', {
   src: 'ARCHITECTURE.md, "Events", "HTTP contract"',
 });
 spec('routers', 'r-consultant-close', {
-  name: 'POST /consultant/case/:id/close', tech: 'consultant close', status: 'partial',
-  summary: 'The consultant only action: `PREQUALIFIED` or `NOT_PREQUALIFIED`. No text.',
+  name: 'POST /consultant/case/:id/close', tech: 'consultant close', status: 'defined',
+  summary: 'The consultant only action: `PREQUALIFIED` or `NOT_PREQUALIFIED`. No text. Built Oct 5 (E8).',
   fixed: [
     'Body: `outcome`, `PREQUALIFIED` or `NOT_PREQUALIFIED`. Any other body is rejected. There is no text field.',
     'Writes `conversation.consultant_closed` with `outcome`, `consultant_id`, and `locale` copied from the process. The certificate is in the customer\'s `locale`, whatever the consultant\'s switch shows.',
-    'Key `consultant_close:{process_id}`. The same case cannot be closed twice.',
+    'Key `consultant_close:{process_id}`. The same case cannot be closed twice: a second close is 409 `already_closed` and appends nothing.',
+    'Only a case the policy reached a result for may be closed: its latest `analysis.completed` exists and is not `NEEDS_INFO` (D15 (3)). Any other close is 409 `case_not_closable`. Since D24 every case has a product.',
+    'The handler appends the event and waits for its cycle like `POST /messages`; the answer is the ended process, or 503 `cycle_pending`. A settled cycle that did not end the case fails loud.',
     'The consultant does not send messages and does not chat.',
   ],
-  open: [['New', 'A case handed off before a product was named (a first-message human request, out of scope, unsupported language) has `product` null, so a close would render a certificate for no product.']],
-  src: 'ARCHITECTURE.md, "Consultant close"',
+  tests: ['A second close of Alicia\'s case is 409 and writes no event.', 'Of two closes at once, only one is written.', 'A close of a case left at `NEEDS_INFO` is 409 `case_not_closable`.'],
+  src: 'ARCHITECTURE.md, "Consultant close"; PLAN.md D15',
 });
 spec('routers', 'r-reads', {
   name: 'Read endpoints', tech: 'api-spec/openapi.yaml', status: 'partial',
-  summary: 'Products, thread, certificate, queue, handoff packet, trace.',
+  summary: 'Products, thread, certificate, queue, handoff packet, trace. The consultant reads were built Oct 5 (E8).',
   fixed: [
     '`GET /me`, `GET /consultant/me`, `GET /products`, `GET /case/{process_id}`, `GET /consultant/queue`, `GET /consultant/case/{process_id}`, `GET /consultant/case/{process_id}/trace`. Shapes are in `api-spec/openapi.yaml`.',
     'The filter `customer_id = jwt.sub` is in every customer query. A `customer_id` query that is not the token sub returns an empty product list.',
     'The customer API does not list `customer_credit_profile`. The certificate has no score, no limit, and no rate.',
     'The consultant queue shows processes in `human_active` only. The trace shows the process `events` in the order they were written (`seq`), plus each message with a null `process_id` that one of them names in `caused_by_event_id`.',
+    'The packet reads the case\'s latest `analysis.completed` and latest `conversation.thread_taken` (by `seq`), and carries `closable`, so the screen does not decide it.',
+    'Amounts reach the wire as JSON numbers through one exact conversion (`wire_numbers.py`) that fails loud instead of rounding.',
   ],
   open: [
     ['New', 'The brief asks for "open questions" in the handoff; `PLAN.md` §2 notes that field is not in the contract.'],
@@ -1291,24 +1295,24 @@ spec('pg-case', 'cs-session', {
 });
 
 spec('pg-queue', 'aq-list', {
-  name: 'Queue', tech: 'human_active', status: 'partial',
+  name: 'Queue', tech: 'human_active', status: 'defined',
   summary: 'Only handed-off, open processes.',
   fixed: [
     'Processes in `human_active`. `ended` processes are not shown.',
     'Alicia appears. Juan, Juliana, and Mariana do not.',
+    'Ordered by `processes.created_at`, then process id. Each card carries the customer name, `product`, the latest `reason_code`, and the case\'s `locale`.',
   ],
-  open: [['New', 'The sort order and its tie-break, and what each queue card shows.']],
   src: 'ARCHITECTURE.md, "Auth and screens"; AGENTS.md, "Database"',
 });
 
 spec('pg-consultantcase', 'ac-packet', {
-  name: 'Handoff packet', tech: 'analysis.completed', status: 'partial',
+  name: 'Handoff packet', tech: 'analysis.completed', status: 'defined',
   summary: 'Request, score, income, deciding rule, policy version.',
   fixed: [
-    'Read from `analysis.completed`: request, score, income, deciding rule, `policy_version`.',
+    'Read from the case\'s latest `analysis.completed`: request, score, income, deciding rule, `policy_version`, outcome. They are null when the policy never ran.',
     'The packet may show the rule id and the facts. An internal reason code is not customer copy.',
+    '`closable` is false when there is no analysis or it is `NEEDS_INFO` (D15 (3)): the screen then offers no close.',
   ],
-  open: [['New', 'A handoff that is not a policy `REFER` (human request, out of scope, unsupported language, tool or reply failure) has no `analysis.completed`, so there is no packet, and a close there has no policy result behind it.']],
   src: 'ARCHITECTURE.md, "Auth and screens", "The other three flows"',
 });
 spec('pg-consultantcase', 'ac-close', {
@@ -1318,18 +1322,18 @@ spec('pg-consultantcase', 'ac-close', {
     'The only actions are `PREQUALIFIED` and `NOT_PREQUALIFIED`. No text field, no comment.',
     'The close writes `conversation.consultant_closed`; a template tells the customer and the process ends.',
     'Which outcome César picks for Alicia is not fixed by the contract.',
+    'The two actions show only when the packet says `closable`.',
   ],
   src: 'ARCHITECTURE.md, "Consultant close", "The other three flows"',
 });
 
 spec('pg-trace', 'tr-events', {
-  name: 'Event list', tech: 'events', status: 'partial',
+  name: 'Event list', tech: 'events', status: 'defined',
   summary: 'The process events in order: the audit trail reviewers see.',
   fixed: [
-    'Lists the process `events` in order, backed by the index on `events (process_id, created_at)`.',
+    'Lists the process `events` in the order they were written (`seq`, unique), backed by the index on `events (process_id, seq)`.',
     'Explanations come from sources, rules, and execution records. No chain-of-thought.',
   ],
-  open: [['New', 'The ordering key. `created_at` can tie, and AGENTS.md asks for an explicit tie-break.']],
   src: 'ARCHITECTURE.md, "Auth and screens", "Indexes"; PLAN.md §2',
 });
 node('ld-entry', {
