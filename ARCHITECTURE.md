@@ -248,7 +248,7 @@ States. There are no others.
 | State | Who talks | What can happen |
 |---|---|---|
 | `ai_active` | the assistant, if a rule enqueues `conversation.generate` | clarify, ask for consent to run pre-qualification, ask for income, decide, hand off to a person |
-| `human_active` | nobody in the thread | the customer may write and the message is stored; the model is not called. The consultant does not reply. The only action is to close with prequalified or not |
+| `human_active` | nobody in the thread | the customer may write and the message is stored; the model is not called. The consultant does not reply. The only action is to close with prequalified or not, on a case the policy reached a result for (`PLAN.md` D15 (3)) |
 | `ended` | nobody | the certificate exists. A new message opens another process |
 
 Allowed transitions. Any other is an error and is not written.
@@ -282,6 +282,8 @@ That POST writes `conversation.consultant_closed`, with `outcome`, `consultant_i
 2. `process.end`. `end_reason` is `prequalified` or `not_prequalified`, the same choice. The policy engine is not run again.
 
 The same case cannot be closed twice. The event key is `consultant_close:{process_id}`.
+
+A person closes only a case the policy reached a result for (`PLAN.md` D15 (3), closed Oct 5): the case's latest `analysis.completed` (by `seq`) exists and its `outcome` is not `NEEDS_INFO`. That is a `REFER`, a policy no the customer appealed, and a decision whose certificate failed three times (`tool_failed`). A case handed off before the policy ran, or after a `NEEDS_INFO`, stays in the queue and its close is 409 `case_not_closable`: the person does not decide a case the policy could not read. `is_closable` in `api/domain/process/packet.py` decides it, and the packet carries it as `closable`, so the screen does not decide it.
 
 ## Events
 
@@ -634,9 +636,11 @@ Regenerate after every edit to `openapi.yaml`. `api/tests/test_contract.py` fail
 | `GET /consultant/queue` | consultant | | processes in `human_active` |
 | `GET /consultant/case/{process_id}` | consultant | | handoff packet. 404 unless the process is `human_active` |
 | `GET /consultant/case/{process_id}/trace` | consultant | | events, discriminated on `event_name` |
-| `POST /consultant/case/{process_id}/close` | consultant | `{outcome}` | ended process. 409 if it was already ended |
+| `POST /consultant/case/{process_id}/close` | consultant | `{outcome}` | the ended process after the worker finishes the close's commands, or 503 `cycle_pending` as for `POST /messages`. 409 `already_closed` if it was already ended or closed, 409 `case_not_closable` on a case the policy reached no result for (`PLAN.md` D15 (3)) |
 
 A customer token on a consultant route is 403. A consultant token on a customer route is 403. Expired or missing token is 401. A body that is not in the schema is 422 `invalid_body`.
+
+Amounts and scores are JSON numbers. The API holds them as exact decimals (`json_codec.py` reads jsonb with `Decimal`) and writes each one through `wire_number` in `api/presentation/http/wire_numbers.py`, which turns it into a double only when the double prints back the same decimal. An amount a double cannot hold exactly fails the response loud instead of being rounded. The trace's open `rule_trace.input` goes through the same function, so no amount reaches the wire as a string.
 
 `GET /products` returns `product_id`, `product_type` (the dataset literal), `product_number`, `currency`, `current_balance`, `product_status`, ordered by `product_id`. It does not return `days_past_due`, `credit_limit`, or `interest_rate`. It leaves out products whose `product_status` is `Closed`, and loans (`Préstamo Personal`, `Préstamo Hipotecario`) whose balance is 0: a loan at 0 is paid. The status in `products` is not changed, so a paid loan still marked `Active` counts as held for R09.
 
@@ -646,13 +650,13 @@ A customer token on a consultant route is 403. A consultant token on a customer 
 
 `Case.certificate` is the case's latest `prequalification.decided` (by `seq`), null until one exists. It carries `locale`, `outcome`, and `body`. A policy certificate reads its `product` and income fields from the `analysis.completed` its decision names in `caused_by_event_id`: the facts `income_local`, `income_currency`, and `income_usd` every decision cites, with `as_of` from the `income_local` fact. A decision that names no analysis fails loud. A consultant certificate is the person's decision: its income fields and `as_of` are null and its `product` is the case's (`PLAN.md` D25). `api/domain/process/case.py` builds both. `Case.appealable` is true only when the certificate is a no the policy decided, the case has ended, and no other case of its product is open; the screen offers the review only then (`PLAN.md` D25). The certificate has no credit limit and no rate. It does not include the score or the deciding rule. It also carries `event_id` (that event) and `decided_by`: `decision.render` writes the certificate's `messages` row with `author = template`, so the screen shows the certificate in its place in the thread (`PLAN.md` D25).
 
-The consultant queue is ordered by `processes.created_at`, then process id. Each item carries the customer name, `product`, `reason_code` from `conversation.thread_taken`, and the case's `locale`.
+The consultant queue is ordered by `processes.created_at`, then process id. Each item carries the customer name, `product`, `reason_code` from the case's latest `conversation.thread_taken` (by `seq`), and the case's `locale`.
 
-The packet copies `product`, `credit_score`, the income fields, `deciding_rule`, `policy_version`, and `outcome` from `analysis.completed`. Those fields are null when that event does not exist. `reason_code` comes from `conversation.thread_taken`.
+The packet copies `product`, `credit_score`, the income fields, `deciding_rule`, `policy_version`, and `outcome` from the case's latest `analysis.completed` (by `seq`): `credit_score` and the income fields are the facts every decision cites. Those fields are null when that event does not exist. `reason_code` comes from the latest `conversation.thread_taken`; a case in `human_active` without one fails loud. `closable` is `is_closable` ("Consultant close").
 
 The trace includes events with this `process_id`, plus each message with a null `process_id` that one of them names in `caused_by_event_id`, as for `Case.messages`. Order is `seq`. `rule_trace.input` is an open object (`dict[str, Any]` in the generated model): the engine records the condition snapshot, and no matcher branches on it.
 
-`POST /consultant/case/{process_id}/close` accepts only `PREQUALIFIED` or `NOT_PREQUALIFIED`. A text field is rejected. A process that is not `human_active` is 404, except one already `ended`, which is 409 and does not append a second `conversation.consultant_closed`.
+`POST /consultant/case/{process_id}/close` accepts only `PREQUALIFIED` or `NOT_PREQUALIFIED`. A text field is rejected. A process that is not `human_active` is 404, except one already `ended`, which is 409 `already_closed` and does not append a second `conversation.consultant_closed`. A second close of a case still in `human_active` (its certificate failed) is the same 409. The handler appends the event through `PlanningEvents` and waits for its cycle like `POST /messages`; a settled cycle that did not end the case fails loud.
 
 ## Database
 
@@ -843,7 +847,7 @@ These points are left open on purpose. Implementing them on your own breaks the 
 - A separate intent router beside `ConversationTurn`.
 - Full pandera/Great Expectations suites or a policy freshness rule (R10).
 
-Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D15 (handoffs that are not a policy `REFER`). D17 is closed by D24: `GET /cases` lists the customer's cases. D12, D13, D14, and D16 (1) are closed (Oct 2): the run-policy key carries the triggering turn, the third turn with no product goes to a person, an income before consent asks for consent again, and `ask_which_product` checks `language` like the other turn rules. D16 (2) is closed: `decide` takes `declared_income`. D16 (3) is closed (Oct 5): `process.transition` and `process.end` change `processes.state`. D21 is closed: the switch picks the `locale` Alba writes in, and the model's `language` only gates an unreadable message. D19 is closed: the keys of two-event actions, the actor of each event, and where event names live. D20 is closed: `process_state` on every event, the write order, a second start, and a reused message id. Each one that gets decided is written into this file.
+Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D15 (1) (the customer's thread on a handoff that is not a policy `REFER`). D15 (3) is closed (Oct 5): a person closes only a case the policy reached a result for ("Consultant close"). D17 is closed by D24: `GET /cases` lists the customer's cases. D12, D13, D14, and D16 (1) are closed (Oct 2): the run-policy key carries the triggering turn, the third turn with no product goes to a person, an income before consent asks for consent again, and `ask_which_product` checks `language` like the other turn rules. D16 (2) is closed: `decide` takes `declared_income`. D16 (3) is closed (Oct 5): `process.transition` and `process.end` change `processes.state`. D21 is closed: the switch picks the `locale` Alba writes in, and the model's `language` only gates an unreadable message. D19 is closed: the keys of two-event actions, the actor of each event, and where event names live. D20 is closed: `process_state` on every event, the write order, a second start, and a reused message id. Each one that gets decided is written into this file.
 
 ## Known gaps
 

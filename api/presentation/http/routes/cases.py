@@ -1,4 +1,3 @@
-from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
@@ -13,7 +12,6 @@ from api.application.cases import (
     list_customer_cases,
     read_customer_case,
 )
-from api.application.cycle.plan import PlanningEvents
 from api.application.processes import (
     CaseAlreadyOpen,
     CaseEnded,
@@ -37,23 +35,21 @@ from api.domain.process.new_events import IdempotencyConflict
 from api.domain.session.tokens import SessionClaims
 from api.infrastructure.db.cases import PostgresThreads
 from api.infrastructure.db.commands import PostgresCommands
-from api.infrastructure.db.events import PostgresEventLog, PostgresEvents
+from api.infrastructure.db.events import PostgresEventLog
 from api.infrastructure.db.processes import PostgresProcesses
+from api.presentation.http.cycle import planning, require_settled
 from api.presentation.http.dependencies import get_connection, require_customer
 from api.presentation.http.errors import (
     case_already_open,
     case_ended,
     case_not_appealable,
-    cycle_pending,
     invalid_body,
     message_id_reused,
     not_found,
 )
-from api.presentation.worker.loop import Worker, cycle_settled
+from api.presentation.http.wire_numbers import wire_optional_number
 
 router = APIRouter()
-
-CYCLE_WAIT_SECONDS = 30.0
 
 Refusal = IdempotencyConflict | CaseAlreadyOpen | CaseEnded | CaseNotFound | CaseNotAppealable
 
@@ -147,21 +143,6 @@ def refusal(refused: Refusal) -> Exception:
     return message_id_reused()
 
 
-def planning(conn: psycopg.Connection) -> PlanningEvents:
-    return PlanningEvents(PostgresEvents(conn), PostgresEventLog(conn), PostgresCommands(conn))
-
-
-def require_settled(request: Request, event_id: UUID) -> None:
-    worker: Worker | None = request.app.state.worker
-    if worker is None:
-        settled = cycle_settled(request.app.state.pool, event_id)
-    else:
-        worker.wake()
-        settled = worker.wait_for_cycle(event_id, CYCLE_WAIT_SECONDS)
-    if not settled:
-        raise cycle_pending()
-
-
 # A settled start that opened no case lost to another start for its product (D24), unless its own command failed.
 def start_without_case(conn: psycopg.Connection, event_id: UUID, target: MessageTarget) -> Exception:
     if isinstance(target, StartCase) and not PostgresCommands(conn).failed_for(event_id):
@@ -212,12 +193,8 @@ def wire_certificate(certificate: CertificateView) -> Certificate:
         outcome=certificate.outcome,
         body=certificate.body,
         product=certificate.product,
-        income_local=wire_amount(income.income_local),
+        income_local=wire_optional_number(income.income_local),
         income_currency=income.income_currency,
-        income_usd=wire_amount(income.income_usd),
+        income_usd=wire_optional_number(income.income_usd),
         as_of=income.as_of,
     )
-
-
-def wire_amount(amount: Decimal | None) -> float | None:
-    return None if amount is None else float(amount)
