@@ -90,7 +90,7 @@ def alicia_packet(case: dict[str, Any], locale: Locale = "es") -> dict[str, Any]
         "credit_score": 615,
         "income_local": 4707334.28,
         "income_currency": "COP",
-        "income_usd": 1167.42,
+        "income_usd": 1167.41890144,
         "deciding_rule": "R05",
         "policy_version": "alba-credit-v1",
         "outcome": "REFER",
@@ -255,7 +255,7 @@ def test_the_trace_shows_the_facts_behind_the_decision(http: TestClient) -> None
             "source": "customer_credit_profile.income_currency",
             "as_of": AS_OF,
         },
-        {"name": "income_usd", "value": 1167.42, "source": "customer_credit_profile.income_usd", "as_of": AS_OF},
+        {"name": "income_usd", "value": 1167.41890144, "source": "customer_credit_profile.income_usd", "as_of": AS_OF},
     ]
 
 

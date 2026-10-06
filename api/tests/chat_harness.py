@@ -9,8 +9,9 @@ from api.contract_models import Locale, ProductKey, Role
 from api.domain.policy.templates import render_notice
 from api.domain.session.tokens import SessionClaims, issue_token
 from api.infrastructure.config.settings import settings
-from api.tests.cycle_harness import GOLD_ROWS, MARIANA
+from api.tests.cycle_harness import MARIANA
 from api.tests.login_harness import JUAN
+from api.tests.oracle import oracle_customer, seed_oracle_profiles
 
 CHAT_TEST_DB = "alba_chat_test"
 AS_OF = "2026-06-17"
@@ -21,26 +22,17 @@ CESAR = "AGT-OJ9N4FGYV9"
 
 
 def seed_profiles(url: str) -> None:
+    mariana = oracle_customer(MARIANA)
     with psycopg.connect(url) as conn:
         conn.execute(
             """
             INSERT INTO customers (customer_id, document_number, first_name, last_name, email, country, segment,
                                    customer_status)
-            VALUES (%s, '0000009643', 'Mariana Mónica', 'Acosta Rojas', NULL, 'Argentina', 'Basic', 'Active')
+            VALUES (%s, '0000009643', %s, %s, NULL, %s, %s, %s)
             """,
-            (MARIANA,),
+            (MARIANA, mariana.first_name, mariana.last_name, mariana.country, mariana.segment, mariana.customer_status),
         )
-        conn.cursor().executemany(
-            """
-            INSERT INTO customer_credit_profile (
-                customer_id, first_name, last_name, country, segment, customer_status, credit_score, income_local,
-                income_currency, income_usd, max_days_past_due, has_active_card, has_active_personal_loan, as_of,
-                batch_id
-            )
-            VALUES (%s, 'x', 'x', %s, 'Basic', 'Active', %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            [(*row, AS_OF, uuid4()) for row in GOLD_ROWS],
-        )
+        seed_oracle_profiles(conn)
 
 
 def reset(url: str) -> None:

@@ -63,7 +63,7 @@ def test_the_certificate_shows_the_income_its_analysis_read(http: TestClient) ->
         product="credit_card",
         income_local=306753.45,
         income_currency="MXN",
-        income_usd=17988.33,
+        income_usd=17988.32906145,
         as_of=AS_OF,
     )
 

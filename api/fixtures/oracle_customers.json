@@ -1,0 +1,237 @@
+{
+  "as_of": "2026-06-17",
+  "rates_to_usd": {
+    "MXN": 0.058641,
+    "COP": 0.000248,
+    "ARS": 0.002873
+  },
+  "product_types": [
+    "Cuenta Ahorro",
+    "Cuenta Corriente",
+    "Inversión",
+    "Préstamo Hipotecario",
+    "Préstamo Personal",
+    "Seguro",
+    "Tarjeta Crédito",
+    "Tarjeta Débito"
+  ],
+  "customers": [
+    {
+      "customer_id": "CLI-9EDEKZ8OUNUR",
+      "first_name": "Juan Alberto",
+      "last_name": "Romero González",
+      "country": "México",
+      "segment": "Premium",
+      "customer_status": "Active",
+      "credit_score": 812,
+      "income_local": 306753.45,
+      "income_currency": "MXN",
+      "income_usd": 17988.32906145,
+      "max_days_past_due": 0,
+      "has_active_card": false,
+      "has_active_personal_loan": false,
+      "has_email": true,
+      "products": [
+        {
+          "product_id": "PRD-AQZ0094E1XY0",
+          "product_type": "Cuenta Ahorro",
+          "currency": "USD",
+          "current_balance": 1559.57,
+          "product_status": "Active",
+          "days_past_due": null
+        },
+        {
+          "product_id": "PRD-W1ZJKF7U5B6C",
+          "product_type": "Préstamo Hipotecario",
+          "currency": "USD",
+          "current_balance": 109159.57,
+          "product_status": "Active",
+          "days_past_due": 0
+        }
+      ],
+      "expected": {
+        "outcome": "PREQUALIFIED",
+        "deciding_rule": "R05",
+        "state": "ended",
+        "end_reason": "prequalified"
+      },
+      "after_declared_income": null
+    },
+    {
+      "customer_id": "CLI-MD60UR8PNJDI",
+      "first_name": "Juliana",
+      "last_name": "Castro Gómez",
+      "country": "México",
+      "segment": "Plus",
+      "customer_status": "Active",
+      "credit_score": 714,
+      "income_local": null,
+      "income_currency": "MXN",
+      "income_usd": null,
+      "max_days_past_due": 0,
+      "has_active_card": false,
+      "has_active_personal_loan": false,
+      "has_email": true,
+      "products": [
+        {
+          "product_id": "PRD-73YY3EIYFXIK",
+          "product_type": "Cuenta Corriente",
+          "currency": "USD",
+          "current_balance": 2528.58,
+          "product_status": "Active",
+          "days_past_due": null
+        }
+      ],
+      "expected": {
+        "outcome": "NEEDS_INFO",
+        "deciding_rule": "R06",
+        "state": "ai_active",
+        "end_reason": null
+      },
+      "after_declared_income": {
+        "declared_income": 45000,
+        "outcome": "PREQUALIFIED",
+        "deciding_rule": "R05"
+      }
+    },
+    {
+      "customer_id": "CLI-440CO5FZIY6A",
+      "first_name": "Alicia Mariana",
+      "last_name": "Parra Álvarez",
+      "country": "Colombia",
+      "segment": "Basic",
+      "customer_status": "Active",
+      "credit_score": 615,
+      "income_local": 4707334.28,
+      "income_currency": "COP",
+      "income_usd": 1167.41890144,
+      "max_days_past_due": 0,
+      "has_active_card": false,
+      "has_active_personal_loan": false,
+      "has_email": true,
+      "products": [
+        {
+          "product_id": "PRD-1S09CHNTQK1E",
+          "product_type": "Tarjeta Débito",
+          "currency": "COP",
+          "current_balance": 422017.11,
+          "product_status": "Active",
+          "days_past_due": null
+        },
+        {
+          "product_id": "PRD-H7HTXSYEZUGG",
+          "product_type": "Tarjeta Débito",
+          "currency": "COP",
+          "current_balance": 3910126.6,
+          "product_status": "Active",
+          "days_past_due": null
+        },
+        {
+          "product_id": "PRD-HSUB9M7052JT",
+          "product_type": "Cuenta Corriente",
+          "currency": "COP",
+          "current_balance": 13192324.57,
+          "product_status": "Active",
+          "days_past_due": null
+        },
+        {
+          "product_id": "PRD-LAS2SGNHG44Y",
+          "product_type": "Seguro",
+          "currency": "USD",
+          "current_balance": 0.0,
+          "product_status": "Active",
+          "days_past_due": null
+        },
+        {
+          "product_id": "PRD-UU6PC5HGVQPG",
+          "product_type": "Inversión",
+          "currency": "COP",
+          "current_balance": 84034999.79,
+          "product_status": "Closed",
+          "days_past_due": null
+        },
+        {
+          "product_id": "PRD-YT0DEZDUN1I4",
+          "product_type": "Cuenta Ahorro",
+          "currency": "COP",
+          "current_balance": 1419507.66,
+          "product_status": "Closed",
+          "days_past_due": null
+        }
+      ],
+      "expected": {
+        "outcome": "REFER",
+        "deciding_rule": "R05",
+        "state": "human_active",
+        "end_reason": null
+      },
+      "after_declared_income": null
+    },
+    {
+      "customer_id": "CLI-ZGOY1V6ZC46J",
+      "first_name": "Mariana Mónica",
+      "last_name": "Acosta Rojas",
+      "country": "Argentina",
+      "segment": "Basic",
+      "customer_status": "Active",
+      "credit_score": 515,
+      "income_local": 801583.7,
+      "income_currency": "ARS",
+      "income_usd": 2302.9499701,
+      "max_days_past_due": 180,
+      "has_active_card": true,
+      "has_active_personal_loan": false,
+      "has_email": true,
+      "products": [
+        {
+          "product_id": "PRD-0HKI3MR0UJCZ",
+          "product_type": "Tarjeta Crédito",
+          "currency": "ARS",
+          "current_balance": 111079.25,
+          "product_status": "Active",
+          "days_past_due": 180
+        },
+        {
+          "product_id": "PRD-CP81VFKA7YRZ",
+          "product_type": "Cuenta Corriente",
+          "currency": "ARS",
+          "current_balance": 622677.69,
+          "product_status": "Active",
+          "days_past_due": null
+        },
+        {
+          "product_id": "PRD-KYELKH1113SQ",
+          "product_type": "Cuenta Corriente",
+          "currency": "ARS",
+          "current_balance": 1594012.45,
+          "product_status": "Active",
+          "days_past_due": null
+        },
+        {
+          "product_id": "PRD-MVZW6DHDS8UO",
+          "product_type": "Tarjeta Débito",
+          "currency": "ARS",
+          "current_balance": 235969.92,
+          "product_status": "Active",
+          "days_past_due": null
+        }
+      ],
+      "expected": {
+        "outcome": "NOT_PREQUALIFIED",
+        "deciding_rule": "R02",
+        "state": "ended",
+        "end_reason": "not_prequalified"
+      },
+      "after_declared_income": null
+    }
+  ],
+  "consultant": {
+    "consultant_id": "AGT-OJ9N4FGYV9",
+    "employee_code": "E75612",
+    "first_name": "César",
+    "last_name": "González Sánchez",
+    "status": "Active",
+    "specialty": "Créditos",
+    "has_email": true
+  }
+}
