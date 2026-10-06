@@ -116,7 +116,7 @@ Feature: Pre-qualification decision
     Given Mariana Mónica Acosta Rojas's credit card request ended as not pre-qualified by the policy
     When Mariana chooses "Pedir que una persona lo revise" on her certificate
     Then her case enters the review queue with reason "customer_requested_human"
-    And the assistant tells her a person from the bank will review her request
+    And the assistant tells her "Pediste que una persona atienda tu caso." and that a person from the bank will review her request
     And her certificate stays in the conversation above that notice
 
   Scenario: A result can be sent to a person only once

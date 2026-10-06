@@ -14,9 +14,9 @@ Feature: Case trace
       | conversation.message_received | Quiero una tarjeta de crédito |
       | process.started               | credit_prequalification       |
       | analysis.completed            | REFER by R05                  |
-      | conversation.template_sent    | refer_notice                  |
       | process.state_changed         | ai_active to human_active     |
       | conversation.thread_taken     | policy_refer                  |
+      | conversation.template_sent    | refer_notice                  |
 
   Scenario: The trace shows the facts behind the decision
     When César opens the trace of Alicia's case
