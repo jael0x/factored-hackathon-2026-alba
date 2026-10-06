@@ -229,7 +229,12 @@ def test_the_trace_lists_the_case_events_in_the_order_they_happened(http: TestCl
         ("conversation.thread_taken", "system", "human_active"),
     ]
     message, started, analysis, notice, moved, taken = events
-    assert (message["process_id"], message["text"], message["product"]) == (None, CARD_ES, "credit_card")
+    assert (message["process_id"], message["text"], message["product"], message["caused_by_event_id"]) == (
+        None,
+        CARD_ES,
+        "credit_card",
+        None,
+    )
     assert (started["process_id"], started["process_key"], started["caused_by_event_id"]) == (
         case["process_id"],
         "credit_prequalification",
@@ -257,6 +262,16 @@ def test_the_trace_shows_the_facts_behind_the_decision(http: TestClient) -> None
             "as_of": AS_OF,
         },
         {"name": "income_usd", "value": 1167.41890144, "source": "customer_credit_profile.income_usd", "as_of": AS_OF},
+    ]
+    assert (analysis["deciding_rule"], analysis["policy_version"]) == ("R05", "alba-credit-v1")
+    assert [(step["rule_id"], step["result"]) for step in analysis["rule_trace"]] == [
+        ("R01", "passed"),
+        ("R02", "passed"),
+        ("R03", "passed"),
+        ("R09", "passed"),
+        ("R04", "passed"),
+        ("R06", "passed"),
+        ("R05", "REFER"),
     ]
 
 
