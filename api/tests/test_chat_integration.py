@@ -10,7 +10,6 @@ from api.domain.process.stored_events import PRODUCT_INFO_INTENT
 from api.infrastructure.llm.keywords import REPLIES, read_keyword_turn
 from api.presentation.worker.loop import run_until_idle
 from api.tests.chat_harness import (
-    AS_OF,
     CARD_ES,
     CESAR,
     NEEDS_INCOME_ES,
@@ -31,43 +30,6 @@ from api.tests.login_harness import ALICIA, JUAN, JULIANA, NO_EMAIL
 pytestmark = pytest.mark.integration
 
 
-def test_juan_starts_from_the_home_and_gets_his_certificate_without_a_model_call(
-    http: TestClient, chat_database: str
-) -> None:
-    case = start(http)
-    body = certificate_for_policy("PREQUALIFIED", "es", "credit_card")
-    assert shape(case) == (
-        "ended",
-        "prequalified",
-        "credit_card",
-        "es",
-        False,
-        [("customer", CARD_ES), ("template", body)],
-    )
-    assert commands(chat_database) == [
-        ("process.start", "done", 1),
-        ("policy.run", "done", 1),
-        ("decision.render", "done", 1),
-        ("process.end", "done", 1),
-    ]
-
-
-def test_the_certificate_shows_the_income_its_analysis_read(http: TestClient) -> None:
-    case = start(http)
-    assert case["certificate"] == certificate(
-        case,
-        decided_by="policy",
-        locale="es",
-        outcome="PREQUALIFIED",
-        body=certificate_for_policy("PREQUALIFIED", "es", "credit_card"),
-        product="credit_card",
-        income_local=306753.45,
-        income_currency="MXN",
-        income_usd=17988.33,
-        as_of=AS_OF,
-    )
-
-
 def test_a_case_started_in_portuguese_decides_in_portuguese(http: TestClient) -> None:
     text = "Quero um cartão de crédito"
     case = start(http, locale="pt", text=text)
@@ -79,62 +41,6 @@ def test_a_case_started_in_portuguese_decides_in_portuguese(http: TestClient) ->
         "pt",
         False,
         [("customer", text), ("template", body)],
-    )
-
-
-def test_mariana_does_not_prequalify_is_not_told_the_rule_and_may_ask_a_person(http: TestClient) -> None:
-    case = start(http, sub=MARIANA)
-    body = certificate_for_policy("NOT_PREQUALIFIED", "es", "credit_card")
-    assert shape(case) == (
-        "ended",
-        "not_prequalified",
-        "credit_card",
-        "es",
-        True,
-        [("customer", CARD_ES), ("template", body)],
-    )
-    assert "R02" not in body and "515" not in body
-
-
-def test_alicia_is_told_a_person_will_review_and_the_case_goes_to_one(http: TestClient) -> None:
-    case = start(http, sub=ALICIA.customer_id)
-    expected = (
-        "human_active",
-        None,
-        "credit_card",
-        "es",
-        False,
-        [("customer", CARD_ES), ("template", REFER_NOTICE_ES)],
-    )
-    assert shape(case) == expected
-    assert case["certificate"] is None
-
-
-def test_juliana_is_asked_her_income_and_prequalifies_with_it(http: TestClient) -> None:
-    asked = start(http, sub=JULIANA.customer_id)
-    opening = [("customer", CARD_ES), ("template", NEEDS_INCOME_ES)]
-    assert shape(asked) == ("ai_active", None, "credit_card", "es", False, opening)
-    decided = say(http, asked, "gano 45,000 pesos al mes", JULIANA.customer_id)
-    body = certificate_for_policy("PREQUALIFIED", "es", "credit_card")
-    assert shape(decided) == (
-        "ended",
-        "prequalified",
-        "credit_card",
-        "es",
-        False,
-        [*opening, ("customer", "gano 45,000 pesos al mes"), ("template", body)],
-    )
-    assert decided["certificate"] == certificate(
-        decided,
-        decided_by="policy",
-        locale="es",
-        outcome="PREQUALIFIED",
-        body=body,
-        product="credit_card",
-        income_local=45000,
-        income_currency="MXN",
-        income_usd=None,
-        as_of=AS_OF,
     )
 
 

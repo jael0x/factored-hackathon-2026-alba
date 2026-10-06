@@ -6,6 +6,7 @@ This file sets how Alba looks and moves on screen. It governs the `web/` app (th
 
 Decided with Jael:
 
+- Oct 5, 2026 (W5): the consultant case shows the customer's thread, which the packet carries; the queue row has no city (the tables keep none) and no rule (the packet shows it); the packet adds Resultado and Motivo, which `specs/08` reads; a consultant's certificate says "Revisado por una persona.".
 - Oct 5, 2026 (later): with `DEMO_LOGIN=1` the code step fills the code from the local Mailpit; a policy's no on the certificate offers a review by a person; the certificate sits in its place in the thread; the product is bold in the start dialog; the page is `translate="no"` (`PLAN.md` D25).
 - Oct 5, 2026: a product row opens a start dialog that is the consent, and each row continues its open case or shows its result (`PLAN.md` D24). An ended case has no composer.
 - Oct 2, 2026: a language switch (ES, PT) in the app bar of every screen (`PLAN.md` D21; English removed Oct 3, D22). Spanish stays the language this file quotes; Portuguese is in `web/src/i18n/`. On phones the customer's name pill gives way to the switch.
@@ -234,7 +235,7 @@ A certificate exists only for `PREQUALIFIED` and `NOT_PREQUALIFIED` (from the po
 3. The template paragraph, exactly as the API returns it.
 4. "Datos usados" (a kicker), then key-value rows: "Ingreso mensual" with the local amount and its code, and "Equivale a" with the USD amount and, under it, the exchange-rate date ("al tipo de cambio del 17 de junio de 2026"). The rows show only on a policy certificate whose analysis read an income, and "Equivale a" only for an income on file: a stated income has no USD equivalent (**Open** 4). A consultant's certificate has no rows: the decision is the person's (`PLAN.md` D25).
 
-The contract's certificate carries no deciding rule, no score, and no `policy_version` (`ARCHITECTURE.md`, "HTTP contract"), so the screen has no rule row and no footer; the template paragraph names the policy. Whether the consultant decided is not on the certificate yet either; "Revisado por una persona." waits for W5.
+The contract's certificate carries no deciding rule, no score, and no `policy_version` (`ARCHITECTURE.md`, "HTTP contract"), so the screen has no rule row and no footer; the template paragraph names the policy. When the consultant decided (`decided_by` is `consultant`), a caption under the paragraph reads "Revisado por una persona." ("Revisado por uma pessoa.").
 
 The certificate sits in the thread where it was decided, in place of its own template line, so a notice that comes after it (a referral after an appeal) reads below it. When the API marks the case `appealable` (a no the policy decided, on an ended case, with no other open case of its product), the certificate ends with a hero secondary button, "Pedir que una persona lo revise" ("Pedir que uma pessoa revise"). The page does not work that out itself. It is offered once: pressing it moves the case back to a person (`PLAN.md` D25), the button goes away, the referral notice follows, and the composer and the "Este caso lo ve una persona." banner return.
 
@@ -282,7 +283,7 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 - Step 1: "Correo" and "Código de empleado", then "Enviar código". Step 2: both values shown above in rows, then the customer login's code step; the text button reads "Cambiar datos".
 - With `DEMO_LOGIN=1` the same Demo popover, headed "Asesores de prueba". It lists only active consultants; a row is the full name and "código de empleado" with the code in mono. Choosing a row fills both fields.
 - Under the panel, "Acceso para clientes" leads back to `/login`.
-- Until the queue is built, `/consultant` shows the customer home's greeting with the consultant's first name, the lede "Los casos en revisión aparecerán aquí.", and a caption with the specialty (when the file has one) and the employee code in mono.
+- After the code, the consultant lands on the queue (`/consultant`).
 
 ### Home (`/`)
 
@@ -305,16 +306,19 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 ### Consultant queue (`/consultant`)
 
 - Title "Casos en revisión" with the count badge.
-- One white card holding the cases as table rows: customer (name and city), product, rule and reason (mono), a clay "En revisión" tag, a chevron. The whole row is the link to the case.
+- One white card holding the cases as table rows: customer (full name), product, reason (mono), a clay "En revisión" tag, a chevron. The whole row is the link to the case. The tables keep no city, and the rule is in the packet. Under 640px each row stacks its cells.
+- The sidebar count and this list read one `GET /consultant/queue`, loaded where the session is; a close or a case found gone loads it again.
+- Loading shows pulsing rows; an error shows the error card with "Reintentar".
 - Empty state: "No hay casos en revisión."
 
 ### Consultant case (`/consultant/case/:id`)
 
-- Left: the thread, read-only, in a glass panel with the heading "Conversación". There is no composer, no reply box, and no text field (`ARCHITECTURE.md`, "Consultant close").
-- Right: the packet as the hero, sticky, section label "Paquete". Key-value rows from `analysis.completed` (`specs/08-consultant-close.feature`): Pedido, Score, Ingreso mensual, Regla, Política.
-- Under the rows, two hero secondary buttons of the same size: "Precalificar", then "No precalificar". Neither takes focus on load and neither is tinted by outcome, so the layout does not lean toward an answer.
+- Above the columns: a crumb back to "Casos en revisión", the customer's full name, the `customer_id` in mono, and the clay "En revisión" tag.
+- Left: the thread, read-only, in a glass panel with the heading "Conversación", from the packet's `messages` and with the case's `locale` as `lang`. There is no composer, no reply box, and no text field (`ARCHITECTURE.md`, "Consultant close").
+- Right: the packet as the hero, sticky, section label "Paquete". Key-value rows from `analysis.completed` (`specs/08-consultant-close.feature`): Pedido, Score, Ingreso mensual, Regla, Política, Resultado, then Motivo from the handoff. Identifiers are mono. A field the packet carries as null has no row, so a case handed off before the policy ran shows only Motivo.
+- Under the rows, when the packet says `closable` (`PLAN.md` D15 (3)), two hero secondary buttons of the same size: "Precalificar", then "No precalificar". Neither takes focus on load and neither is tinted by outcome, so the layout does not lean toward an answer. When it does not, there are no buttons and the packet reads "Este caso no se puede cerrar: la política no llegó a un resultado.": the screen does not work out whether a case can be closed.
 - Choosing one opens a confirm dialog, the review step Wirely shows before a payment. It names the outcome, says the customer gets a message and the case closes, and offers "Volver" (secondary, focused first) and "Confirmar" (decisive).
-- On success the case leaves the queue. A second close is rejected by the API (`consultant_close:{process_id}`) and the screen shows that as an error.
+- On success the screen returns to the queue, which no longer lists the case. A second close is rejected by the API (409 `already_closed`, the event key `consultant_close:{process_id}`) and the screen shows that as an error. A 503 `cycle_pending` means the close was written: the screen says it is being recorded, offers "Actualizar", and never sends it again. A case no longer with a person (404) reads "Este caso ya no está en revisión." with a way back to the queue.
 - This confirm step is the consultant's. The customer's consent (`PLAN.md` D8) is the `confirm_prequalify` template, answered in the thread.
 
 ### Trace (`/consultant/case/:id/trace`)

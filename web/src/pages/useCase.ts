@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { api } from "../api/client";
+import { CONFLICT } from "../api/status";
 import type { components } from "../api/schema";
 import type { PendingSend } from "../chat";
 import { isLocale, useLocale } from "../i18n/locale";
@@ -81,8 +82,6 @@ export function useCase(processId: string | undefined, arrived: CaseData | undef
 }
 
 type Answer = { case: CaseData } | { refused: number | null };
-
-const CONFLICT = 409;
 
 // A start names its product; any other message names its case (D24).
 async function postMessage(message: PendingSend, processId: string | undefined): Promise<Answer> {

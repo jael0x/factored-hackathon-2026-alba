@@ -1,6 +1,6 @@
 from collections.abc import Callable, Iterator
 from decimal import Decimal
-from typing import Any
+from typing import Any, get_args
 from uuid import UUID, uuid4
 
 import psycopg
@@ -47,6 +47,7 @@ from api.tests.cycle_harness import (
     seed_cycle_people,
     send,
 )
+from api.tests.oracle import ORACLE, OracleCustomer
 from api.tests.turn_harness import load_turn_fixture
 
 pytestmark = pytest.mark.integration
@@ -183,6 +184,18 @@ def started(pool: ConnectionPool, customer_id: str, product: ProductKey = "credi
     run_until_idle(pool, scripted())
 
 
+@pytest.mark.parametrize("customer", ORACLE.customers, ids=lambda c: c.customer_id)
+@pytest.mark.parametrize("product", get_args(ProductKey))
+def test_each_oracle_case_reaches_its_outcome_and_state(
+    url: str, pool: ConnectionPool, customer: OracleCustomer, product: ProductKey
+) -> None:
+    started(pool, customer.customer_id, product)
+    expected = customer.expected
+    [analysis] = payloads(url, customer.customer_id, ANALYSIS_COMPLETED)
+    assert (analysis["outcome"], analysis["deciding_rule"]) == (expected.outcome, expected.deciding_rule)
+    assert cases(url, customer.customer_id) == [(expected.state, expected.end_reason, product, "es")]
+
+
 def test_juan_prequalifies_for_a_card_from_the_home_without_a_model_call(url: str, pool: ConnectionPool) -> None:
     model = scripted()
     start(pool, JUAN)
@@ -199,7 +212,7 @@ def test_juan_prequalifies_for_a_card_from_the_home_without_a_model_call(url: st
     [analysis] = payloads(url, JUAN, "analysis.completed")
     assert (analysis["outcome"], analysis["deciding_rule"], analysis["locale"]) == ("PREQUALIFIED", "R05", "es")
     file_income = "customer_credit_profile.income_local"
-    assert analysis["facts"] == facts(812, Decimal("306753.45"), "MXN", Decimal("17988.33"), file_income)
+    assert analysis["facts"] == facts(812, Decimal("306753.45"), "MXN", Decimal("17988.32906145"), file_income)
     assert payloads(url, JUAN, "process.ended") == [{"end_reason": "prequalified", "policy_version": "alba-credit-v1"}]
     assert model.calls == []
 

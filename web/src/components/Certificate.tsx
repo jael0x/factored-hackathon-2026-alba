@@ -1,7 +1,7 @@
 import { useId } from "react";
 
 import type { components } from "../api/schema";
-import { PREQUALIFIED } from "../chat";
+import { DECIDED_BY_CONSULTANT, PREQUALIFIED } from "../chat";
 import { formatAmount, formatDate } from "../format";
 import { useMessages } from "../i18n/messages";
 
@@ -13,7 +13,7 @@ type Appeal = { busy: boolean; failed: boolean; onAppeal: () => void };
 export function Certificate({ certificate, appeal }: { certificate: CertificateData; appeal: Appeal | null }) {
   const t = useMessages();
   const titleId = useId();
-  const { outcome, product, body, income_local, income_currency, income_usd, as_of, locale } = certificate;
+  const { outcome, product, body, income_local, income_currency, income_usd, as_of, locale, decided_by } = certificate;
   return (
     <section
       className={`certificate hero enter ${outcome === PREQUALIFIED ? "yes" : "no"}`}
@@ -27,6 +27,7 @@ export function Certificate({ certificate, appeal }: { certificate: CertificateD
         </h2>
       )}
       <p>{body}</p>
+      {decided_by === DECIDED_BY_CONSULTANT && <p className="reviewed">{t.certificate.reviewed}</p>}
       {income_local !== null && income_currency !== null && (
         <>
           <p className="kicker">{t.certificate.facts}</p>

@@ -950,10 +950,11 @@ spec('policy', 'po-profile', {
     '`max_days_past_due` over active `Tarjeta Crédito`, `Préstamo Personal`, and `Préstamo Hipotecario`; empty counts as 0. `as_of` 2026-06-17.',
     '`holds_product` is the gold boolean of the requested product: `has_active_card` or `has_active_personal_loan`.',
     'Rates from `daily_exchange_rates` for June 17, 2026: 1 MXN = 0.058641 USD, 1 COP = 0.000248 USD, 1 ARS = 0.002873 USD.',
+    '`income_usd` is stored unrounded; screens round it.',
+    '`Tarjeta Crédito` is `credit_card`, `Préstamo Personal` is `personal_loan`, `Préstamo Hipotecario` counts only toward days past due; the other five types are not read (R9).',
   ],
   open: [
     ['R7', 'Convert incomes to USD per country and check the medians land in a similar range.'],
-    ['R9', 'List every `product_type` value and record its mapping to product keys.'],
   ],
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1"; PLAN.md §6',
 });
@@ -1007,13 +1008,13 @@ spec('policy', 'po-absent', {
   src: 'ARCHITECTURE.md, "Policy alba-credit-v1", "Risk estimate", "Not decided"',
 });
 spec('policy', 'po-oracle', {
-  name: 'Oracle fixtures', tech: 'api/fixtures/oracle_customers.json', status: 'partial',
+  name: 'Oracle fixtures', tech: 'api/fixtures/oracle_customers.json', status: 'defined',
   summary: 'Four real rows that cover every outcome, plus César.',
   fixed: [
     'Juan `PREQUALIFIED` R05; Juliana `NEEDS_INFO` R06, then `PREQUALIFIED` once she states an amount; Alicia `REFER` R05; Mariana `NOT_PREQUALIFIED` R02.',
-    'If an outcome changes, the integration test fails.',
+    'If an outcome changes, the integration test fails: `api/tests/test_oracle_integration.py` runs the four flows over HTTP and the worker, signed in with emailed codes, with scripted turns (E9).',
+    'Confirmed Oct 5 against a fresh load (R8): `pytest -m dataset` compares the fixture with the loaded tables. No document, email, or product number in it.',
   ],
-  open: [['R8', 'Re-read the four customers and César from `data/raw/` and confirm every value in the contract.']],
   src: 'ARCHITECTURE.md, "Oracle fixtures", "The other three flows"',
 });
 
@@ -1194,7 +1195,7 @@ node('pg-queue', {
 });
 node('pg-consultantcase', {
   parent: 'web', kind: 'component', name: 'Consultant case', tech: 'ConsultantCase.tsx',
-  summary: '`/consultant/case/:id`. The handoff packet and two close actions. No reply box.',
+  summary: '`/consultant/case/:id`. The customer\'s thread, read only, the handoff packet, and two close actions. No reply box.',
   src: 'ARCHITECTURE.md, "Auth and screens", "Consultant close"',
 });
 node('pg-trace', {
@@ -1217,7 +1218,7 @@ view('web', {
     ['pg-case', 'api', 'messages, certificate'],
     ['pg-login', 'api', 'search, code, JWT'],
     ['pg-queue', 'api', 'queue'],
-    ['pg-consultantcase', 'api', 'packet, close'],
+    ['pg-consultantcase', 'api', 'packet and thread, close'],
     ['pg-trace', 'api', 'events'],
   ],
 });
@@ -1301,6 +1302,7 @@ spec('pg-queue', 'aq-list', {
     'Processes in `human_active`. `ended` processes are not shown.',
     'Alicia appears. Juan, Juliana, and Mariana do not.',
     'Ordered by `processes.created_at`, then process id. Each card carries the customer name, `product`, the latest `reason_code`, and the case\'s `locale`.',
+    'Built Oct 5 (W5): `ConsultantQueue.tsx` and the sidebar count read one `GET /consultant/queue`, loaded once by `ConsultantLayout.tsx`.',
   ],
   src: 'ARCHITECTURE.md, "Auth and screens"; AGENTS.md, "Database"',
 });
@@ -1312,6 +1314,7 @@ spec('pg-consultantcase', 'ac-packet', {
     'Read from the case\'s latest `analysis.completed`: request, score, income, deciding rule, `policy_version`, outcome. They are null when the policy never ran.',
     'The packet may show the rule id and the facts. An internal reason code is not customer copy.',
     '`closable` is false when there is no analysis or it is `NEEDS_INFO` (D15 (3)): the screen then offers no close.',
+    'Built Oct 5 (W5): the packet also carries the customer\'s thread (`messages`), read for the case\'s own `customer_id`; the screen shows it read only, beside the rows.',
   ],
   src: 'ARCHITECTURE.md, "Auth and screens", "The other three flows"',
 });
@@ -1323,6 +1326,7 @@ spec('pg-consultantcase', 'ac-close', {
     'The close writes `conversation.consultant_closed`; a template tells the customer and the process ends.',
     'Which outcome César picks for Alicia is not fixed by the contract.',
     'The two actions show only when the packet says `closable`.',
+    'Built Oct 5 (W5): a confirm dialog before the close; a 503 is never sent again, a 409 or a 404 reads the case again.',
   ],
   src: 'ARCHITECTURE.md, "Consultant close", "The other three flows"',
 });
@@ -1489,14 +1493,13 @@ spec('ld-silver', 'sv-rules', {
   src: 'ARCHITECTURE.md, "Data: what is touched and what is not"',
 });
 spec('ld-silver', 'sv-tables', {
-  name: 'Read tables', tech: 'listed columns only', status: 'partial',
+  name: 'Read tables', tech: 'listed columns only', status: 'defined',
   summary: 'Other columns in the data dictionary are not copied.',
   fixed: [
     '`customers`: `customer_id`, `document_number`, `first_name`, `last_name`, `email`, `country`, `segment`, `credit_score`, `estimated_monthly_income`, `customer_status`.',
     '`products`: `product_id`, `customer_id`, `product_type`, `product_number`, `currency`, `current_balance`, `product_status`, `days_past_due`.',
     '`daily_exchange_rates`: `date`, `source_currency`, `target_currency`, `exchange_rate`. `service_agents`: `agent_id`, `employee_code`, `first_name`, `last_name`, `email`, `agent_status`, `specialty`.',
   ],
-  open: [['R9', 'The `product_type` values and their mapping to `credit_card` and `personal_loan`.']],
   src: 'ARCHITECTURE.md, "Read tables"',
 });
 

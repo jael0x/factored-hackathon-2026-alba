@@ -3,9 +3,10 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
+from api.application.cases import Threads
 from api.application.processes import Events
 from api.contract_models import Actor, CloseOutcome, EventName, ProcessState
-from api.domain.process.case import CaseRow
+from api.domain.process.case import CaseRow, ThreadLine
 from api.domain.process.lifecycle import ENDED, HUMAN_ACTIVE, ProcessRow
 from api.domain.process.new_events import AlreadyAppended, IdempotencyConflict, consultant_closed
 from api.domain.process.packet import HandoffPacket, HandoffSource, QueueItem, packet_of
@@ -36,6 +37,12 @@ class ConsultantCases(Protocol):
     def case(self, process_id: UUID) -> CaseRow | None: ...
 
 
+@dataclass(frozen=True)
+class Handoff:
+    packet: HandoffPacket
+    thread: list[ThreadLine]
+
+
 class ConsultantCaseNotFound(Exception):
     def __init__(self, process_id: UUID) -> None:
         super().__init__(f"process {process_id} is not with a person")
@@ -55,11 +62,12 @@ def list_consultant_queue(cases: ConsultantCases) -> list[QueueItem]:
     return cases.queue()
 
 
-def read_handoff_packet(cases: ConsultantCases, process_id: UUID) -> HandoffPacket | None:
+# The thread is the customer's own, read for the customer the case belongs to, never one the request names.
+def read_handoff(cases: ConsultantCases, threads: Threads, process_id: UUID) -> Handoff | None:
     source = cases.handoff(process_id)
     if source is None or source.state != HUMAN_ACTIVE:
         return None
-    return packet_of(source)
+    return Handoff(packet_of(source), threads.thread(source.customer_id, process_id))
 
 
 def read_case_trace(cases: ConsultantCases, process_id: UUID) -> list[TraceRecord] | None:

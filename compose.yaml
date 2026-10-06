@@ -90,6 +90,7 @@ services:
     environment:
       ALBA_TEST_ADMIN_DATABASE_URL: postgresql://alba:alba@postgres:5432/postgres
       ALBA_REQUIRE_POSTGRES: "1"
+      ALBA_DATASET_DATABASE_URL: postgresql://alba:alba@postgres:5432/alba
     depends_on:
       postgres:
         condition: service_healthy

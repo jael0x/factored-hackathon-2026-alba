@@ -476,8 +476,8 @@ paths:
       description: >
         Requires role consultant. A process that is not human_active is not found.
         Packet fields that come from the case's latest analysis.completed are null when that event does not exist
-        (a handoff before the policy ran). closable says whether the case may be closed. There is no text field
-        and no reply body.
+        (a handoff before the policy ran). closable says whether the case may be closed. messages is the
+        customer's thread, read only. There is no text field and no reply body.
       parameters:
         - $ref: "#/components/parameters/ProcessId"
       responses:
@@ -1271,6 +1271,8 @@ components:
         policy_version, and outcome are copied from the case's latest analysis.completed. They are null
         when that event does not exist. reason_code is copied from the latest conversation.thread_taken.
         closable is true only when that analysis exists and its outcome is not NEEDS_INFO (PLAN.md D15 (3)).
+        messages is the customer's thread, read as Case.messages reads it, for the customer the case belongs to.
+        The consultant reads it and does not write in it.
       required:
         - process_id
         - state
@@ -1288,6 +1290,7 @@ components:
         - reason_code
         - locale
         - closable
+        - messages
       properties:
         process_id:
           type: string
@@ -1336,6 +1339,10 @@ components:
           $ref: "#/components/schemas/Locale"
         closable:
           type: boolean
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ThreadMessage"
 
     CloseCaseRequest:
       type: object

@@ -9,8 +9,9 @@ from api.contract_models import Locale, ProductKey, Role
 from api.domain.policy.templates import render_notice
 from api.domain.session.tokens import SessionClaims, issue_token
 from api.infrastructure.config.settings import settings
-from api.tests.cycle_harness import GOLD_ROWS, MARIANA
+from api.tests.cycle_harness import ALICIA, MARIANA
 from api.tests.login_harness import JUAN
+from api.tests.oracle import oracle_customer, seed_oracle_profiles
 
 CHAT_TEST_DB = "alba_chat_test"
 AS_OF = "2026-06-17"
@@ -21,26 +22,17 @@ CESAR = "AGT-OJ9N4FGYV9"
 
 
 def seed_profiles(url: str) -> None:
+    mariana = oracle_customer(MARIANA)
     with psycopg.connect(url) as conn:
         conn.execute(
             """
             INSERT INTO customers (customer_id, document_number, first_name, last_name, email, country, segment,
                                    customer_status)
-            VALUES (%s, '0000009643', 'Mariana Mónica', 'Acosta Rojas', NULL, 'Argentina', 'Basic', 'Active')
+            VALUES (%s, '0000009643', %s, %s, NULL, %s, %s, %s)
             """,
-            (MARIANA,),
+            (MARIANA, mariana.first_name, mariana.last_name, mariana.country, mariana.segment, mariana.customer_status),
         )
-        conn.cursor().executemany(
-            """
-            INSERT INTO customer_credit_profile (
-                customer_id, first_name, last_name, country, segment, customer_status, credit_score, income_local,
-                income_currency, income_usd, max_days_past_due, has_active_card, has_active_personal_loan, as_of,
-                batch_id
-            )
-            VALUES (%s, 'x', 'x', %s, 'Basic', 'Active', %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            [(*row, AS_OF, uuid4()) for row in GOLD_ROWS],
-        )
+        seed_oracle_profiles(conn)
 
 
 def reset(url: str) -> None:
@@ -54,7 +46,11 @@ def bearer(sub: str, role: Role = "customer") -> dict[str, str]:
 
 
 def post(http: TestClient, body: dict[str, Any], sub: str) -> dict[str, Any]:
-    response = http.post("/messages", json=body, headers=bearer(sub))
+    return post_as(http, body, bearer(sub))
+
+
+def post_as(http: TestClient, body: dict[str, Any], session: dict[str, str]) -> dict[str, Any]:
+    response = http.post("/messages", json=body, headers=session)
     assert response.status_code == 200, response.text
     case = response.json()
     assert isinstance(case, dict)
@@ -76,9 +72,12 @@ def start(
     return post(http, start_body(product, locale, text, message_id), sub)
 
 
+def case_body(case: dict[str, Any], text: str, locale: Locale = "es") -> dict[str, str]:
+    return {"text": text, "client_message_id": str(uuid4()), "locale": locale, "process_id": case["process_id"]}
+
+
 def say(http: TestClient, case: dict[str, Any], text: str, sub: str, locale: Locale = "es") -> dict[str, Any]:
-    body = {"text": text, "client_message_id": str(uuid4()), "locale": locale, "process_id": case["process_id"]}
-    return post(http, body, sub)
+    return post(http, case_body(case, text, locale), sub)
 
 
 def appeal(http: TestClient, case: dict[str, Any], sub: str) -> Any:
@@ -108,3 +107,31 @@ def close(http: TestClient, case: dict[str, Any], outcome: str, sub: str = CESAR
     return http.post(
         f"/consultant/case/{case['process_id']}/close", json={"outcome": outcome}, headers=bearer(sub, role)
     )
+
+
+def alicia_queue_item(case: dict[str, Any], locale: Locale = "es") -> dict[str, Any]:
+    return {
+        "process_id": case["process_id"],
+        "customer_id": ALICIA,
+        "first_name": "Alicia Mariana",
+        "last_name": "Parra Álvarez",
+        "product": "credit_card",
+        "reason_code": "policy_refer",
+        "locale": locale,
+    }
+
+
+def alicia_packet(case: dict[str, Any], locale: Locale = "es") -> dict[str, Any]:
+    return {
+        **alicia_queue_item(case, locale),
+        "state": "human_active",
+        "credit_score": 615,
+        "income_local": 4707334.28,
+        "income_currency": "COP",
+        "income_usd": 1167.41890144,
+        "deciding_rule": "R05",
+        "policy_version": "alba-credit-v1",
+        "outcome": "REFER",
+        "closable": True,
+        "messages": case["messages"],
+    }
