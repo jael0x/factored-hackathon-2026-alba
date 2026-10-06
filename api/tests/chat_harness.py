@@ -9,7 +9,7 @@ from api.contract_models import Locale, ProductKey, Role
 from api.domain.policy.templates import render_notice
 from api.domain.session.tokens import SessionClaims, issue_token
 from api.infrastructure.config.settings import settings
-from api.tests.cycle_harness import MARIANA
+from api.tests.cycle_harness import ALICIA, MARIANA
 from api.tests.login_harness import JUAN
 from api.tests.oracle import oracle_customer, seed_oracle_profiles
 
@@ -46,7 +46,11 @@ def bearer(sub: str, role: Role = "customer") -> dict[str, str]:
 
 
 def post(http: TestClient, body: dict[str, Any], sub: str) -> dict[str, Any]:
-    response = http.post("/messages", json=body, headers=bearer(sub))
+    return post_as(http, body, bearer(sub))
+
+
+def post_as(http: TestClient, body: dict[str, Any], session: dict[str, str]) -> dict[str, Any]:
+    response = http.post("/messages", json=body, headers=session)
     assert response.status_code == 200, response.text
     case = response.json()
     assert isinstance(case, dict)
@@ -68,9 +72,12 @@ def start(
     return post(http, start_body(product, locale, text, message_id), sub)
 
 
+def case_body(case: dict[str, Any], text: str, locale: Locale = "es") -> dict[str, str]:
+    return {"text": text, "client_message_id": str(uuid4()), "locale": locale, "process_id": case["process_id"]}
+
+
 def say(http: TestClient, case: dict[str, Any], text: str, sub: str, locale: Locale = "es") -> dict[str, Any]:
-    body = {"text": text, "client_message_id": str(uuid4()), "locale": locale, "process_id": case["process_id"]}
-    return post(http, body, sub)
+    return post(http, case_body(case, text, locale), sub)
 
 
 def appeal(http: TestClient, case: dict[str, Any], sub: str) -> Any:
@@ -100,3 +107,30 @@ def close(http: TestClient, case: dict[str, Any], outcome: str, sub: str = CESAR
     return http.post(
         f"/consultant/case/{case['process_id']}/close", json={"outcome": outcome}, headers=bearer(sub, role)
     )
+
+
+def alicia_queue_item(case: dict[str, Any], locale: Locale = "es") -> dict[str, Any]:
+    return {
+        "process_id": case["process_id"],
+        "customer_id": ALICIA,
+        "first_name": "Alicia Mariana",
+        "last_name": "Parra Álvarez",
+        "product": "credit_card",
+        "reason_code": "policy_refer",
+        "locale": locale,
+    }
+
+
+def alicia_packet(case: dict[str, Any], locale: Locale = "es") -> dict[str, Any]:
+    return {
+        **alicia_queue_item(case, locale),
+        "state": "human_active",
+        "credit_score": 615,
+        "income_local": 4707334.28,
+        "income_currency": "COP",
+        "income_usd": 1167.41890144,
+        "deciding_rule": "R05",
+        "policy_version": "alba-credit-v1",
+        "outcome": "REFER",
+        "closable": True,
+    }

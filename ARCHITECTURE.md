@@ -87,7 +87,7 @@ api-spec/
   openapi.yaml            # wire contract; generate both clients from this file
   generate.py
 api/
-  main.py                 # process: opens the pool, includes the routers
+  main.py                 # process: create_app opens the pool, starts the worker with the turn reader it is given (LLM_MODEL by default), includes the routers
   contract_models.py      # generated from api-spec/openapi.yaml
   domain/                 # pure rules. No FastAPI, no psycopg, no settings
     session/
