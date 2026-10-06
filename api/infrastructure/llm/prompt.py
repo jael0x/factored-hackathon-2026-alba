@@ -85,15 +85,16 @@ def yes_no(value: bool) -> str:
 
 
 def turn_schema() -> dict[str, object]:
-    schema = without_keywords(ConversationTurn.model_json_schema())
-    if not isinstance(schema, dict):
-        raise TypeError("the ConversationTurn schema is not an object")
-    return schema
+    return without_keywords(ConversationTurn.model_json_schema())
 
 
-def without_keywords(node: object) -> object:
+def without_keywords(schema: Mapping[str, object]) -> dict[str, object]:
+    return {key: stripped(value) for key, value in schema.items() if key not in UNSUPPORTED_KEYWORDS}
+
+
+def stripped(node: object) -> object:
     if isinstance(node, Mapping):
-        return {key: without_keywords(value) for key, value in node.items() if key not in UNSUPPORTED_KEYWORDS}
+        return without_keywords(node)
     if isinstance(node, list):
-        return [without_keywords(item) for item in node]
+        return [stripped(item) for item in node]
     return node
