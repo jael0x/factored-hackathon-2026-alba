@@ -27,6 +27,7 @@ const AI_ACTIVE: ProcessState = "ai_active";
 export const HUMAN_ACTIVE: ProcessState = "human_active";
 export const ENDED: ProcessState = "ended";
 export const PREQUALIFIED: CloseOutcome = "PREQUALIFIED";
+export const NOT_PREQUALIFIED: CloseOutcome = "NOT_PREQUALIFIED";
 
 export function newSend(text: string, locale: Locale, product?: ProductKey): PendingSend {
   return { text, clientMessageId: crypto.randomUUID(), locale, product };
