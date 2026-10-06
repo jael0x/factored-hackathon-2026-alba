@@ -1,3 +1,4 @@
+import time
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -120,3 +121,16 @@ def query(url: str, sql: LiteralString, params: tuple[Any, ...] = ()) -> list[tu
     with psycopg.connect(url) as conn:
         configure_json(conn)
         return conn.execute(sql, params).fetchall()
+
+
+def wait_until_blocked(url: str, backend_pid: int) -> None:
+    deadline = time.monotonic() + 5
+    with psycopg.connect(url, autocommit=True) as watcher:
+        while time.monotonic() < deadline:
+            row = watcher.execute(
+                "SELECT wait_event_type FROM pg_stat_activity WHERE pid = %s", (backend_pid,)
+            ).fetchone()
+            if row is not None and row[0] == "Lock":
+                return
+            time.sleep(0.01)
+    raise AssertionError(f"backend {backend_pid} never waited on a lock")

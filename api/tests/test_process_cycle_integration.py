@@ -1,4 +1,3 @@
-import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -37,6 +36,7 @@ from api.domain.process.new_events import (
 )
 from api.infrastructure.db.events import PostgresEvents
 from api.infrastructure.db.processes import PostgresProcesses
+from api.tests.cycle_harness import wait_until_blocked
 
 pytestmark = pytest.mark.integration
 
@@ -104,19 +104,6 @@ def processes(url: str) -> list[tuple[Any, ...]]:
         return conn.execute(
             "SELECT id, customer_id, process_key, state, end_reason, product, locale FROM processes ORDER BY created_at, id"
         ).fetchall()
-
-
-def wait_until_blocked(url: str, backend_pid: int) -> None:
-    deadline = time.monotonic() + 5
-    with psycopg.connect(url, autocommit=True) as watcher:
-        while time.monotonic() < deadline:
-            row = watcher.execute(
-                "SELECT wait_event_type FROM pg_stat_activity WHERE pid = %s", (backend_pid,)
-            ).fetchone()
-            if row is not None and row[0] == "Lock":
-                return
-            time.sleep(0.01)
-    raise AssertionError(f"backend {backend_pid} never waited on a lock")
 
 
 def test_a_first_message_has_no_process_and_is_born_ai_active(url: str) -> None:
