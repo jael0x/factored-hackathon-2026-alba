@@ -90,3 +90,10 @@ Feature: Consultant close
     Then it says a person from the bank reviewed her request and she pre-qualifies for a credit card
     And it shows no income and no USD equivalent
     And it offers no option to ask a person to review it
+
+  Scenario: A case page left open shows the close once it is reloaded
+    Given Alicia's case page says a person is seeing her case
+    And César closed her case as pre-qualified
+    When Alicia reloads that page
+    Then she sees her certificate
+    And the page no longer says a person is seeing her case
