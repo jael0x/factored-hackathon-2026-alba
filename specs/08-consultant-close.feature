@@ -62,6 +62,23 @@ Feature: Consultant close
     Then the close is rejected
     And Alicia's case stays in the review queue
 
+  Scenario: A case the policy left without a result cannot be closed
+    Given Juliana Castro Gómez was asked for her monthly income in her credit card case
+    And she wrote "quiero hablar con una persona" in that case
+    When César opens Juliana's case
+    Then he sees the reason "customer_requested_human" and the outcome "NEEDS_INFO" by rule "R06"
+    And the case offers no way to close it
+    When César tries to close Juliana's case as "PREQUALIFIED"
+    Then the close is refused
+    And Juliana's case stays in the review queue
+
+  Scenario: A case handed off before the policy ran shows no analysis and cannot be closed
+    Given a customer with no credit profile started a credit card request
+    And the policy could not run, so the case went to a person with reason "tool_failed"
+    When César opens that case
+    Then the packet shows no score, no income, no rule, no policy, and no outcome
+    And the case offers no way to close it
+
   Scenario: The customer's certificate from a consultant shows no income figures
     Given César closed Alicia's credit card case as pre-qualified
     When Alicia opens her certificate
