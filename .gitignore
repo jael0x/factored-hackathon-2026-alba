@@ -19,5 +19,7 @@ venv/
 
 node_modules/
 dist/
+web/e2e-results/
+web/e2e-report/
 .coverage
 coverage.xml

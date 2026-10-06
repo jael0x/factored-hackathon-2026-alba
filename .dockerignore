@@ -6,6 +6,8 @@ data
 web/node_modules
 api-spec/node_modules
 web/dist
+web/e2e-results
+web/e2e-report
 mocks
 docs
 *.md
