@@ -1012,7 +1012,7 @@ spec('policy', 'po-oracle', {
   summary: 'Four real rows that cover every outcome, plus César.',
   fixed: [
     'Juan `PREQUALIFIED` R05; Juliana `NEEDS_INFO` R06, then `PREQUALIFIED` once she states an amount; Alicia `REFER` R05; Mariana `NOT_PREQUALIFIED` R02.',
-    'If an outcome changes, the integration test fails.',
+    'If an outcome changes, the integration test fails: `api/tests/test_oracle_integration.py` runs the four flows over HTTP and the worker, signed in with emailed codes, with scripted turns (E9).',
     'Confirmed Oct 5 against a fresh load (R8): `pytest -m dataset` compares the fixture with the loaded tables. No document, email, or product number in it.',
   ],
   src: 'ARCHITECTURE.md, "Oracle fixtures", "The other three flows"',
