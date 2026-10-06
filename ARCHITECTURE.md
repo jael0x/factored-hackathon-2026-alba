@@ -73,7 +73,7 @@ A consultant is a bank employee who reviews the cases the assistant hands off. T
 | How it runs | `docker compose up` applies the schema, downloads the missing CSVs, and builds the profile. Nobody runs SQL by hand. Reviewers (and anyone else) run that stack locally and open the app in the browser. There is no cloud deploy for the submission. `docs/ops.md` will list optional steps if a host is used later |
 | Auth | Customers: document number plus a one-time code emailed to the address on file. Consultants: email and employee code plus the same kind of code. Mailpit receives every code in the compose stack. Then an own JWT, HS256, 15 minutes, issued by this API |
 | Pipeline | Python, in the `load` container. Reads local CSVs. DuckDB only if the aggregate needs it; the result lands in Postgres |
-| LLM | OpenAI API, model `gpt-6-luna` (GPT-6 Luna). The adapter `api/infrastructure/llm/conversation.py` makes one call with Structured Outputs (the `ConversationTurn` JSON schema) and returns `ConversationTurn`. The policy does not use this adapter |
+| LLM | Anthropic API, model `claude-sonnet-5-5` (Claude Sonnet 5.5; `PLAN.md` D27). The adapter `api/infrastructure/llm/conversation.py` makes one call with structured output (the `ConversationTurn` JSON schema) and returns the reading. The policy does not use this adapter |
 | Tests | pytest in the API. Vitest with jsdom for the client's own logic (browser storage, the session, the language choice); business logic does not live in the client |
 | Quality gate | ruff (lint and format), mypy strict, pytest with branch coverage, `tsc`, Vitest, and the Vite build. GitHub Actions runs it on every pull request to `main` and every push to `main`. See **Quality gate** |
 | Running processes | A loop inside the API process that takes `commands` rows with `status = pending`. No Kafka, no Redis, no Inngest |
@@ -145,15 +145,17 @@ api/
       events.py           # append to events, idempotent on the key; read one event and a process's earlier ones
       commands.py         # the command queue: enqueue on the key, claim the next one, done, failed
       messages.py         # thread lines, one per event
+      llm_turns.py        # one row per model call, on its own connection so it survives a rolled-back attempt
       json_codec.py       # jsonb both ways with exact decimals, set on every pooled connection
       processes.py        # SQL for processes: the open case, the insert, the row lock, the state
       profile.py          # gold by customer_id, for the policy and the model's booleans
       cases.py            # the thread of one case, in the seq of its events, and its latest certificate
       products.py         # SQL for products, filtered on the session customer, ordered by product_id
     mail/smtp.py          # sends the login code by SMTP; the only module that opens SMTP
-    llm/                  # the classifiers; only conversation.py imports the OpenAI SDK, when that adapter is built
+    llm/                  # the turn readers; only conversation.py imports the Anthropic SDK
       keywords.py         # B0, the keyword baseline: a TurnRequest read from word lists (PLAN.md D23)
-      conversation.py     # one call, JSON schema
+      conversation.py     # Claude: one call with structured output, one retry, each call recorded (PLAN.md D27)
+      prompt.py           # the versioned prompt, the catalog in a fixed order, and the schema sent with it
       schema.py           # ConversationTurn and parse_conversation_turn, the one parse of the model's JSON
   presentation/
     http/
@@ -199,7 +201,7 @@ db/migrations/008_events_locale_check.sql
 db/migrations/009_command_queue.sql
 db/migrations/010_one_open_case_per_product.sql
 db/migrations/011_case_read_indexes.sql
-eval/                       # comes later; does not block the flow
+eval/                       # the frozen held-out set, B0 against Claude, and the reports (M4, M6; run by hand)
 compose.yaml
 docker/api.Dockerfile
 docker/web.Dockerfile
@@ -414,7 +416,7 @@ How the loop runs (built Oct 5, E4):
 - **The thread.** `conversation.show_reply` writes the turn's `reply_text` with `author = assistant` and the turn as its `event_id`. `template.send` and `decision.render` write their body with `author = template` and the event they wrote. One event has at most one line (unique `messages.event_id`).
 - **`conversation.generate` re-reads the case.** A message stamped `ai_active` may reach a case a queued handoff moved to `human_active` first. The command then writes nothing and is done: the model is not called. The model call comes before any write, so it holds no lock on the process row.
 - **The process.** The API process runs one worker thread when `RUN_WORKER` is set (`compose.yaml` sets it). It wakes when work is enqueued and polls every second otherwise. `wait_for_cycle(event_id)` returns once no command in that event's chain (command, event it wrote, its commands) is pending, so `POST /messages` waits without running commands. Tests run the same commands with `run_until_idle`, with no thread and no sleep.
-- **The model is injected.** `conversation.generate` calls a function that takes a `TurnRequest` (the text, the message's `locale`, the process state, and the four booleans) and returns the reading. `LLM_MODEL` picks it (`read_turn_for` in `api/presentation/worker/loop.py`): `b0-keywords` is B0, the keyword baseline, which `compose.yaml` sets while there is no `OPENAI_API_KEY` (`PLAN.md` D23); `gpt-6-luna` is the model. Until the adapter of `api/infrastructure/llm/conversation.py` is built, the model's function fails with an error that names it, and each case goes to a person with `tool_failed`.
+- **The model is injected.** `conversation.generate` calls a function that takes a `TurnRequest` (the text, the message's `locale`, the process state, and the four booleans) and returns the reading. `LLM_MODEL` picks it (`read_turn_for` in `api/presentation/worker/loop.py`): `claude-sonnet-5-5` is the model, which `compose.yaml` sets by default (`PLAN.md` D27); `b0-keywords` is B0, the keyword baseline, for a stack with no `ANTHROPIC_API_KEY` (`PLAN.md` D23). With the model named and no key, the reader fails with an error that names the key, and each case goes to a person with `tool_failed`.
 - **A start runs the policy.** A message with a `product` and no case is the home's dialog with the consent already given (`PLAN.md` D24): `open_process` opens the case for that product, and `run_requested_policy` on its `process.started` runs `policy.run`. So only the start that opened the case runs the policy, and every command after `process.start` finds its case on its triggering event, never by looking up an open case. A start whose `process.start` fails for good has no case, so nothing is handed to a person.
 
 | `command_name` | Does | Does not |
@@ -506,15 +508,15 @@ Outcome phrases the template may emit, and the model is forbidden to emit on its
 
 ## How the model is called
 
-The model is GPT-6 Luna on the OpenAI API, model id `gpt-6-luna`. It only classifies the sentence and drafts the clarification. Juan pre-qualifies the same with this model or with the test JSON, because `api/domain/policy/engine.py` decides that.
+The model is Claude Sonnet 5.5 on the Anthropic API, model id `claude-sonnet-5-5` (`PLAN.md` D27: no OpenAI key was available, so GPT-6 Luna was replaced before it was built). It only classifies the sentence and drafts the clarification. Juan pre-qualifies the same with this model or with the test JSON, because `api/domain/policy/engine.py` decides that.
 
-`OPENAI_API_KEY` lives in `.env`. It never enters git, the image, a log, or a prompt. `LLM_MODEL` names the classifier and defaults to `gpt-6-luna`. `b0-keywords` is B0, the keyword baseline, as a named classifier (`PLAN.md` D23): it needs no key, writes a fixed `reply_text` per intent in the message's `locale`, and is parsed by the same `parse_conversation_turn`. The compose stack sets `b0-keywords` until a key exists. The worker is given the reader `LLM_MODEL` names (`read_turn_for`); a B0 turn writes no `llm_turns` row, which M3's adapter writes. `gpt-6-luna` fails `conversation.generate` until its adapter (M3) is built; B0 is never used in its place. Any other value stops the API at startup. Only `api/infrastructure/llm/conversation.py` imports the OpenAI SDK. Whether it calls Chat Completions or Responses is an adapter detail: both support Structured Outputs for this model.
+`ANTHROPIC_API_KEY` lives in `.env`. It never enters git, the image, a log, or a prompt. An organization-level key must name its workspace: `ANTHROPIC_WORKSPACE_ID`, when set, goes as the `anthropic-workspace-id` header on every request; a workspace-scoped key needs none. `LLM_MODEL` names the classifier and defaults to `claude-sonnet-5-5`. `b0-keywords` is B0, the keyword baseline, as a named classifier (`PLAN.md` D23): it needs no key, writes a fixed `reply_text` per intent in the message's `locale`, and is parsed by the same `parse_conversation_turn`. The worker is given the reader `LLM_MODEL` names (`read_turn_for`); a B0 turn writes no `llm_turns` row. B0 is never used in the model's place. Any other value stops the API at startup. Only `api/infrastructure/llm/conversation.py` imports the Anthropic SDK (`anthropic`, pinned in `api/requirements.txt`); `api/infrastructure/llm/prompt.py` builds the prompt.
 
-If the key is missing, Postgres, login, and the policy still start. `conversation.generate` fails with an error that says the key is missing. A failed API call (timeout, rate limit, server error) is a failed attempt of the command, under the worker's limit of 3 attempts; after the third, `human_active` with `reason_code = tool_failed`. The model is not silently replaced with another one.
+If the key is missing, Postgres, login, and the policy still start. `conversation.generate` fails with an error that says the key is missing. A failed API call (timeout, rate limit, server error, after the SDK's own 2 retries) is a failed attempt of the command, under the worker's limit of 3 attempts; after the third, `human_active` with `reason_code = tool_failed`. A refusal (`stop_reason` `refusal`) is a failed attempt too. The model is not silently replaced with another one, so the API's refusal fallback is not enabled.
 
 The model is called only from `conversation.generate`, and only if the `generate_while_ai` rule enqueued that command.
 
-One call, no streaming, Structured Outputs with the `ConversationTurn` JSON schema. `temperature` 0 if the model accepts it; GPT-6 Luna is a reasoning model and its docs do not say (`PLAN.md` R11). The response must also validate as `ConversationTurn` in Pydantic. If it does not, one retry. If the second also fails, the turn is written with `reply_ok` false and `reason_code = model_output_invalid`. `hand_off_reply` moves the case to `human_active`. The request and the raw response are stored in `llm_turns` either way, including when parsing fails, with the model id and token usage. pytest does not call OpenAI: it injects the JSON, the turns in `api/fixtures/turns/`.
+One call, no streaming, structured output (`output_config.format`, a JSON schema) with the `ConversationTurn` schema minus the keywords the API does not accept (`minimum`, `title`), and `output_config.effort` `low`. No `temperature`: Claude Sonnet 5.5 rejects non-default sampling. The system prompt is cached (`cache_control`). The response must also parse with `parse_conversation_turn`, and a `prequalify_card` or `prequalify_loan` turn must name its own product. If it does not, one retry. If the second also fails, the attempt fails (`ModelOutputInvalid`), so the worker's third attempt sends the case to a person with `tool_failed` (`PLAN.md` D27); no turn is written, since `intent` and `language` have no valid value, and `model_output_invalid` stays in the closed set unused. A reply that holds an outcome stem (`precalifica`, `pré-qualifica`, `pre-qualifica`, any letter case, inside a word too: `OUTCOME_PHRASES` in `api/domain/process/turns.py`) is written with `reply_ok` false and `reason_code = reply_forbidden`, and `hand_off_reply` moves the case to `human_active`. Every call, parsed or not, is one `llm_turns` row with the prompt version, the raw response, the model id, token usage, and latency, written on its own connection so it survives the attempt's rollback. pytest does not call the API: it injects the JSON, the turns in `api/fixtures/turns/`, through a scripted `messages.create`.
 
 ```text
 ConversationTurn
@@ -532,7 +534,7 @@ ConversationTurn
 
 `api/infrastructure/llm/schema.py` holds `ConversationTurn` and `parse_conversation_turn`, the one parse of the model's JSON, for the adapter and for the test fixtures. Every field is required, and no other field is accepted. `declared_income_amount` is a JSON number of 0 or more, read as an exact decimal. A quoted amount, `NaN`, a repeated key, or a value outside its set is invalid output. The JSON schema sent for Structured Outputs is the one `ConversationTurn` writes, with the amount as a number only.
 
-What goes into the prompt. This is everything that leaves the service for OpenAI; the brief forbids private records in external model requests.
+What goes into the prompt. This is everything that leaves the service for Anthropic; the brief forbids private records in external model requests.
 
 - The message text, as the customer typed it. Whether ID-like numbers in it are masked first is open (`PLAN.md` D11).
 - The process state.
@@ -561,7 +563,7 @@ Conversation, risk estimate, and eligibility stay separate. The risk estimate is
 
 ### Learned component (evaluation)
 
-The learned component evaluated against a baseline is the `ConversationTurn` classifier (`gpt-6-luna` via Structured Outputs): intents including product, consent (`confirm_prequalify` / `decline_prequalify`), clarify, and out-of-scope. The baseline is B0, a keyword-rules bot, on the same team-labeled held-out set. There is no separate intent router in the runtime. Labels and splits are team-generated; customers used while tuning prompts are disjoint from the held-out set (`PLAN.md` §7).
+The learned component evaluated against a baseline is the `ConversationTurn` classifier (`claude-sonnet-5-5` with structured output, prompt `alba-turn-v1`): intents including product, consent (`confirm_prequalify` / `decline_prequalify`), clarify, and out-of-scope. The baseline is B0, a keyword-rules bot, on the same team-labeled held-out set. There is no separate intent router in the runtime. Labels and splits are team-generated; customers used while tuning prompts are disjoint from the held-out set (`PLAN.md` §7).
 
 ### UI wait state
 
@@ -707,7 +709,7 @@ The customer API does not list this table. `policy.run` reads one row, the one f
 
 The filter `customer_id = jwt.sub` is in every API query. A test calls `products` with Juan's JWT and asks for Alicia's id: the response carries no rows of Alicia's.
 
-Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` excludes. S3 keys and the OpenAI key live only in `.env`: never in the repo, the image, or the prompt.
+Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` excludes. S3 keys and the Anthropic key live only in `.env`: never in the repo, the image, or the prompt.
 
 ## Docker
 
@@ -724,7 +726,7 @@ Raw CSVs are not committed. They live in `data/raw/`, which `.gitignore` exclude
 
 Who runs it: anyone with the repo, a `.env`, and Docker. The default local demo sets `DEMO_LOGIN=1` and sends every login code to Mailpit. There is no SMS and no real email. Reviewers run `docker compose up` and open the web URL from the compose file. Secrets stay in `.env`; they are not committed.
 
-With a `.env` holding `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION=us-east-2`, `S3_BUCKET`, `OPENAI_API_KEY`, and `JWT_SECRET`, `docker compose up` needs no other command. `JWT_SECRET` must be at least 32 characters; the API refuses to start without it and names the variable. `.env.example` lists the same names with empty values. `load` uses the AWS CLI and runs `aws s3 cp` for these four keys, prefix `data/`:
+With a `.env` holding `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION=us-east-2`, `S3_BUCKET`, `ANTHROPIC_API_KEY`, and `JWT_SECRET`, `docker compose up` needs no other command. `JWT_SECRET` must be at least 32 characters; the API refuses to start without it and names the variable. `.env.example` lists the same names with empty values. `load` uses the AWS CLI and runs `aws s3 cp` for these four keys, prefix `data/`:
 
 - `customers.csv`
 - `products.csv`
@@ -739,7 +741,7 @@ The Postgres volume keeps gold. A second `up` does not reload if `load_batches` 
 
 ## Quality gate
 
-`.github/workflows/quality.yml` runs on every pull request to `main` and every push to `main`. It needs no secret: no `.env`, no S3 keys, no `OPENAI_API_KEY`. Four jobs. Each one is meant to be a required status check on `main`; that is a repository setting, not part of the workflow file:
+`.github/workflows/quality.yml` runs on every pull request to `main` and every push to `main`. It needs no secret: no `.env`, no S3 keys, no `ANTHROPIC_API_KEY`. Four jobs. Each one is meant to be a required status check on `main`; that is a repository setting, not part of the workflow file:
 
 | Job | Fails when |
 |---|---|
@@ -847,7 +849,7 @@ These points are left open on purpose. Implementing them on your own breaks the 
 - A separate intent router beside `ConversationTurn`.
 - Full pandera/Great Expectations suites or a policy freshness rule (R10).
 
-Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before OpenAI), D15 (1) (the customer's thread on a handoff that is not a policy `REFER`). D15 (3) is closed (Oct 5): a person closes only a case the policy reached a result for ("Consultant close"). D17 is closed by D24: `GET /cases` lists the customer's cases. D12, D13, D14, and D16 (1) are closed (Oct 2): the run-policy key carries the triggering turn, the third turn with no product goes to a person, an income before consent asks for consent again, and `ask_which_product` checks `language` like the other turn rules. D16 (2) is closed: `decide` takes `declared_income`. D16 (3) is closed (Oct 5): `process.transition` and `process.end` change `processes.state`. D21 is closed: the switch picks the `locale` Alba writes in, and the model's `language` only gates an unreadable message. D19 is closed: the keys of two-event actions, the actor of each event, and where event names live. D20 is closed: `process_state` on every event, the write order, a second start, and a reused message id. Each one that gets decided is written into this file.
+Decisions still open in `PLAN.md` §5: D1 (optional second-model comparison), D7 (eval harness sizing and spend), D11 (masking ID-like digits in customer text before the model API), D15 (1) (the customer's thread on a handoff that is not a policy `REFER`). D15 (3) is closed (Oct 5): a person closes only a case the policy reached a result for ("Consultant close"). D17 is closed by D24: `GET /cases` lists the customer's cases. D12, D13, D14, and D16 (1) are closed (Oct 2): the run-policy key carries the triggering turn, the third turn with no product goes to a person, an income before consent asks for consent again, and `ask_which_product` checks `language` like the other turn rules. D16 (2) is closed: `decide` takes `declared_income`. D16 (3) is closed (Oct 5): `process.transition` and `process.end` change `processes.state`. D21 is closed: the switch picks the `locale` Alba writes in, and the model's `language` only gates an unreadable message. D19 is closed: the keys of two-event actions, the actor of each event, and where event names live. D20 is closed: `process_state` on every event, the write order, a second start, and a reused message id. Each one that gets decided is written into this file.
 
 ## Known gaps
 
