@@ -21,11 +21,11 @@ Feature: Case trace
   Scenario: The trace shows the facts behind the decision
     When César opens the trace of Alicia's case
     Then the policy analysis cites these facts:
-      | name            | value      | source                                  | as-of      |
-      | credit_score    | 615        | customer_credit_profile.credit_score    | 2026-06-17 |
-      | income_local    | 4707334.28 | customer_credit_profile.income_local    | 2026-06-17 |
-      | income_currency | COP        | customer_credit_profile.income_currency | 2026-06-17 |
-      | income_usd      | 1167.42    | customer_credit_profile.income_usd      | 2026-06-17 |
+      | name            | value         | source                                  | as-of      |
+      | credit_score    | 615           | customer_credit_profile.credit_score    | 2026-06-17 |
+      | income_local    | 4707334.28    | customer_credit_profile.income_local    | 2026-06-17 |
+      | income_currency | COP           | customer_credit_profile.income_currency | 2026-06-17 |
+      | income_usd      | 1167.41890144 | customer_credit_profile.income_usd      | 2026-06-17 |
     And it names rule "R05" under policy "alba-credit-v1"
 
   Scenario: A message written while the case waits for a person is recorded and not classified

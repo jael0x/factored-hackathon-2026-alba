@@ -2,7 +2,6 @@ import time
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from decimal import Decimal
 from typing import Any, LiteralString
 from uuid import UUID, uuid4
 
@@ -21,6 +20,7 @@ from api.infrastructure.db.json_codec import configure_json
 from api.infrastructure.db.pool import open_pool
 from api.infrastructure.db.processes import PostgresProcesses
 from api.infrastructure.llm.schema import reading_of
+from api.tests.oracle import ORACLE, seed_oracle_profiles
 from api.tests.turn_harness import TurnFixtureName, load_turn_fixture
 
 JUAN = "CLI-9EDEKZ8OUNUR"
@@ -28,14 +28,6 @@ JULIANA = "CLI-MD60UR8PNJDI"
 ALICIA = "CLI-440CO5FZIY6A"
 MARIANA = "CLI-ZGOY1V6ZC46J"
 NO_PROFILE = "CLI-NOPROFILE001"
-
-# The oracle values of ARCHITECTURE.md, "Oracle fixtures", as the gold row holds them.
-GOLD_ROWS: list[tuple[Any, ...]] = [
-    (JUAN, "México", 812, Decimal("306753.45"), "MXN", Decimal("17988.33"), 0, False, False),
-    (JULIANA, "México", 714, None, "MXN", None, 0, False, False),
-    (ALICIA, "Colombia", 615, Decimal("4707334.28"), "COP", Decimal("1167.42"), 0, False, False),
-    (MARIANA, "Argentina", 515, Decimal("801583.70"), "ARS", Decimal("2302.95"), 180, True, False),
-]
 
 
 class ModelDown(Exception):
@@ -66,20 +58,15 @@ def seed_cycle_people(url: str) -> None:
         conn.cursor().executemany(
             """
             INSERT INTO customers (customer_id, document_number, first_name, last_name, country, segment, customer_status)
-            VALUES (%s, %s, 'Nombre', 'Apellido', %s, 'Basic', 'Active')
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            [(row[0], row[0], row[1]) for row in GOLD_ROWS] + [(NO_PROFILE, NO_PROFILE, "México")],
+            [
+                (c.customer_id, c.customer_id, c.first_name, c.last_name, c.country, c.segment, c.customer_status)
+                for c in ORACLE.customers
+            ]
+            + [(NO_PROFILE, NO_PROFILE, "Nombre", "Apellido", "México", "Basic", "Active")],
         )
-        conn.cursor().executemany(
-            """
-            INSERT INTO customer_credit_profile (
-                customer_id, first_name, last_name, country, segment, customer_status, credit_score, income_local,
-                income_currency, income_usd, max_days_past_due, has_active_card, has_active_personal_loan, as_of, batch_id
-            )
-            VALUES (%s, 'Nombre', 'Apellido', %s, 'Basic', 'Active', %s, %s, %s, %s, %s, %s, %s, '2026-06-17', %s)
-            """,
-            [(*row, uuid4()) for row in GOLD_ROWS],
-        )
+        seed_oracle_profiles(conn)
 
 
 @contextmanager
