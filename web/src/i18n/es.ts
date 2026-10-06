@@ -168,6 +168,22 @@ export const es = {
       failed: "No pudimos cerrar el caso. Inténtalo de nuevo.",
     },
   },
+  trace: {
+    title: "Registro del caso",
+    crumb: "Registro",
+    caseCrumb: "Caso",
+    count: (count: number) =>
+      count === 1 ? "1 evento, en el orden en que ocurrió" : `${count} eventos, en el orden en que ocurrieron`,
+    events: "Eventos",
+    loadFailed: "No pudimos cargar el registro del caso.",
+    unknown: "Este caso no existe.",
+    causedBy: (number: number) => `Causado por el evento ${number}`,
+    words: { by: "por", to: "a", policy: "política" },
+    policy: "Política",
+    rules: "Reglas evaluadas",
+    facts: "Hechos",
+    columns: { name: "Hecho", value: "Valor", source: "Fuente", asOf: "Al" },
+  },
   chat: {
     opening: { credit_card: "Quiero una tarjeta de crédito", personal_loan: "Quiero un préstamo personal" },
     back: "Inicio",

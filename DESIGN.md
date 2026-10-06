@@ -323,8 +323,11 @@ A pill, 12/16 weight 500, with a 1px border and text in the tone and a white fil
 
 ### Trace (`/consultant/case/:id/trace`)
 
-- Title "Registro del caso". One white card per event, in the order the API returns them: a numbered glass marker, the event name in mono, the time, and the fields the rules match on. State changes show the state tag.
-- A dashed 1.4px `--arrow` connector joins a card to the card named by its `caused_by_event_id`, the way the thinking-mode shot joins cards. No id, no line (`AGENTS.md`, "Events, rules, commands").
+- Reached from "Registro del caso" on the consultant case. Crumbs: "Casos en revisión", "Caso" (back to the case), "Registro". `CaseTrace` carries no customer name, so the crumbs and the head name none: the head is the title "Registro del caso", the count of events, and the `process_id` in mono.
+- One white card per event, in the order the API returns them (`seq`): a numbered glass marker, the event name in mono, the date and time with seconds in the browser's time zone, and the detail `specs/09-case-trace.feature` gives each event name. Events written together share a time, so the number, not the time, is the order. Outcomes and states show as tags; identifiers are mono; a customer's text is quoted.
+- `analysis.completed` also shows its policy version, the rules it evaluated with each result and the `input` it recorded, and the facts table (Hecho, Valor, Fuente, Al). Every value is shown as recorded: no rounding and no thousands separator, since this is the record and not a summary.
+- A dashed 1.4px `--arrow` connector joins a card to the card named by its `caused_by_event_id`, the way the thinking-mode shot joins cards, and the card says in text which event caused it ("Causado por el evento 2"), so the line is not the only cue. No id, no line. An id that names no event in the list draws nothing and is logged as an error (`AGENTS.md`, "Events, rules, commands").
+- Loading shows pulsing cards; an error shows the error card with "Reintentar"; an unknown case (404) reads "Este caso no existe." with a way back to the queue.
 
 ### C4 page
 

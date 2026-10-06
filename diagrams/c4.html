@@ -1211,7 +1211,7 @@ node('pg-consultantcase', {
 });
 node('pg-trace', {
   parent: 'web', kind: 'component', name: 'Trace', tech: 'Trace.tsx',
-  summary: '`/consultant/case/:id/trace`. The process events, in order.',
+  summary: '`/consultant/case/:id/trace`. The process events, in order. Built Oct 5 (W6).',
   src: 'ARCHITECTURE.md, "Auth and screens"',
 });
 
@@ -1348,8 +1348,17 @@ spec('pg-trace', 'tr-events', {
   fixed: [
     'Lists the process `events` in the order they were written (`seq`, unique), backed by the index on `events (process_id, seq)`.',
     'Explanations come from sources, rules, and execution records. No chain-of-thought.',
+    'Each event name has its detail in `specs/09-case-trace.feature`; `traceDetail` in `web/src/trace.ts` is exhaustive over `EventName`, so a new event fails `tsc` until it has one.',
+    '`analysis.completed` shows its policy version, every evaluated rule with its result and `input`, and the facts. Values are shown as recorded: no rounding, no thousands separator.',
+    'A card names the event its `caused_by_event_id` names, in text and with a dashed connector, found by id in the list. An id the list does not hold draws nothing and is logged.',
+    'Built Oct 5 (W6): reached from the consultant case; crumbs name no customer, since `CaseTrace` carries none.',
   ],
-  src: 'ARCHITECTURE.md, "Auth and screens", "Indexes"; PLAN.md §2',
+  tests: [
+    'Alicia's six events in order with the detail of `09`, the rules R01 to R05 with their results, and the four facts as recorded.',
+    'One event of every name with its exact detail; a withheld reply names its reason.',
+    'Links resolve by id whatever the position; a cause outside the list draws nothing and is logged.',
+  ],
+  src: 'ARCHITECTURE.md, "Auth and screens", "Indexes"; PLAN.md §2; specs/09-case-trace.feature',
 });
 node('ld-entry', {
   parent: 'load', kind: 'component', name: 'Startup sequence', tech: 'entrypoint, file not named',

@@ -1,10 +1,12 @@
 import { Link } from "react-router";
 
 import type { components } from "../api/schema";
+import { HUMAN_ACTIVE } from "../chat";
 import { ErrorCard } from "../components/ErrorCard";
 import { fullName } from "../format";
 import { useMessages } from "../i18n/messages";
 import { consultantCasePath } from "../routes";
+import { STATE_TONE } from "../tones";
 import { CaseCount, useConsultantShell } from "./ConsultantLayout";
 
 type QueueItem = components["schemas"]["ConsultantQueueItem"];
@@ -58,7 +60,7 @@ function QueueTable({ items }: { items: QueueItem[] }) {
               <span>{item.product && t.products.askAbout[item.product]}</span>
               <span className="mono caption">{item.reason_code}</span>
               <span>
-                <span className="state-tag clay">{t.consultant.inReview}</span>
+                <span className={`state-tag ${STATE_TONE[HUMAN_ACTIVE]}`}>{t.consultant.inReview}</span>
               </span>
               <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M9 6l6 6-6 6" />

@@ -23,3 +23,11 @@ export const CONSULTANT_CASE_ROUTE = `${CONSULTANT_CASE_SEGMENT}/:processId`;
 export function consultantCasePath(processId: string): string {
   return `${HOME_PATH.consultant}/${CONSULTANT_CASE_SEGMENT}/${processId}`;
 }
+
+const TRACE_SEGMENT = "trace";
+
+export const CONSULTANT_TRACE_ROUTE = `${CONSULTANT_CASE_ROUTE}/${TRACE_SEGMENT}`;
+
+export function consultantTracePath(processId: string): string {
+  return `${consultantCasePath(processId)}/${TRACE_SEGMENT}`;
+}

@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, type SyntheticEvent } from "react";
 
 import type { components } from "../api/schema";
-import { PREQUALIFIED } from "../chat";
 import { useMessages } from "../i18n/messages";
+import { OUTCOME_TONE } from "../tones";
 
 type CloseOutcome = components["schemas"]["CloseOutcome"];
 
@@ -48,7 +48,7 @@ export function CloseDialog({ outcome, customerName, closing, onConfirm, onCance
     >
       {outcome !== null && (
         <div className="stack">
-          <span className={`state-tag ${outcome === PREQUALIFIED ? "green" : "stop"}`}>
+          <span className={`state-tag ${OUTCOME_TONE[outcome]}`}>
             {t.consultant.closeTag[outcome]}
           </span>
           <h2 className="heading" id={titleId}>

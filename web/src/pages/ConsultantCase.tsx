@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from "react-router";
 
 import type { components } from "../api/schema";
 import { useLoad } from "../api/useLoad";
+import { HUMAN_ACTIVE } from "../chat";
 import { CloseDialog } from "../components/CloseDialog";
 import { ErrorCard } from "../components/ErrorCard";
 import { HandoffPacket } from "../components/HandoffPacket";
@@ -10,7 +11,8 @@ import { MessageLine } from "../components/MessageLine";
 import { closeActions, type CloseAnswer } from "../consultant";
 import { fullName } from "../format";
 import { useMessages } from "../i18n/messages";
-import { HOME_PATH } from "../routes";
+import { consultantTracePath, HOME_PATH } from "../routes";
+import { STATE_TONE } from "../tones";
 import { useConsultantShell } from "./ConsultantLayout";
 import { loadConsultantCase, useClose } from "./useClose";
 
@@ -113,7 +115,12 @@ export function ConsultantCaseView({ packet, answer, closing, onClose, onRefresh
           <h1 className="title">{name}</h1>
           <p className="caption muted mono">{packet.customer_id}</p>
         </div>
-        <span className="state-tag clay">{t.consultant.inReview}</span>
+        <div className="main-head-actions">
+          <Link className="btn secondary" to={consultantTracePath(packet.process_id)}>
+            {t.trace.title}
+          </Link>
+          <span className={`state-tag ${STATE_TONE[HUMAN_ACTIVE]}`}>{t.consultant.inReview}</span>
+        </div>
       </div>
       {answer !== null && answer.kind !== "closed" && <CloseNotice answer={answer} onRefresh={onRefresh} />}
       <div className="split">
