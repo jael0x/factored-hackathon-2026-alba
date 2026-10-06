@@ -63,7 +63,7 @@ The load gaps of item M0 closed Oct 5: `daily_exchange_rates.csv` has its snapsh
 - Chat, stage 1, built Oct 4 (W4 with parts of E4, E5, E8, and M5; D23): a home row or a typed message reaches the consent question, a clarification, or a person, through `POST /messages`, the worker, and B0.
 - Chat, stage 2, built Oct 5 (D24): a product row opens a consent dialog and runs the policy at once; one open case per product, listed by `GET /cases`; the certificate with the income the run read. Juan, Juliana, and Mariana reach their certificates and Alicia reaches a person.
 - Consultant routes built Oct 5 (E8, D15 (3)): the review queue, the handoff packet with `closable`, the trace, and the close, which only a case the policy reached a result for allows.
-- E1, built Sep 30 and hardened Oct 1: `decide(profile, product, declared_income)` in `api/domain/policy/engine.py`, thresholds and rule order in `alba-credit-v1.yaml`. D16 (2) is closed. The trace lists every evaluated rule and stops at the first terminal result. The policy file is checked when it loads (every status and every rule listed once, no gap between bands, R04 before R05), and a negative or non-finite declared income is rejected. `api/domain/policy/test_engine.py` covers the branches. `api/fixtures/oracle_customers.json` stays with M1.
+- E1, built Sep 30 and hardened Oct 1: `decide(profile, product, declared_income)` in `api/domain/policy/engine.py`, thresholds and rule order in `alba-credit-v1.yaml`. D16 (2) is closed. The trace lists every evaluated rule and stops at the first terminal result. The policy file is checked when it loads (every status and every rule listed once, no gap between bands, R04 before R05), and a negative or non-finite declared income is rejected. `api/domain/policy/test_engine.py` covers the branches. `api/fixtures/oracle_customers.json` came with M1 (Oct 5).
 - E1, Oct 4: every decision also cites `credit_score`, `income_local`, `income_currency`, and `income_usd` from the profile, after the closing fact and each name once, because `Case.certificate` and the packet copy them from `analysis.completed` (E5, E8). Sabotage runs: dropping the cited facts and citing a name twice each turn the engine tests red.
 
 ## Interfaces (do first)
@@ -104,7 +104,7 @@ The load gaps of item M0 closed Oct 5: `daily_exchange_rates.csv` has its snapsh
   - the file income winning over a typed amount;
   - one sabotage run.
 
-  `api/fixtures/oracle_customers.json` after M1.
+  `api/fixtures/oracle_customers.json` since M1: `api/tests/test_oracle_policy.py` runs the policy on each oracle profile for both products.
   - Specs: `05` status, days past due, product held, no score, and score band outlines; `06` "The income on file wins over a typed amount" and "marked as self-declared".
   - Depends on I1. D16 (2) closed Sep 30: `decide(profile, product, declared_income)`.
 - [x] **E2. Events and processes.** `api/infrastructure/db/events.py`: append with the idempotency key; a repeated key writes nothing and says so; the same key for another fact raises. `api/application/processes.py`: stamps `process_id` and `process_state` on `conversation.message_received`; start, transition (only the allowed table; anything else raises and writes nothing), end. Built Oct 2 (D20).
@@ -187,7 +187,13 @@ The load gaps of item M0 closed Oct 5: `daily_exchange_rates.csv` has its snapsh
   - `rebuild_gold` first requires a positive rate to USD on the as-of date for every income currency; without it `income_usd` was empty for every income and nothing failed.
   - `ensure_bronze` takes the raw folder and the copier, so the two copy scenarios run without AWS; `aws_s3_copy` and `run_command` are tested with a recorded runner and a real child process.
   - Sabotage runs: the exchange size dropped, the size check back to the expected files only, a non-active product counted, a file on disk copied again, the report without `require_columns`, and the rate check removed; each turns its exact tests red.
-- [ ] **M1. R8 and R9 against Postgres.** Confirm every oracle value in `ARCHITECTURE.md` from the loaded tables, and list the distinct `product_type` values. Feeds E1's fixture. No dependency.
+- [x] **M1. R8 and R9 against Postgres.** Confirm every oracle value in `ARCHITECTURE.md` from the loaded tables, and list the distinct `product_type` values. Feeds E1's fixture. No dependency.
+  - Done Oct 5, on a fresh load from this checkout (the volume had stopped at `004_event_sequence.sql`). Every value matches. The tables do not keep the city, document type, occupation, rates, limits, or César's level, shift, CSAT, and language; those were read from `data/raw/`. The lists of products in the contract were partial, and say so now.
+  - `api/fixtures/oracle_customers.json` holds the four customers (loaded columns, the gold row with exact amounts, every product, the expected outcome, and Juliana's stated income), César, the as-of rates, and the eight product types; no document, email, or product number. `api/tests/oracle.py` parses it strictly, with exact decimals and the closed sets of `contract_models.py`, and seeds the gold rows.
+  - `api/tests/test_oracle_dataset.py` (`pytest -m dataset`, left out of the gate since CI has no dataset) compares the fixture with the loaded tables, full rows both ways, and runs the policy on the loaded profiles. `test_oracle_policy.py` runs the policy on the fixture for both products, `test_each_oracle_case_reaches_its_outcome_and_state` in `test_worker_integration.py` runs each case through the worker to its final state, and `test_oracle_fixture.py` covers the refusals.
+  - The gold `income_usd` is unrounded (17,988.32906145 USD for Juan), and the harnesses had seeded it rounded to cents. They now seed from the fixture, and spec `09` cites 1167.41890144.
+  - Sabotage runs: Juan's score changed, `income_usd` rounded, a product type dropped, Mariana's card dropped, and Alicia expected `ended`; each turns its exact tests red.
+  - R9's mapping is in `ARCHITECTURE.md`, "Data". A `product_type` outside the eight still loads in silence and reads as no product held; that is #31.
 - [ ] **M2. R11 probe.** `gpt-6-luna` on a small dev set (never the held-out set):
   - latency, tokens, and cost per turn;
   - Structured Outputs validity;
