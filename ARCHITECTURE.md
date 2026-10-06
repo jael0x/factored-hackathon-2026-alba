@@ -200,7 +200,9 @@ web/
   src/pages/ConsultantCase.tsx  # the read-only thread, the handoff packet, and the two close actions when closable
   src/pages/useClose.ts         # the packet read (404 is gone) and the close
   src/consultant.ts             # the packet rows, the close actions, and what each close answer means
-  src/pages/Trace.tsx           # the process's events table
+  src/pages/Trace.tsx           # the process's events, numbered in the API's order, with the analysis and the connectors
+  src/trace.ts                  # each event's detail (specs/09), the rule and fact rows, and the links by caused_by_event_id
+  src/tones.ts                  # the one map from an outcome or a state to its tone (DESIGN.md "Tones")
 pipeline/
   bronze.py
   silver.py
