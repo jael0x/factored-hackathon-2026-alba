@@ -144,6 +144,22 @@ export const pt: Messages = {
       failed: "Não conseguimos encerrar o caso. Tente novamente.",
     },
   },
+  trace: {
+    title: "Registro do caso",
+    crumb: "Registro",
+    caseCrumb: "Caso",
+    count: (count: number) =>
+      count === 1 ? "1 evento, na ordem em que ocorreu" : `${count} eventos, na ordem em que ocorreram`,
+    events: "Eventos",
+    loadFailed: "Não conseguimos carregar o registro do caso.",
+    unknown: "Este caso não existe.",
+    causedBy: (number: number) => `Causado pelo evento ${number}`,
+    words: { by: "por", to: "para", policy: "política" },
+    policy: "Política",
+    rules: "Regras avaliadas",
+    facts: "Fatos",
+    columns: { name: "Fato", value: "Valor", source: "Fonte", asOf: "Em" },
+  },
   chat: {
     opening: { credit_card: "Quero um cartão de crédito", personal_loan: "Quero um empréstimo pessoal" },
     back: "Início",

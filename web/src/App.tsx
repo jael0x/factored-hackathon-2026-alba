@@ -9,7 +9,8 @@ import { ConsultantLogin } from "./pages/ConsultantLogin";
 import { Home } from "./pages/Home";
 import { ConsultantQueue } from "./pages/ConsultantQueue";
 import { Login } from "./pages/Login";
-import { CASE_PATH, CONSULTANT_CASE_ROUTE, HOME_PATH, LOGIN_PATH } from "./routes";
+import { Trace } from "./pages/Trace";
+import { CASE_PATH, CONSULTANT_CASE_ROUTE, CONSULTANT_TRACE_ROUTE, HOME_PATH, LOGIN_PATH } from "./routes";
 
 export function App() {
   return (
@@ -44,6 +45,7 @@ export function App() {
         >
           <Route index element={<ConsultantQueue />} />
           <Route path={CONSULTANT_CASE_ROUTE} element={<ConsultantCase />} />
+          <Route path={CONSULTANT_TRACE_ROUTE} element={<Trace />} />
         </Route>
         <Route path="*" element={<Navigate to={HOME_PATH.customer} replace />} />
       </Routes>
