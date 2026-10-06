@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from api.application.cycle import moves
 from api.contract_models import CloseOutcome
-from api.domain.policy.templates import certificate_for_close, certificate_for_policy, render_notice
+from api.domain.policy.templates import certificate_for_close, certificate_for_policy, handoff_notice, render_notice
 from api.domain.process.stored_events import PRODUCT_INFO_INTENT
 from api.infrastructure.llm.keywords import REPLIES, read_keyword_turn
 from api.presentation.worker.loop import run_until_idle
@@ -13,7 +13,6 @@ from api.tests.chat_harness import (
     CARD_ES,
     CESAR,
     NEEDS_INCOME_ES,
-    REFER_NOTICE_ES,
     appeal,
     bearer,
     certificate,
@@ -108,7 +107,12 @@ def test_a_request_for_a_person_inside_a_case_hands_it_off(http: TestClient) -> 
         "credit_card",
         "es",
         False,
-        [("customer", CARD_ES), ("template", NEEDS_INCOME_ES), ("customer", "quiero hablar con una persona")],
+        [
+            ("customer", CARD_ES),
+            ("template", NEEDS_INCOME_ES),
+            ("customer", "quiero hablar con una persona"),
+            ("template", handoff_notice("es", "credit_card", "customer_requested_human", None)),
+        ],
     )
 
 
@@ -231,8 +235,20 @@ def test_a_typed_question_is_answered_by_the_classifier_llm_model_names(http: Te
 
 def test_a_customer_without_a_credit_profile_goes_to_a_person(http: TestClient, chat_database: str) -> None:
     case = start(http, sub=NO_EMAIL.customer_id)
-    assert shape(case) == ("human_active", None, "credit_card", "es", False, [("customer", CARD_ES)])
-    assert commands(chat_database) == [("process.start", "done", 1), ("policy.run", "failed", 3)]
+    notice = handoff_notice("es", "credit_card", "tool_failed", None)
+    assert shape(case) == (
+        "human_active",
+        None,
+        "credit_card",
+        "es",
+        False,
+        [("customer", CARD_ES), ("template", notice)],
+    )
+    assert commands(chat_database) == [
+        ("process.start", "done", 1),
+        ("policy.run", "failed", 3),
+        ("template.send", "done", 1),
+    ]
 
 
 def test_a_case_that_cannot_open_fails_the_send_and_leaves_no_process(
@@ -289,7 +305,11 @@ def test_mariana_asks_a_person_to_review_her_no_and_the_case_reopens_for_one(htt
         "credit_card",
         "es",
         False,
-        [("customer", CARD_ES), ("template", body), ("template", REFER_NOTICE_ES)],
+        [
+            ("customer", CARD_ES),
+            ("template", body),
+            ("template", handoff_notice("es", "credit_card", "customer_requested_human", None)),
+        ],
     )
     assert reopened["messages"][1]["event_id"] == reopened["certificate"]["event_id"]
     again = appeal(http, decided, MARIANA)

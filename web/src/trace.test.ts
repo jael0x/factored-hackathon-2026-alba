@@ -28,16 +28,16 @@ describe("the trace of Alicia's referred case (specs/09)", () => {
       ["conversation.message_received", "Quiero una tarjeta de crédito"],
       ["process.started", "credit_prequalification"],
       ["analysis.completed", "REFER by R05"],
-      ["conversation.template_sent", "refer_notice"],
       ["process.state_changed", "ai_active to human_active"],
       ["conversation.thread_taken", "policy_refer"],
+      ["conversation.template_sent", "refer_notice"],
     ]);
   });
 
   it("tags the outcome and the states in their tones", () => {
     const tags = (event: TraceEvent) => traceDetail(event).filter((part) => part.kind === "tag");
     expect(tags(ALICIA_ANALYSIS)).toEqual([{ kind: "tag", text: "REFER", tone: "clay" }]);
-    expect(tags(ALICIA_TRACE.events[4])).toEqual([
+    expect(tags(ALICIA_TRACE.events[3])).toEqual([
       { kind: "tag", text: "ai_active", tone: "slate" },
       { kind: "tag", text: "human_active", tone: "clay" },
     ]);
@@ -132,7 +132,7 @@ describe("the links between events", () => {
       { from: 2, to: 1, lane: 1 },
       { from: 3, to: 2, lane: 0 },
       { from: 4, to: 2, lane: 2 },
-      { from: 5, to: 2, lane: 3 },
+      { from: 5, to: 4, lane: 0 },
     ]);
     expect(unresolved).toEqual([]);
     expect([...causeOf(links)].sort(([a], [b]) => a - b)).toEqual([
@@ -140,7 +140,7 @@ describe("the links between events", () => {
       [2, 1],
       [3, 2],
       [4, 2],
-      [5, 2],
+      [5, 4],
     ]);
   });
 

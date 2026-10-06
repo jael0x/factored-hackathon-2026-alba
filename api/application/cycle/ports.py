@@ -32,8 +32,12 @@ class ClaimedCommand:
     attempt_count: int
 
 
+# What the turn reader is asked. The prompt carries only the text, the locale, the state, and the four booleans;
+# process_id and command_id go no further than the llm_turns row (ARCHITECTURE.md, "What goes into the prompt").
 @dataclass(frozen=True)
 class TurnRequest:
+    process_id: UUID
+    command_id: UUID
     text: str
     locale: Locale
     process_state: ProcessState

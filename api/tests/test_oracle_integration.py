@@ -1,6 +1,7 @@
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any, get_args
+from uuid import UUID
 
 import psycopg
 import pytest
@@ -8,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from api.application.cycle.ports import TurnRequest
 from api.contract_models import CloseOutcome, EndReason
-from api.domain.policy.templates import certificate_for_close, certificate_for_policy, render_notice
+from api.domain.policy.templates import certificate_for_close, certificate_for_policy, handoff_notice, render_notice
 from api.domain.process.events import ANALYSIS_COMPLETED
 from api.infrastructure.config.settings import settings
 from api.infrastructure.mail.smtp import get_mailer
@@ -36,7 +37,7 @@ CESAR_EMAIL = "cesar.gonzalez@example.com"
 JULIANA_INCOME = load_turn_fixture("es-gano-45000-pesos").text
 STILL_WAITING = "¿ya revisaron mi caso?"
 NEEDS_INCOME = render_notice("needs_income", "es", "credit_card")
-ALICIA_OPENING = [("customer", CARD_ES), ("template", render_notice("refer_notice", "es", "credit_card"))]
+ALICIA_OPENING = [("customer", CARD_ES), ("template", handoff_notice("es", "credit_card", "policy_refer", "R05"))]
 
 # ARCHITECTURE.md, "What gets built": the four outcomes. Written here, not read from the fixture, so a fixture edit
 # that moves an outcome turns this file red instead of moving the expectation with it.
@@ -124,7 +125,7 @@ def bank(oracle_database: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[Bank
     monkeypatch.setattr(settings, "run_worker", True)
     model = scripted("es-gano-45000-pesos")
     mail = FakeMailer()
-    app = create_app(lambda: model)
+    app = create_app(lambda _pool: model)
     app.dependency_overrides[get_mailer] = lambda: mail
     with TestClient(app) as client:
         yield Bank(client, mail, model)
@@ -241,8 +242,11 @@ def test_juliana_is_asked_her_income_by_r06_and_prequalifies_by_r05_once_she_sta
         income_usd=None,
         as_of=AS_OF,
     )
+    [call] = bank.model.calls
     assert bank.model.calls == [
         TurnRequest(
+            process_id=UUID(answered["process_id"]),
+            command_id=call.command_id,
             text=JULIANA_INCOME,
             locale="es",
             process_state="ai_active",

@@ -46,7 +46,7 @@ A correct diagnosis plus a patch that skips the owner is a failed fix. The small
 | Who the customer is | `customer_id` on the JWT | Chat text, national id, or a model argument |
 | History | Append to `events`, with `caused_by_event_id` | `UPDATE` a past event, or join two facts by clock time |
 | Decision wording | `api/domain/policy/templates.py` | Model prose |
-| Model call | `api/infrastructure/llm/conversation.py` | Import the OpenAI SDK from policy or UI |
+| Model call | `api/infrastructure/llm/conversation.py` | Import the Anthropic SDK from policy or UI |
 | Login codes and sessions | `api/domain/session` and `api/application/session`: codes stored hashed, JWT; `get_session` in `api/presentation/http/dependencies.py` | A code in a log, a response body, or a plain-text column |
 | Sending email | `api/infrastructure/mail/smtp.py`, to Mailpit in the compose stack | Opening SMTP from another module, or pointing it at a real provider while the stack holds this dataset |
 | HTTP request and response | `api-spec/openapi.yaml`, generated into `api/contract_models.py` and `web/src/api/schema.d.ts` | A hand-written DTO in `api/` or `web/` |
@@ -119,10 +119,10 @@ Prefer a better name or an extracted function over a comment.
 10. **Functional flow.** Prefer `map` / `filter` / comprehensions over long imperative loops. Side effects stay at the edges.
 11. **Single responsibility.** One function, one job. One module, one concern.
 12. **No god functions.** Past about fifty lines, split.
-13. **Pure core.** Policy, rule match, and row choice are pure. Database, HTTP, and the OpenAI API sit in thin functions that call the pure ones.
+13. **Pure core.** Policy, rule match, and row choice are pure. Database, HTTP, and the Anthropic API sit in thin functions that call the pure ones.
 14. **Composition.** If a function does A then B, export A and B and compose them. Do not nest B inside A.
 15. **DRY.** Copying a block means extract it. After a refactor, grep and delete the loser. Two live implementations of the same decision is a bug. Deleting the dead one is part of the change.
-16. **Adapter at the boundary.** Business logic does not import a provider SDK. Only `api/infrastructure/llm/conversation.py` imports the OpenAI SDK. Swapping the model changes that module.
+16. **Adapter at the boundary.** Business logic does not import a provider SDK. Only `api/infrastructure/llm/conversation.py` imports the Anthropic SDK (`PLAN.md` D27). Swapping the model changes that module.
 17. **Explicit.** A side effect is in the name. A nullable value is in the type. A dependency is passed in or imported, not read from ambient global state.
 18. **Fail loud.** Validate at the boundary. Unexpected state surfaces immediately. Do not swallow an exception and continue.
 19. **Colocation.** Tests next to the pure module. Types next to the code that uses them. Constants next to the domain.
@@ -178,7 +178,7 @@ Prefer a better name or an extracted function over a comment.
 ## Model
 
 - The model classifies the utterance and drafts the clarification. It does not see score, income, delinquency, name, document, email, or address. It sees booleans and the message.
-- The model is an external service. Nothing leaves the API for OpenAI beyond the list under "What goes into the prompt" in `ARCHITECTURE.md`.
+- The model is an external service. Nothing leaves the API for Anthropic beyond the list under "What goes into the prompt" in `ARCHITECTURE.md`.
 - It must not emit `precalifica`, `no precalifica`, `pré-qualificado`, or `não pré-qualifica`. The template emits those.
 - A document number or `customer_id` does not prove identity. A one-time code opens the session.
 - Permissions and eligibility stay outside the model.
@@ -193,7 +193,7 @@ Prefer a better name or an extracted function over a comment.
 - **No soft asserts.** `if field is present: assert else: assert empty == empty` always passes. If the fixture includes the field, assert it unconditionally.
 - **Tied rows.** Permute input order. The comparator, not scan order, picks the winner.
 - **Sabotage once.** Break the pure function on purpose (return the wrong outcome, drop the tie-break) and confirm the exact test goes red. Then restore it.
-- If a test is hard to write, the design is wrong. Do not mock the policy to hide that. Unit tests inject `ConversationTurn` JSON. They do not call OpenAI to learn whether Juan is prequalified.
+- If a test is hard to write, the design is wrong. Do not mock the policy to hide that. Unit tests inject `ConversationTurn` JSON. They do not call the model API to learn whether Juan is prequalified.
 - An event-chain test crosses the worker. The command is completed, the new state is persisted, and the new event is in the database. A queued payload alone is not the assertion.
 - A test file must live on a path the test command actually runs. Say which command. A file no command globs is not coverage.
 - Fix pre-existing failures you hit in the suite you ran. Do not leave them as "not this task" without saying so.
@@ -209,7 +209,7 @@ Prefer a better name or an extracted function over a comment.
 ## Security
 
 - External input is hostile until the boundary validates it.
-- S3 keys, `OPENAI_API_KEY`, and any other secret live in `.env` locally and in the host's secrets when deployed. They do not enter git, the image, a log, or the prompt.
+- S3 keys, `ANTHROPIC_API_KEY`, and any other secret live in `.env` locally and in the host's secrets when deployed. They do not enter git, the image, a log, or the prompt.
 - Never commit `*.pdf` or anything under `data/`. Organizer PDFs stay local in `docs/`; page 2 of the data dictionary holds the S3 keys. Rows from the dataset do not go into docs beyond the oracle fixtures, and never into a request to an external model.
 - Before the first push to any remote, scan the full history for secrets.
 - Each service gets the minimum it needs. The customer API reads that session's rows and no one else's.

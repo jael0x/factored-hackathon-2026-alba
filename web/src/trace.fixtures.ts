@@ -13,9 +13,9 @@ const AS_OF = "2026-06-17";
 const MESSAGE = "e0000001-0000-4000-8000-000000000001";
 const STARTED = "e0000002-0000-4000-8000-000000000002";
 const ANALYSIS = "e0000003-0000-4000-8000-000000000003";
-const NOTICE = "e0000004-0000-4000-8000-000000000004";
-const MOVED = "e0000005-0000-4000-8000-000000000005";
-const TAKEN = "e0000006-0000-4000-8000-000000000006";
+const MOVED = "e0000004-0000-4000-8000-000000000004";
+const TAKEN = "e0000005-0000-4000-8000-000000000005";
+const NOTICE = "e0000006-0000-4000-8000-000000000006";
 
 const base = { created_at: AT, actor: "system", process_id: PROCESS, process_state: "ai_active" } as const;
 
@@ -77,19 +77,9 @@ const referred: TraceEvent[] = [
   ALICIA_ANALYSIS,
   {
     ...base,
-    id: NOTICE,
-    event_name: "conversation.template_sent",
-    created_at: "2026-10-05T14:03:27.701Z",
-    caused_by_event_id: ANALYSIS,
-    locale: "es",
-    template_id: "refer_notice",
-    body: "Una persona del banco va a revisar tu solicitud.",
-  },
-  {
-    ...base,
     id: MOVED,
     event_name: "process.state_changed",
-    created_at: "2026-10-05T14:03:27.733Z",
+    created_at: "2026-10-05T14:03:27.701Z",
     process_state: "human_active",
     caused_by_event_id: ANALYSIS,
     from_state: "ai_active",
@@ -100,12 +90,25 @@ const referred: TraceEvent[] = [
     ...base,
     id: TAKEN,
     event_name: "conversation.thread_taken",
-    created_at: "2026-10-05T14:03:27.733Z",
+    created_at: "2026-10-05T14:03:27.701Z",
     process_state: "human_active",
     caused_by_event_id: ANALYSIS,
     reason_code: "policy_refer",
     from_state: "ai_active",
     to_state: "human_active",
+  },
+  {
+    ...base,
+    id: NOTICE,
+    event_name: "conversation.template_sent",
+    created_at: "2026-10-05T14:03:27.733Z",
+    process_state: "human_active",
+    caused_by_event_id: TAKEN,
+    locale: "es",
+    template_id: "refer_notice",
+    body:
+      "Tu historial crediticio necesita una revisión adicional. Una persona del banco va a revisar tu solicitud de una " +
+      "tarjeta de crédito. Te avisaremos por aquí cuando tenga una respuesta.",
   },
 ];
 

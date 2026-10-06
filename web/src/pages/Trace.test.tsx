@@ -79,9 +79,9 @@ describe("the trace screen (specs/09)", () => {
       ["1", "conversation.message_received", "Quiero una tarjeta de crédito"],
       ["2", "process.started", "credit_prequalification"],
       ["3", "analysis.completed", "REFER por R05"],
-      ["4", "conversation.template_sent", "refer_notice"],
-      ["5", "process.state_changed", "ai_active a human_active"],
-      ["6", "conversation.thread_taken", "policy_refer"],
+      ["4", "process.state_changed", "ai_active a human_active"],
+      ["5", "conversation.thread_taken", "policy_refer"],
+      ["6", "conversation.template_sent", "refer_notice"],
     ]);
     expect(text(page.querySelector(".main-head"))).toBe(
       `${es.trace.title} ${es.trace.count(6)} ${ALICIA_TRACE.process_id}`,
@@ -101,7 +101,7 @@ describe("the trace screen (specs/09)", () => {
       es.trace.causedBy(2),
       es.trace.causedBy(3),
       es.trace.causedBy(3),
-      es.trace.causedBy(3),
+      es.trace.causedBy(5),
     ]);
   });
 

@@ -4,9 +4,9 @@ Alba is a customer-service demo for the synthetic LATAM bank of the Factored AI 
 
 It is not a production bank and it moves no money. "Alba" is the name of this interface. Customers, products, scores, incomes, and consultants come from the organizer dataset, snapshot of June 17, 2026.
 
-**Status (Oct 5, 2026): logins, the customer home, the language switch, and the customer's pre-qualification built.** `docker compose up` brings up Postgres, the one-shot `load` container (bronze, silver, gold), the API with both logins, the customer's products and cases, and the worker, Mailpit for the login codes, the two login pages, the home, and the case screen. Every screen reads in Spanish or Portuguese, chosen in the app bar; a message in any other language goes to a person. A "Preguntar por" row on the home opens a consent dialog; "Empezar" runs the policy at once and shows the certificate, asks for the monthly income, or hands the case to a person. Each product has its own case, and its row continues it or shows its result (`PLAN.md` D24). A no from the policy can be sent once to a person for review (D25). Without an `OPENAI_API_KEY` the stack classifies typed messages with B0, the keyword baseline, named by `LLM_MODEL=b0-keywords` (`PLAN.md` D23). The consultant's API is built (the review queue, the handoff packet, the trace, and the close; `PLAN.md` D15 (3)); its screens are not built yet. `mocks/index.html` remains the screen walkthrough. Submission is due Mon Oct 5.
+**Status (Oct 5, 2026): logins, the customer home, the language switch, the customer's pre-qualification, and the consultant's screens built.** `docker compose up` brings up Postgres, the one-shot `load` container (bronze, silver, gold), the API with both logins, the customer's products and cases, and the worker, Mailpit for the login codes, the two login pages, the home, and the case screen. Every screen reads in Spanish or Portuguese, chosen in the app bar; a message in any other language goes to a person. A "Preguntar por" row on the home opens a consent dialog; "Empezar" runs the policy at once and shows the certificate, asks for the monthly income, or hands the case to a person. Each product has its own case, and its row continues it or shows its result (`PLAN.md` D24). A no from the policy can be sent once to a person for review (D25). Every move to a person tells the customer why, in one template sentence (D28). Typed messages are read by Claude Sonnet 5.5 (`PLAN.md` D27); without an `ANTHROPIC_API_KEY`, `LLM_MODEL=b0-keywords` reads them with B0, the keyword baseline (D23). On a frozen held-out set of 60 utterances, Claude reads 60 of 60 intents and routes all 60 as the labels do; B0 reads 44 and routes 48 (`eval/reports/`, `docs/model_card_conversation_turn.md`). The consultant's side is built, API and screens: the review queue, the case with its handoff packet and close (`PLAN.md` D15 (3)), and the trace. `mocks/index.html` remains the screen walkthrough. Submission is due Mon Oct 5.
 
-Stack: FastAPI and PostgreSQL 16 in one Docker Compose stack, with GPT-6 Luna (`gpt-6-luna`) on the OpenAI API for the conversation (when wired). Details in `ARCHITECTURE.md`.
+Stack: FastAPI and PostgreSQL 16 in one Docker Compose stack, with Claude Sonnet 5.5 (`claude-sonnet-5-5`) on the Anthropic API reading each typed message (`PLAN.md` D27). Details in `ARCHITECTURE.md`.
 
 ## How to review
 
@@ -124,7 +124,7 @@ Open http://127.0.0.1:8765/. The dark bar at the top switches screens; it is par
 | Portuguese labels and templates | Team-written; the dataset is Spanish only. The language switch picks the language Alba writes in; a message in any other language, English included, goes to a person (`PLAN.md` D21, D22) |
 | Evaluation utterances and labels | Team-generated; Portuguese may be machine-translated and is disclosed (`PLAN.md` D3, D6, D22) |
 
-What reaches OpenAI: the customer's message text, the process state, four yes/no flags (income on file, score on file, has an active card, has an active personal loan), and the two-product catalog. No dataset row, score, income, name, document, email, or address. Masking ID-like numbers inside the typed text is still open (`PLAN.md` D11).
+What reaches Anthropic: the customer's message text, the process state, four yes/no flags (income on file, score on file, has an active card, has an active personal loan), and the two-product catalog. No dataset row, score, income, name, document, email, or address. Masking ID-like numbers inside the typed text is still open (`PLAN.md` D11).
 
 ### Access
 
@@ -135,11 +135,12 @@ AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 AWS_DEFAULT_REGION=us-east-2
 S3_BUCKET=
-OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+ANTHROPIC_WORKSPACE_ID=
 JWT_SECRET=
 ```
 
-With no `OPENAI_API_KEY`, the compose stack classifies messages with the keyword baseline (`LLM_MODEL=b0-keywords`). Once a key exists, set `LLM_MODEL=gpt-6-luna` in `.env` too (the adapter is item M3 in `IMPLEMENTATION.md`).
+Typed messages are read by Claude Sonnet 5.5, which needs `ANTHROPIC_API_KEY`. Without a key, add `LLM_MODEL=b0-keywords` to `.env` to read them with the keyword baseline instead; a case started from the home never needs the model. The evaluation of both on the held-out set is in `eval/reports/` (`python -m eval.run_eval`, see `eval/run_eval.py`).
 
 Layout under `data/` in the bucket:
 

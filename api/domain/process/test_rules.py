@@ -29,6 +29,7 @@ from api.domain.process.rules import (
     CLOSE_RULES,
     DECIDED_RULES,
     END_REASON_BY_OUTCOME,
+    HANDOFF_RULES,
     MESSAGE_RULES,
     RULE_TABLES,
     STARTED_RULES,
@@ -107,12 +108,18 @@ def started(product: str, locale: str = "es") -> StoredEvent:
 
 
 def analysis(outcome: str) -> StoredEvent:
-    payload = {"outcome": outcome, "product": "credit_card", "locale": "es", "policy_version": "alba-credit-v1"}
+    payload = {
+        "outcome": outcome,
+        "product": "credit_card",
+        "locale": "es",
+        "policy_version": "alba-credit-v1",
+        "deciding_rule": "R05",
+    }
     return stored("analysis.completed", payload)
 
 
 def decided(outcome: str, decided_by: str) -> StoredEvent:
-    return stored("prequalification.decided", {"outcome": outcome, "decided_by": decided_by})
+    return stored("prequalification.decided", {"outcome": outcome, "decided_by": decided_by, "locale": "es"})
 
 
 def closed(outcome: str) -> StoredEvent:
@@ -392,11 +399,16 @@ def test_needs_info_asks_for_income() -> None:
     assert fired(analysis("NEEDS_INFO")) == (("render_needs_info", send_template("needs_income")),)
 
 
-def test_refer_sends_the_notice_then_hands_the_case_to_a_person() -> None:
-    assert fired(analysis("REFER")) == (
-        ("render_refer_notice", send_template("refer_notice")),
-        ("take_thread", hand_off("policy_refer")),
-    )
+def test_refer_hands_the_case_to_a_person() -> None:
+    assert fired(analysis("REFER")) == (("take_thread", hand_off("policy_refer")),)
+
+
+@pytest.mark.parametrize(
+    "reason", ["policy_refer", "customer_requested_human", "out_of_scope", "language_unsupported", "tool_failed"]
+)
+def test_every_handoff_tells_the_customer_why(reason: ReasonCode) -> None:
+    taken = stored("conversation.thread_taken", {"reason_code": reason})
+    assert fired(taken) == (("notify_handoff", send_template("refer_notice")),)
 
 
 @pytest.mark.parametrize("outcome", ["PREQUALIFIED", "NOT_PREQUALIFIED"])
@@ -431,7 +443,6 @@ def test_a_consultant_close_renders_then_ends_without_the_policy(outcome: str, e
 @pytest.mark.parametrize(
     "event_name",
     [
-        "conversation.thread_taken",
         "process.state_changed",
         "process.ended",
     ],
@@ -512,7 +523,7 @@ def test_alicia_is_referred_waits_for_a_person_and_is_closed_by_one() -> None:
     ) == [
         (("open_process", start_process("es", "credit_card")),),
         (("run_requested_policy", run_policy("credit_card", None, None)),),
-        (("render_refer_notice", send_template("refer_notice")), ("take_thread", hand_off("policy_refer"))),
+        (("take_thread", hand_off("policy_refer")),),
         (),
         (
             ("close_on_consultant_decision", render_decision("consultant")),
@@ -548,7 +559,7 @@ def tables_with(**changes: RuleTable) -> Mapping[EventName, RuleTable]:
 
 def test_the_rule_tables_list_every_rule_once_under_its_trigger() -> None:
     require_rule_table(RULE_TABLES)
-    assert len([rule for rules in RULE_TABLES.values() for rule in rules]) == 25
+    assert len([rule for rules in RULE_TABLES.values() for rule in rules]) == 24
 
 
 def test_a_rule_listed_twice_is_refused() -> None:
@@ -603,7 +614,16 @@ def test_a_reply_handoff_is_only_built_from_a_withheld_turn() -> None:
 
 
 def test_no_trigger_table_is_shared() -> None:
-    tables = (MESSAGE_RULES, TURN_RULES, ANALYSIS_RULES, DECIDED_RULES, CLOSE_RULES, APPEAL_RULES, STARTED_RULES)
+    tables = (
+        MESSAGE_RULES,
+        TURN_RULES,
+        ANALYSIS_RULES,
+        DECIDED_RULES,
+        CLOSE_RULES,
+        APPEAL_RULES,
+        STARTED_RULES,
+        HANDOFF_RULES,
+    )
     assert tuple(RULE_TABLES.values()) == tables
 
 
@@ -623,14 +643,11 @@ def test_naming_the_other_product_with_no_open_case_switches_and_asks_consent() 
     assert fired(switched) == (("ask_confirm_prequalify", send_template("confirm_prequalify")),)
 
 
-def test_an_appeal_reopens_the_case_for_a_person_then_tells_the_customer() -> None:
+def test_an_appeal_reopens_the_case_for_a_person() -> None:
     appeal = parse_stored_event(
         EVENT_ID, "conversation.appeal_requested", PROCESS_ID, "ended", {"locale": "es", "product": "credit_card"}
     )
-    assert fired(appeal) == (
-        ("reopen_on_appeal", hand_off("customer_requested_human")),
-        ("notify_appeal", send_template("refer_notice")),
-    )
+    assert fired(appeal) == (("reopen_on_appeal", hand_off("customer_requested_human")),)
 
 
 def test_an_appeal_belongs_to_a_case() -> None:

@@ -1,6 +1,8 @@
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from api.infrastructure.llm.conversation import ClaudeAccess
+
 JWT_SECRET_MIN_LENGTH = 32
 DB_POOL_MIN_DEFAULT = 1
 DB_POOL_MAX_DEFAULT = 10
@@ -11,8 +13,9 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://alba:alba@localhost:5432/alba"
     jwt_secret: str = ""
-    openai_api_key: str = ""
-    llm_model: str = "gpt-6-luna"
+    anthropic_api_key: str = ""
+    anthropic_workspace_id: str = ""
+    llm_model: str = "claude-sonnet-5-5"
     demo_login: bool = False
     run_worker: bool = False
     smtp_host: str = "localhost"
@@ -40,3 +43,7 @@ def require_jwt_secret(secret: str) -> None:
 
 
 settings = Settings()
+
+
+def claude_access() -> ClaudeAccess:
+    return ClaudeAccess(settings.anthropic_api_key, settings.anthropic_workspace_id or None)

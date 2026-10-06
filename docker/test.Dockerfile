@@ -25,6 +25,7 @@ COPY --from=web-deps /app/web/node_modules /app/web/node_modules
 COPY web /app/web
 COPY pipeline /app/pipeline
 COPY api /app/api
+COPY eval /app/eval
 COPY api-spec/openapi.yaml api-spec/generate.py /app/api-spec/
 COPY db /app/db
 COPY pytest.ini pyproject.toml /app/

@@ -1,10 +1,10 @@
 from collections.abc import Mapping
 from types import MappingProxyType
 
-from api.contract_models import CloseOutcome, DecidedBy, Locale, Outcome, ProductKey, TemplateId
+from api.contract_models import CloseOutcome, DecidedBy, Locale, Outcome, ProductKey, ReasonCode, RuleId, TemplateId
 from api.domain.closed_sets import parse_member
 from api.domain.locale import LOCALES, PORTUGUESE_LOCALE, SPANISH_LOCALE
-from api.domain.policy.engine import CREDIT_CARD, NOT_PREQUALIFIED, PERSONAL_LOAN, PREQUALIFIED
+from api.domain.policy.engine import CREDIT_CARD, NOT_PREQUALIFIED, PERSONAL_LOAN, PREQUALIFIED, R01, R03, R04, R05, R09
 from api.domain.process.commands import (
     CONFIRM_PREQUALIFY_TEMPLATE,
     DECIDED_BY_CONSULTANT,
@@ -13,6 +13,16 @@ from api.domain.process.commands import (
     PRODUCT_CASE_OPEN,
     REFER_NOTICE,
     WHICH_PRODUCT,
+)
+from api.domain.process.lifecycle import (
+    CUSTOMER_REQUESTED_HUMAN,
+    LANGUAGE_UNSUPPORTED,
+    MODEL_OUTPUT_INVALID,
+    OUT_OF_SCOPE,
+    POLICY_REFER,
+    REASON_CODES,
+    REPLY_FORBIDDEN,
+    TOOL_FAILED,
 )
 from api.domain.process.stored_events import CLOSE_OUTCOMES, DECIDED_BY, PRODUCT_KEYS, TEMPLATE_IDS
 
@@ -119,6 +129,90 @@ CERTIFICATES: Mapping[tuple[DecidedBy, Outcome], Texts] = MappingProxyType(
 )
 
 
+# Why a case went to a person, as the customer reads it before the referral notice (PLAN.md D28). A policy reason
+# names the fact a person must weigh, never the score and never an outcome (ARCHITECTURE.md, "Policy").
+REFER_REASONS: Mapping[RuleId, Texts] = MappingProxyType(
+    {
+        R01: MappingProxyType(
+            {
+                SPANISH_LOCALE: "El estado de tu cuenta como cliente necesita que una persona revise tu solicitud.",
+                PORTUGUESE_LOCALE: "A situação do seu cadastro de cliente precisa que uma pessoa analise a solicitação.",
+            }
+        ),
+        R03: MappingProxyType(
+            {
+                SPANISH_LOCALE: "Uno de tus productos tiene un pago con algunos días de atraso.",
+                PORTUGUESE_LOCALE: "Um dos seus produtos tem um pagamento com alguns dias de atraso.",
+            }
+        ),
+        R04: MappingProxyType(
+            {
+                SPANISH_LOCALE: "Tu expediente no tiene la información de crédito que este chat necesita para responderte.",
+                PORTUGUESE_LOCALE: "Seu cadastro não tem as informações de crédito de que este chat precisa para responder.",
+            }
+        ),
+        R05: MappingProxyType(
+            {
+                SPANISH_LOCALE: "Tu historial crediticio necesita una revisión adicional.",
+                PORTUGUESE_LOCALE: "Seu histórico de crédito precisa de uma análise adicional.",
+            }
+        ),
+        R09: MappingProxyType(
+            {
+                SPANISH_LOCALE: "Ya tienes {product} con nosotros.",
+                PORTUGUESE_LOCALE: "Você já tem {product} conosco.",
+            }
+        ),
+    }
+)
+
+HANDOFF_REASONS: Mapping[ReasonCode, Texts] = MappingProxyType(
+    {
+        CUSTOMER_REQUESTED_HUMAN: MappingProxyType(
+            {
+                SPANISH_LOCALE: "Pediste que una persona atienda tu caso.",
+                PORTUGUESE_LOCALE: "Você pediu que uma pessoa cuide do seu caso.",
+            }
+        ),
+        OUT_OF_SCOPE: MappingProxyType(
+            {
+                SPANISH_LOCALE: "Tu mensaje pide algo que no puedo resolver en este chat.",
+                PORTUGUESE_LOCALE: "Sua mensagem pede algo que não consigo resolver neste chat.",
+            }
+        ),
+        LANGUAGE_UNSUPPORTED: MappingProxyType(
+            {
+                SPANISH_LOCALE: "Por ahora solo puedo leer mensajes en español o portugués.",
+                PORTUGUESE_LOCALE: "Por enquanto só consigo ler mensagens em espanhol ou português.",
+            }
+        ),
+        REPLY_FORBIDDEN: MappingProxyType(
+            {
+                SPANISH_LOCALE: "Esta respuesta debe dártela una persona.",
+                PORTUGUESE_LOCALE: "Essa resposta deve vir de uma pessoa.",
+            }
+        ),
+        MODEL_OUTPUT_INVALID: MappingProxyType(
+            {
+                SPANISH_LOCALE: "No pude procesar tu mensaje.",
+                PORTUGUESE_LOCALE: "Não consegui processar sua mensagem.",
+            }
+        ),
+        TOOL_FAILED: MappingProxyType(
+            {
+                SPANISH_LOCALE: "Tuvimos un problema técnico al procesar tu solicitud.",
+                PORTUGUESE_LOCALE: "Tivemos um problema técnico ao processar sua solicitação.",
+            }
+        ),
+    }
+)
+
+
+class UnknownReason(Exception):
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"no handoff reason is written for {reason}")
+
+
 class MissingProduct(Exception):
     def __init__(self, template: str) -> None:
         super().__init__(f"{template} names the product, and none was given")
@@ -130,6 +224,21 @@ def render_notice(template_id: TemplateId, locale: Locale, product: ProductKey |
     if product is None:
         raise MissingProduct(template_id)
     return name_product(NOTICES_FOR_A_PRODUCT[template_id][locale], locale, product)
+
+
+def handoff_notice(
+    locale: Locale, product: ProductKey | None, reason_code: ReasonCode, deciding_rule: RuleId | None
+) -> str:
+    reason = refer_reason(deciding_rule) if reason_code == POLICY_REFER else HANDOFF_REASONS.get(reason_code)
+    if reason is None:
+        raise UnknownReason(f"{reason_code} {deciding_rule}")
+    if product is None:
+        raise MissingProduct("the handoff notice")
+    return f"{name_product(reason[locale], locale, product)} {render_notice(REFER_NOTICE, locale, product)}"
+
+
+def refer_reason(deciding_rule: RuleId | None) -> Texts | None:
+    return None if deciding_rule is None else REFER_REASONS.get(deciding_rule)
 
 
 def certificate_for_policy(outcome: Outcome, locale: Locale, product: ProductKey) -> str:
@@ -191,6 +300,17 @@ def require_product_names(names: Mapping[Locale, Mapping[ProductKey, str]]) -> N
         raise ValueError("every locale needs a name for every product")
 
 
+def require_reasons(refer: Mapping[RuleId, Texts], handoff: Mapping[ReasonCode, Texts]) -> None:
+    if set(refer) != {R01, R03, R04, R05, R09} or set(handoff) != REASON_CODES - {POLICY_REFER}:
+        raise ValueError("every rule that refers and every other handoff reason needs exactly one reason")
+    require_every_locale(refer, "a policy reason")
+    require_every_locale(handoff, "a handoff reason")
+    require_slot(MappingProxyType({R09: refer[R09]}), 1, "the reason for a product already held")
+    require_slot(MappingProxyType({key: texts for key, texts in refer.items() if key != R09}), 0, "a policy reason")
+    require_slot(handoff, 0, "a handoff reason")
+
+
 require_product_names(PRODUCT_NAMES)
 require_notices(NOTICES_FOR_A_PRODUCT, NOTICES_FOR_ANY_PRODUCT)
 require_certificates(CERTIFICATES)
+require_reasons(REFER_REASONS, HANDOFF_REASONS)

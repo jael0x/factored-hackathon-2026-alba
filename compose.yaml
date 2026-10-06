@@ -46,7 +46,7 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       MAIL_FROM: "Alba <no-reply@alba.local>"
-      LLM_MODEL: ${LLM_MODEL:-b0-keywords}  # PLAN.md D23: the keyword baseline until an OPENAI_API_KEY exists
+      LLM_MODEL: ${LLM_MODEL:-claude-sonnet-5-5}  # PLAN.md D27; b0-keywords reads turns with no ANTHROPIC_API_KEY (D23)
       WATCHFILES_FORCE_POLLING: "true"
     ports:
       - "8000:8000"

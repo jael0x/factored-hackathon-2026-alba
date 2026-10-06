@@ -10,8 +10,7 @@ from fastapi.testclient import TestClient
 from api.application.consultants.cases import CaseAlreadyClosed, close_consultant_case
 from api.contract_models import CloseOutcome, EndReason, Locale
 from api.domain.policy.engine import CreditProfile, decide
-from api.domain.policy.templates import certificate_for_close, render_notice
-from api.domain.process.commands import REFER_NOTICE
+from api.domain.policy.templates import certificate_for_close, handoff_notice
 from api.domain.process.events import transition_key
 from api.domain.process.lifecycle import ProcessRow
 from api.domain.process.new_events import Cause, analysis_completed, thread_taken
@@ -125,7 +124,7 @@ def test_the_case_shows_the_customers_thread_as_she_reads_it(http: TestClient) -
     assert (status, body["messages"]) == (200, case["messages"])
     assert [(line["author"], line["body"]) for line in body["messages"]] == [
         ("customer", CARD_ES),
-        ("template", render_notice(REFER_NOTICE, "pt", "credit_card")),
+        ("template", handoff_notice("pt", "credit_card", "policy_refer", "R05")),
         ("customer", "já revisaram meu caso?"),
     ]
 
@@ -224,11 +223,11 @@ def test_the_trace_lists_the_case_events_in_the_order_they_happened(http: TestCl
         ("conversation.message_received", "customer", "ai_active"),
         ("process.started", "system", "ai_active"),
         ("analysis.completed", "system", "ai_active"),
-        ("conversation.template_sent", "system", "ai_active"),
         ("process.state_changed", "system", "human_active"),
         ("conversation.thread_taken", "system", "human_active"),
+        ("conversation.template_sent", "system", "human_active"),
     ]
-    message, started, analysis, notice, moved, taken = events
+    message, started, analysis, moved, taken, notice = events
     assert (message["process_id"], message["text"], message["product"], message["caused_by_event_id"]) == (
         None,
         CARD_ES,
@@ -245,9 +244,9 @@ def test_the_trace_lists_the_case_events_in_the_order_they_happened(http: TestCl
         "R05",
         "alba-credit-v1",
     )
-    assert notice["template_id"] == "refer_notice"
     assert (moved["from_state"], moved["to_state"], moved["end_reason"]) == ("ai_active", "human_active", None)
-    assert taken["reason_code"] == "policy_refer"
+    assert (taken["reason_code"], taken["caused_by_event_id"]) == ("policy_refer", analysis["id"])
+    assert (notice["template_id"], notice["caused_by_event_id"]) == ("refer_notice", taken["id"])
 
 
 def test_the_trace_shows_the_facts_behind_the_decision(http: TestClient) -> None:
