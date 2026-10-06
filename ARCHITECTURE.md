@@ -4,7 +4,7 @@ This is the build contract. Anyone who implements from this file, person or mode
 
 Related files: `README.md` (product view and data access), `mocks/index.html` (screens), `DESIGN.md` (look and motion), `AGENTS.md` (coding standard), `PLAN.md` (hackathon requirements, data evidence, open decisions, schedule), `IMPLEMENTATION.md` (build order), `specs/` (behavior as examples), `api-spec/openapi.yaml` (the wire contract). If `PLAN.md` offers an alternative (another host, another model, a credit limit), this file wins.
 
-This file is in English. Dataset literals, the customer-facing copy quoted here, and the phrases the model must not emit stay in the language they are written in. The screens and the login email are written in Spanish, English, and Portuguese ("Auth and screens", `PLAN.md` D21).
+This file is in English. Dataset literals, the customer-facing copy quoted here, and the phrases the model must not emit stay in the language they are written in. The screens and the login email are written in Spanish and Portuguese ("Auth and screens", `PLAN.md` D21, D22).
 
 ## Contract for implementers
 
@@ -76,7 +76,7 @@ A consultant is a bank employee who reviews the cases the assistant hands off. T
 | Auth | Customers: document number plus a one-time code emailed to the address on file. Consultants: email and employee code plus the same kind of code. Mailpit receives every code in the compose stack. Then an own JWT, HS256, 15 minutes, issued by this API |
 | Pipeline | Python, in the `load` container. Reads local CSVs. DuckDB only if the aggregate needs it; the result lands in Postgres |
 | LLM | OpenAI API, model `gpt-6-luna` (GPT-6 Luna). The adapter `api/infrastructure/llm/conversation.py` makes one call with Structured Outputs (the `ConversationTurn` JSON schema) and returns `ConversationTurn`. The policy does not use this adapter |
-| Tests | pytest in the API. Vitest with jsdom for the client's own logic (browser storage, the session, the language choice); business logic does not live in the client |
+| Tests | pytest in the API. Vitest with jsdom for the client's own logic (browser storage, the session, the language choice, the demo code fill, and the chat's sends, bubbles, typing indicator, and home row actions); business logic does not live in the client |
 | Quality gate | ruff (lint and format), mypy strict, pytest with branch coverage, `tsc`, Vitest, and the Vite build. GitHub Actions runs it on every pull request to `main` and every push to `main`. See **Quality gate** |
 | Running processes | A loop inside the API process that takes `commands` rows with `status = pending`. No Kafka, no Redis, no Inngest |
 
@@ -119,7 +119,8 @@ api/
       turns.py            # the model's reading in domain terms, and the two stamps on a turn
       thread.py           # the authors of a thread line
       rules.py            # rule ids, the command key, and the pure match over the event already written
-      case.py             # the case row and the thread line a customer reads
+      case.py             # the case row and the thread line a customer reads, the certificate, and whether a no can be appealed
+      packet.py           # the consultant queue item, the handoff packet, and is_closable (D15 (3))
   application/            # one file per use case. Defines the ports
     session/
       ports.py
@@ -131,6 +132,7 @@ api/
       search_customers.py
     consultants/
       search_consultants.py
+      cases.py            # the consultant queue, the packet, the trace, and the close
     products/
       list_products.py    # the session customer's products; another customer_id gets none
     processes.py          # record a customer message, start, hand off, end; the Events and Processes ports
@@ -151,6 +153,7 @@ api/
       processes.py        # SQL for processes: the open case, the insert, the row lock, the state
       profile.py          # gold by customer_id, for the policy and the model's booleans
       cases.py            # the thread of one case, in the seq of its events, and its latest certificate
+      consultant_cases.py # the queue, the packet's latest analysis and handoff, the trace, the close's row lock
       products.py         # SQL for products, filtered on the session customer, ordered by product_id
     mail/smtp.py          # sends the login code by SMTP; the only module that opens SMTP
     llm/                  # the classifiers; only conversation.py imports the OpenAI SDK, when that adapter is built
@@ -159,16 +162,23 @@ api/
       schema.py           # ConversationTurn and parse_conversation_turn, the one parse of the model's JSON
   presentation/
     http/
-      errors.py           # {error: ...} bodies for 401, 403, 404, 422
+      errors.py           # {error: ...} bodies for 401, 403, 404, 409, 422, 503
+      cycle.py            # the wait for one cycle, shared by POST /messages, the appeal, and the close; 503 cycle_pending
+      wire_numbers.py     # an exact decimal to a JSON number, or a loud failure
+      trace.py            # each stored event to its generated trace model, by event_name
       dependencies.py     # wires a request to a use case. get_session lives here
-      routes/             # session (/session and /consultant/session), customers (/me and /customers), products (/products), cases (/messages and /case), consultants (/consultant/me and /consultants), config, health
+      routes/             # session (/session and /consultant/session), customers (/me and /customers), products (/products), cases (/messages, /cases, /case, and the appeal), consultants (/consultant/me and /consultants), consultant_cases (/consultant/queue and /consultant/case), config, health
     worker/loop.py        # the worker thread, run_next, and the wait for one cycle
   fixtures/
     oracle_customers.json # the four profiles and César
     turns/                # one model turn per step of the oracle flows and the spec examples; tests inject them
 web/
   src/api/client.ts             # openapi-fetch client, typed by schema.d.ts; adds the bearer token, ends the session on 401
+  src/api/useLoad.ts            # one fetch as loading, error, or ready
+  src/routes.ts                 # the home and login path of each role, and the case path
   src/session/session.ts        # the session in sessionStorage; never renewed; kept in memory for the tab when storage is blocked
+  src/session/demoCode.ts       # with DEMO_LOGIN, the newest code from the local Mailpit fills the code field (D25)
+  src/components/RequireSession.tsx # a route for one role; an expired session shows "Tu sesión terminó"
   src/storage.ts                # the only module that touches browser storage; a blocked area reads empty and drops writes
   src/styles/tokens.css         # DESIGN.md tokens
   src/api/schema.d.ts           # generated from api-spec/openapi.yaml
@@ -180,8 +190,10 @@ web/
   src/pages/Home.tsx            # greeting, product cards, and the Preguntar por rows
   src/pages/ConsultantHome.tsx  # greeting from GET /consultant/me until the queue is built
   src/pages/Case.tsx            # customer: /case opens a case from the start dialog, /case/:id is the thread, the composer, and the certificate
+  src/pages/useCase.ts          # the case read, the send (same id and locale on a retry), the opening start, and the appeal
   src/components/StartDialog.tsx # the consent before a case starts (D24)
-  src/components/Certificate.tsx # the hero: outcome tag, product, sentence, and the income the run read
+  src/components/Certificate.tsx # the hero: outcome tag, product, sentence, the income the run read, and the review a policy's no offers once
+  src/format.ts                 # amounts, dates, and full names, one formula each
   src/chat.ts                   # one send (text, id, locale), the bubble of each author, when the typing indicator shows
   src/pages/ConsultantQueue.tsx
   src/pages/ConsultantCase.tsx  # handoff packet and the two close actions
@@ -201,6 +213,7 @@ db/migrations/008_events_locale_check.sql
 db/migrations/009_command_queue.sql
 db/migrations/010_one_open_case_per_product.sql
 db/migrations/011_case_read_indexes.sql
+db/migrations/012_consultant_queue_index.sql
 eval/                       # comes later; does not block the flow
 compose.yaml
 docker/api.Dockerfile
@@ -243,7 +256,7 @@ A catalog of one row.
 |---|---|
 | `process_key` | `credit_prequalification` |
 | Initial state | `ai_active` |
-| Who opens it | the first `conversation.message_received` from a customer with no open process |
+| Who opens it | a start: a `conversation.message_received` that names a product the customer has no open case for (`PLAN.md` D24) |
 
 States. There are no others.
 
@@ -567,7 +580,7 @@ The learned component evaluated against a baseline is the `ConversationTurn` cla
 
 ### UI wait state
 
-While the client waits for the API after a customer send, the chat shows a typing indicator in the switch's language ("escribiendo…" in Spanish). That covers real model and worker latency. The UI does not add a fixed sleep to "give the model time"; language and intent are classified inside the same `conversation.generate` call that produces the turn.
+While the client waits for the API after a customer send, the chat shows a typing indicator in the switch's language ("escribiendo…" in Spanish), only while the assistant has the case. That covers real model and worker latency. The UI does not add a fixed sleep to "give the model time" and does not poll; language and intent are classified inside the same `conversation.generate` call that produces the turn. A 503 `cycle_pending` keeps the message on screen with a retry that sends the same `client_message_id` and `locale` (`PLAN.md` D26).
 
 ## Auth and screens
 
@@ -591,20 +604,20 @@ Consultants log in on their own page, `/consultant/login` (`PLAN.md` D18, decide
 - `POST /consultant/session` takes `email`, `employee_code`, and `code`. The pair must still match an `Active` consultant. Every failure is the same 401. Claims: `sub` = `consultant_id`, `role` = `consultant`, `exp` 15 minutes. A customer code does not open a consultant session, and a consultant code does not open a customer session.
 - `GET /consultant/me` gives the consultant screens the name, `employee_code`, and `specialty`, which is null for the 476 consultants the file gives none.
 
-The consultant's email is the same message as the customer's, in the same three languages. Each login page links to the other: "Acceso para asesores" on `/login`, "Acceso para clientes" on `/consultant/login` (in Spanish). One browser tab holds one session; logging in on the other page replaces it.
+The consultant's email is the same message as the customer's, in the same two languages. Each login page links to the other: "Acceso para asesores" on `/login`, "Acceso para clientes" on `/consultant/login` (in Spanish). One browser tab holds one session; logging in on the other page replaces it.
 
 Language (`PLAN.md` D21, built Oct 2). Every screen's app bar, both login pages included, has a switch with Spanish and Portuguese (`PLAN.md` D22). Every interface label follows it, and so do the product names and statuses on the home. A first visit takes the browser's language when it is one of the two, else Spanish. The choice is kept in the browser (`localStorage`), not on the server, and sets `<html lang>`. When the browser blocks site storage, the choice holds until the page is reloaded, and then the browser's language stands in again. Amounts keep one format in every language (`1,559.57 USD`). The switch also decides the language Alba writes in: each message carries it as `locale` ("Process", "How the model is called").
 
-Expired JWT: 401. The customer sees that the session ended. It is not silently renewed during the case being shown.
+Expired JWT: 401. The customer or the consultant sees that the session ended, with a way back to that role's own login. It is not silently renewed during the case being shown.
 
 | Frontend route | Who | What it renders |
 |---|---|---|
 | `/login` | customer | document number, then the code from the email. The demo helpers when `DEMO_LOGIN=1` |
 | `/consultant/login` | consultant | email and employee code, then the code from the email. The demo helpers when `DEMO_LOGIN=1` |
 | `/` | customer | their products, in the row's currency, and one row per product: start (the consent dialog), continue the open case, or see the ended case's result |
-| `/case/:id` | customer | thread, plus the certificate if `prequalification.decided` exists |
+| `/case/:id` | customer | the thread, with the certificate in its place once `prequalification.decided` exists and the review a policy's no offers when `appealable` (`PLAN.md` D25). The composer in `ai_active` and `human_active` (with a banner that a person has the case); none in `ended`. `/case` with no id only carries a start from the home's dialog until its case exists, and otherwise returns to `/` |
 | `/consultant` | consultant | processes in `human_active` |
-| `/consultant/case/:id` | consultant | the handoff packet read from `analysis.completed`, and two actions: prequalify or do not. No reply box |
+| `/consultant/case/:id` | consultant | the handoff packet read from `analysis.completed`, and two actions, prequalify or do not, only when the packet says `closable` (`PLAN.md` D15 (3)). No reply box |
 | `/consultant/case/:id/trace` | consultant | the process's `events`, in order |
 
 A customer whose process is `ended` with `prequalified` or `not_prequalified` sees the certificate. They do not see the queue. The consultant does not see `ended` processes in the queue. Juan does not appear in César's queue. Neither does Mariana. Alicia does.
@@ -664,7 +677,7 @@ The trace includes events with this `process_id`, plus each message with a null 
 
 PostgreSQL 16. `load` is the only process that reads S3. The API and `policy.run` read Postgres.
 
-`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. `004_event_sequence.sql` adds `events.seq`. `005_products_balance_required.sql` sets an empty `products.current_balance` to 0 and makes the column `NOT NULL`. `006_process_locale.sql` renames `processes.language` to `locale`, makes it `NOT NULL`, and limits it to `es`, `en`, and `pt`. `007_process_locale_es_pt.sql` narrows that to `es` and `pt` (`PLAN.md` D22) and moves any local `en` case to `es`. `008_events_locale_check.sql` holds every event's `payload.locale` to `es` or `pt` (or none). `009_command_queue.sql` adds `commands.seq`, the indexes the queue and the cycle wait read, and a unique `messages.event_id`. `010_one_open_case_per_product.sql` replaces the one-open-case index with one per customer and product (D24). `011_case_read_indexes.sql` indexes `events.caused_by_event_id` and `messages.process_id`. A database that still has an `en` event from before D22 fails `008_events_locale_check.sql`, and `load` stops: reset its volume. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
+`db/migrations/001_init.sql` creates the four read tables, gold, the cycle tables, and `load_batches`. `002_login.sql` adds `customers.email`, makes `document_number` unique, turns `login_codes` into hashed codes with wrong tries and use, and clears `load_batches` so an already loaded volume reloads with email. `003_consultant_login.sql` adds `service_agents.email`, `agent_status`, and `specialty` and the unique login pair, and clears `load_batches` the same way. `004_event_sequence.sql` adds `events.seq`. `005_products_balance_required.sql` sets an empty `products.current_balance` to 0 and makes the column `NOT NULL`. `006_process_locale.sql` renames `processes.language` to `locale`, makes it `NOT NULL`, and limits it to `es`, `en`, and `pt`. `007_process_locale_es_pt.sql` narrows that to `es` and `pt` (`PLAN.md` D22) and moves any local `en` case to `es`. `008_events_locale_check.sql` holds every event's `payload.locale` to `es` or `pt` (or none). `009_command_queue.sql` adds `commands.seq`, the indexes the queue and the cycle wait read, and a unique `messages.event_id`. `010_one_open_case_per_product.sql` replaces the one-open-case index with one per customer and product (D24). `011_case_read_indexes.sql` indexes `events.caused_by_event_id` and `messages.process_id`. `012_consultant_queue_index.sql` indexes the cases with a person in queue order. A database that still has an `en` event from before D22 fails `008_events_locale_check.sql`, and `load` stops: reset its volume. The API process keeps a Postgres pool (`DB_POOL_MIN` 1, `DB_POOL_MAX` 10 unless the environment says otherwise). Repositories receive a connection from that pool. They do not open one.
 
 ### Read tables
 
@@ -706,6 +719,7 @@ The customer API does not list this table. `policy.run` reads one row, the one f
 - `events (process_id, created_at)`, `events (process_id, seq)`, and a unique index on `events (seq)`
 - a partial unique index on `processes (customer_id, process_key, product) where state <> 'ended'` (`010_one_open_case_per_product.sql`)
 - `events (caused_by_event_id)` and `messages (process_id)`, which the thread and the cycle wait read (`011_case_read_indexes.sql`)
+- `processes (created_at, id)` where `state = 'human_active'`, which the consultant queue reads (`012_consultant_queue_index.sql`)
 
 The filter `customer_id = jwt.sub` is in every API query. A test calls `products` with Juan's JWT and asks for Alicia's id: the response carries no rows of Alicia's.
 
